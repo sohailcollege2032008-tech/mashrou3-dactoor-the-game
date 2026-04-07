@@ -10,11 +10,15 @@ export function useAuth() {
   useEffect(() => {
     async function getProfile(userId) {
       try {
-        const { data, error } = await supabase
+        const queryPromise = supabase
           .from('profiles')
           .select('*')
           .eq('id', userId)
           .single()
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Profile fetch timeout')), 6000)
+        )
+        const { data, error } = await Promise.race([queryPromise, timeoutPromise])
         if (error) {
           // PGRST116 = no rows found (profile not created yet), not a real error
           if (error.code !== 'PGRST116') {
@@ -45,7 +49,6 @@ export function useAuth() {
     // needed. getSession() was the cause of hangs with stale refresh tokens.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
-        clearTimeout(safetyTimeout) // Cancel fallback on ANY auth event
         console.log(`[Auth] ${event}`, currentSession ? `uid=${currentSession.user.id}` : 'no session')
 
         if (event === 'INITIAL_SESSION') {
@@ -55,6 +58,7 @@ export function useAuth() {
           } else {
             useAuthStore.getState().clearAuth()
           }
+          clearTimeout(safetyTimeout) // Clear AFTER state is resolved
           return
         }
 
@@ -66,6 +70,7 @@ export function useAuth() {
             const profileData = await getProfile(currentSession.user.id)
             useAuthStore.getState().setAuth(currentSession, profileData)
           }
+          clearTimeout(safetyTimeout) // Clear AFTER state is resolved
           return
         }
 
@@ -80,6 +85,7 @@ export function useAuth() {
 
         if (event === 'SIGNED_OUT') {
           useAuthStore.getState().clearAuth()
+          clearTimeout(safetyTimeout)
           return
         }
       }
