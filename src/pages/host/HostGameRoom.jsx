@@ -194,20 +194,22 @@ export default function HostGameRoom() {
 
   const revealAnswer = async () => {
     setIsRevealing(true)
-    
-    // BUG 4 FIX: Fetch fresh players first so leaderboard is accurate when host reveals
-    await fetchPlayers()
-
-    const { data, error } = await supabase.rpc('reveal_answer', {
-      p_room_id: roomId,
-      p_question_index: room.current_question_index
-    })
-    setIsRevealing(false)
-    if (error) {
-      console.error('[Host] Error revealing answer:', error)
-      alert('Failed to reveal answer: ' + error.message)
-    } else {
-      setRevealResult(data)
+    try {
+      const { data, error } = await supabase.rpc('reveal_answer', {
+        p_room_id: roomId,
+        p_question_index: room.current_question_index
+      })
+      if (error) {
+        console.error('[Host] Error revealing answer:', error)
+        alert('Failed to reveal answer: ' + error.message)
+      } else {
+        await fetchPlayers()
+        setRevealResult(data)
+      }
+    } catch (err) {
+      console.error('[Host] revealAnswer exception:', err)
+    } finally {
+      setIsRevealing(false)
     }
   }
 
