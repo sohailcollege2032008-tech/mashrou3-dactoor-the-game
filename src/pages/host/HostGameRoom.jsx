@@ -71,7 +71,10 @@ export default function HostGameRoom() {
       })
       // Players: push/update locally
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, (payload) => {
-        setPlayers(prev => [...prev, payload.new].sort((a, b) => b.score - a.score))
+        setPlayers(prev => {
+          if (prev.some(p => p.id === payload.new.id)) return prev
+          return [...prev, payload.new].sort((a, b) => b.score - a.score)
+        })
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, (payload) => {
         setPlayers(prev =>
