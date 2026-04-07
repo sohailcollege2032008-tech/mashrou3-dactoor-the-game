@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../hooks/useAuth'
-import { Link } from 'react-router-dom'
+import { useAuthStore } from '../../stores/authStore'
+import { Link, useNavigate } from 'react-router-dom'
 import UploadQuestionsModal from '../../components/host/UploadQuestionsModal'
 
 export default function HostDashboard() {
-  const { profile } = useAuth()
+  const profile = useAuthStore(state => state.profile)
+  const navigate = useNavigate()
   const [banks, setBanks] = useState([])
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
@@ -49,7 +50,7 @@ export default function HostDashboard() {
     }).select().single()
 
     if (error) alert('Error creating room: ' + error.message)
-    else window.location.href = `/host/game/${data.id}`
+    else navigate(`/host/game/${data.id}`)
   }
 
   return (
