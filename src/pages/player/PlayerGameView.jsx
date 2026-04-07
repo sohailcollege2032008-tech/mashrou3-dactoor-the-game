@@ -155,29 +155,22 @@ export default function PlayerGameView() {
     setSelectedChoice(choiceIndex)
     setAnswerLocked(true)
 
-    const correctChoice = room.questions.questions[room.current_question_index].correct
-
     const { data, error } = await supabase.rpc('submit_answer', {
       p_room_id: roomId,
       p_player_id: player.id,
       p_question_index: room.current_question_index,
       p_selected_choice: choiceIndex,
-      p_correct_choice: correctChoice,
       p_reaction_time_ms: reactionMs
     })
 
-    // Explicit Error Handling: Do not fail silently!
-    if (error || data?.error) {
-      console.error('[Game] Submit error:', error || data?.error);
-      
-      // 1. Alert the player that the submission failed
-      alert("⚠️ Failed to submit your answer due to a network or permission issue. Please try again.");
-      
-      // 2. Revert the Optimistic UI state (Unlock so they can click again)
-      setAnswerLocked(false);
-      setSelectedChoice(null);
-      
-      return; // Halt further execution
+    if (error) {
+      console.error('[Game] submit_answer failed:', error)
+      setAnswerLocked(false)
+      setSelectedChoice(null)
+    } else if (data?.error && data.error !== 'already_answered') {
+      console.error('[Game] submit_answer returned:', data.error)
+      setAnswerLocked(false)
+      setSelectedChoice(null)
     }
   }
 
