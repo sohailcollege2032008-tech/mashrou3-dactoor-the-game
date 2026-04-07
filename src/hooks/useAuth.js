@@ -45,10 +45,10 @@ export function useAuth() {
     // needed. getSession() was the cause of hangs with stale refresh tokens.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
+        clearTimeout(safetyTimeout) // Cancel fallback on ANY auth event
         console.log(`[Auth] ${event}`, currentSession ? `uid=${currentSession.user.id}` : 'no session')
 
         if (event === 'INITIAL_SESSION') {
-          clearTimeout(safetyTimeout) // Event fired — cancel the fallback
           if (currentSession) {
             const profileData = await getProfile(currentSession.user.id)
             useAuthStore.getState().setAuth(currentSession, profileData)
@@ -60,7 +60,9 @@ export function useAuth() {
 
         if (event === 'SIGNED_IN') {
           if (currentSession) {
-            useAuthStore.getState().setLoading(true)
+            // Only flash loading screen on the very first login, not on session restore
+            const { initialized } = useAuthStore.getState()
+            if (!initialized) useAuthStore.getState().setLoading(true)
             const profileData = await getProfile(currentSession.user.id)
             useAuthStore.getState().setAuth(currentSession, profileData)
           }

@@ -1,15 +1,22 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuth } from '../hooks/useAuth'
+import { useAuthStore } from '../stores/authStore'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
+import { supabase } from '../lib/supabase'
 
 export default function Landing() {
-  const { session, profile, loading } = useAuth()
+  const session = useAuthStore(state => state.session)
+  const profile = useAuthStore(state => state.profile)
+  const loading = useAuthStore(state => state.loading)
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6 font-display">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md space-y-8 text-center"
@@ -23,39 +30,65 @@ export default function Landing() {
 
         {loading ? (
           <div className="text-primary animate-pulse py-8 font-sans">Loading...</div>
+
         ) : !session ? (
           <div className="pt-8 flex justify-center">
             <GoogleSignInButton />
           </div>
+
+        ) : !profile ? (
+          // Session exists but profile missing — show sign out option
+          <div className="space-y-4 pt-8 font-sans">
+            <div className="rounded-2xl border border-amber-800/40 bg-amber-900/20 p-5 text-amber-300 text-sm">
+              ⚠️ حدث خطأ في تحميل بيانات حسابك. يرجى تسجيل الخروج والمحاولة مرة أخرى.
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="w-full rounded-xl bg-red-500/10 border border-red-500/30 px-6 py-3 font-bold text-red-400 hover:bg-red-500/20 transition-colors"
+            >
+              تسجيل الخروج
+            </button>
+          </div>
+
         ) : (
           <div className="space-y-6 pt-8 font-sans">
+            {/* Profile card */}
             <div className="rounded-2xl border border-gray-800 bg-gray-900/50 p-6 backdrop-blur-sm">
-              <img 
-                src={profile?.avatar_url || ''} 
-                alt="Profile" 
+              <img
+                src={profile.avatar_url || ''}
+                alt="Profile"
                 className="mx-auto mb-4 h-20 w-20 rounded-full border-2 border-primary object-cover"
               />
-              <h2 className="text-2xl font-bold text-white">{profile?.display_name}</h2>
+              <h2 className="text-2xl font-bold text-white">{profile.display_name}</h2>
               <p className="text-gray-400 mt-1">
-                {profile?.role === 'owner' ? 'Owner' : profile?.role === 'host' ? 'Host' : 'Player'}
+                {profile.role === 'owner' ? '👑 Owner' : profile.role === 'host' ? '🎮 Host' : '🎓 Player'}
               </p>
             </div>
-            
-            <div className="flex flex-col gap-4">
-              <Link 
-                to={profile?.role === 'owner' ? '/owner/dashboard' : profile?.role === 'host' ? '/host/dashboard' : '/player/join'}
+
+            {/* Navigation buttons */}
+            <div className="flex flex-col gap-3">
+              <Link
+                to={profile.role === 'owner' ? '/owner/dashboard' : profile.role === 'host' ? '/host/dashboard' : '/player/join'}
                 className="w-full rounded-xl bg-primary px-6 py-4 font-bold text-background transition-colors hover:bg-[#00D4FF]"
               >
-                Enter {profile?.role === 'owner' ? 'Owner ' : ''}Dashboard
+                {profile.role === 'owner' ? 'Owner Dashboard' : profile.role === 'host' ? 'Host Dashboard' : 'Join a Game'}
               </Link>
-              {profile?.role === 'owner' && (
-                <Link 
+
+              {profile.role === 'owner' && (
+                <Link
                   to="/host/dashboard"
                   className="w-full rounded-xl bg-white/5 border border-primary/30 px-6 py-4 font-bold text-primary transition-colors hover:bg-primary/10"
                 >
-                  Enter Host Dashboard
+                  🎮 Host Dashboard
                 </Link>
               )}
+
+              <button
+                onClick={handleSignOut}
+                className="w-full rounded-xl bg-gray-800/50 border border-gray-700 px-6 py-3 font-bold text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors text-sm"
+              >
+                تسجيل الخروج
+              </button>
             </div>
           </div>
         )}
