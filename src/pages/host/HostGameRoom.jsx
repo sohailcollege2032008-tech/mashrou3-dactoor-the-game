@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { Play, UserCheck, XCircle, CheckCircle, SkipForward, Trophy, Eye, Timer } from 'lucide-react'
+import { Play, UserCheck, XCircle, CheckCircle, SkipForward, Trophy, Eye, Timer, Loader2 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
 // ─── Optional countdown timer (visual only – host controls pacing) ────────────
@@ -56,6 +56,7 @@ export default function HostGameRoom() {
   const [isRevealing, setIsRevealing] = useState(false)
   const [timerKey, setTimerKey] = useState(0)
   const [showTimer, setShowTimer] = useState(false)
+  const [processingRequests, setProcessingRequests] = useState(new Set())
 
   useEffect(() => {
     fetchInitialData()
@@ -145,8 +146,7 @@ export default function HostGameRoom() {
     const currentRequest = requests.find(r => r.id === requestId)
     if (!currentRequest) return
 
-    // Optimistic: remove from list immediately
-    setRequests(prev => prev.filter(r => r.id !== requestId))
+    setProcessingRequests(prev => new Set(prev).add(requestId))
 
     try {
       const { data, error } = await supabase.rpc('process_join_request', { 
@@ -158,14 +158,18 @@ export default function HostGameRoom() {
         const errorMsg = error?.message || data?.error || 'Unknown error'
         console.error('[Host] Join request failed:', errorMsg)
         alert(`❌ Failed to ${action} ${currentRequest.player_name}: ${errorMsg}`)
-        
-        // Rollback: put it back in the list
-        setRequests(prev => [...prev, currentRequest])
       }
+      // Note: We don't filter requests here. 
+      // The Realtime listener will call fetchRequests() which will naturally remove it once status isn't 'pending'.
     } catch (err) {
       console.error('[Host] Join request exception:', err)
       alert(`❌ Error processing request: ${err.message}`)
-      setRequests(prev => [...prev, currentRequest])
+    } finally {
+      setProcessingRequests(prev => {
+        const next = new Set(prev)
+        next.delete(requestId)
+        return next
+      })
     }
   }
 
@@ -277,8 +281,26 @@ export default function HostGameRoom() {
                       <div className="text-sm text-gray-400">{req.player_email}</div>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => handleRequest(req.id, 'approved')} className="bg-green-500/20 text-green-500 hover:bg-green-500/30 p-2 rounded-lg transition-colors"><CheckCircle size={20} /></button>
-                      <button onClick={() => handleRequest(req.id, 'rejected')} className="bg-red-500/20 text-red-500 hover:bg-red-500/30 p-2 rounded-lg transition-colors"><XCircle size={20} /></button>
+                      {processingRequests.has(req.id) ? (
+                        <div className="p-2 text-primary animate-spin">
+                          <Loader2 size={20} />
+                        </div>
+                      ) : (
+                        <>
+                          <button 
+                            onClick={() => handleRequest(req.id, 'approved')} 
+                            className="bg-green-500/20 text-green-500 hover:bg-green-500/30 p-2 rounded-lg transition-colors"
+                          >
+                            <CheckCircle size={20} />
+                          </button>
+                          <button 
+                            onClick={() => handleRequest(req.id, 'rejected')} 
+                            className="bg-red-500/20 text-red-500 hover:bg-red-500/30 p-2 rounded-lg transition-colors"
+                          >
+                            <XCircle size={20} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

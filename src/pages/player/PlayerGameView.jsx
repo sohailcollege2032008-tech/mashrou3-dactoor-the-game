@@ -79,6 +79,10 @@ export default function PlayerGameView() {
     }
     setPlayer(p)
 
+    // BUG 2 FIX: Actually fetch the room data before checking rError or r
+    const { data: r, error: rError } = await supabase
+      .from('rooms').select('*').eq('id', roomId).single()
+
     if (rError || !r) {
       console.error('[Player] Error fetching room:', rError)
       alert("Error loading game data")
