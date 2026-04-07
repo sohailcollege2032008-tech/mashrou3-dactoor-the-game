@@ -158,9 +158,10 @@ export default function HostGameRoom() {
         const errorMsg = error?.message || data?.error || 'Unknown error'
         console.error('[Host] Join request failed:', errorMsg)
         alert(`❌ Failed to ${action} ${currentRequest.player_name}: ${errorMsg}`)
+      } else if (action === 'approved') {
+        // Fallback: fetch players immediately in case realtime misses the INSERT
+        await fetchPlayers()
       }
-      // Note: We don't filter requests here. 
-      // The Realtime listener will call fetchRequests() which will naturally remove it once status isn't 'pending'.
     } catch (err) {
       console.error('[Host] Join request exception:', err)
       alert(`❌ Error processing request: ${err.message}`)
