@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { useServerClock } from '../../hooks/useServerClock'
 import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
@@ -9,6 +10,9 @@ export default function PlayerGameView() {
   const { roomId } = useParams()
   const { session } = useAuth()
   const navigate = useNavigate()
+
+  // Clock sync: measures offset between client clock and server clock (SNTP-style)
+  const clockOffset = useServerClock()
 
   const [room, setRoom] = useState(null)
   const [player, setPlayer] = useState(null)
@@ -19,15 +23,18 @@ export default function PlayerGameView() {
   // Result revealed by host: { is_correct, is_first_correct }
   const [revealedResult, setRevealedResult] = useState(null)
 
-  // Records the timestamp when the current question appeared on screen (for fairness)
-  const questionLoadTimeRef = useRef(null)
+  // Stores the CORRECTED SERVER timestamp when the current question appeared
+  // = Date.now() + clockOffset at the moment the question was shown
+  // This is what we compare against to compute fair reaction time
+  const questionServerStartRef = useRef(null)
 
   // Reset per-question state when a new question appears
   const resetForNewQuestion = () => {
     setSelectedChoice(null)
     setAnswerLocked(false)
     setRevealedResult(null)
-    questionLoadTimeRef.current = performance.now()
+    // Record the server-corrected time at which this question appeared on screen
+    questionServerStartRef.current = Date.now() + clockOffset.current
   }
 
   useEffect(() => {
@@ -93,8 +100,8 @@ export default function PlayerGameView() {
       }
     }
 
-    // Start tracking question load time
-    questionLoadTimeRef.current = performance.now()
+    // Record server-corrected question start time
+    questionServerStartRef.current = Date.now() + clockOffset.current
   }
 
   const fetchMyAnswerResult = async (questionIndex) => {
@@ -124,9 +131,12 @@ export default function PlayerGameView() {
   const submitAnswer = async (choiceIndex) => {
     if (answerLocked) return   // already picked
 
-    // Measure reaction time locally (fair — ignores network latency)
-    const reactionMs = questionLoadTimeRef.current
-      ? Math.round(performance.now() - questionLoadTimeRef.current)
+    // Fair reaction time: (server-corrected click time) - (server-corrected question-shown time)
+    // Because BOTH timestamps use the same clock reference (server epoch),
+    // slow networks don't give any advantage — only actual click speed matters.
+    const serverClickTime = Date.now() + clockOffset.current
+    const reactionMs = questionServerStartRef.current
+      ? Math.round(serverClickTime - questionServerStartRef.current)
       : 5000
 
     // Optimistic UI: lock the choice immediately so it feels instant
