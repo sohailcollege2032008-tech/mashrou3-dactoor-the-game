@@ -46,7 +46,8 @@ function initAuthListener() {
 
     if (event === 'INITIAL_SESSION') {
       if (currentSession) {
-        const profileData = await getProfile(currentSession.user.id)
+        let profileData = await getProfile(currentSession.user.id)
+        if (!profileData) profileData = useAuthStore.getState().profile // fallback to existing if network fails
         useAuthStore.getState().setAuth(currentSession, profileData)
       } else {
         useAuthStore.getState().clearAuth()
@@ -59,7 +60,8 @@ function initAuthListener() {
       if (currentSession) {
         const { initialized } = useAuthStore.getState()
         if (!initialized) useAuthStore.getState().setLoading(true)
-        const profileData = await getProfile(currentSession.user.id)
+        let profileData = await getProfile(currentSession.user.id)
+        if (!profileData) profileData = useAuthStore.getState().profile
         useAuthStore.getState().setAuth(currentSession, profileData)
       }
       clearTimeout(safetyTimeout)
@@ -68,7 +70,8 @@ function initAuthListener() {
 
     if (event === 'TOKEN_REFRESHED') {
       if (currentSession) {
-        const profileData = await getProfile(currentSession.user.id)
+        let profileData = await getProfile(currentSession.user.id)
+        if (!profileData) profileData = useAuthStore.getState().profile
         useAuthStore.getState().setAuth(currentSession, profileData)
       }
       return
