@@ -108,7 +108,7 @@ CREATE TABLE players (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   room_id UUID REFERENCES rooms(id) ON DELETE CASCADE,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  nickname VARCHAR(30) NOT NULL,
+  nickname VARCHAR(100) NOT NULL,
   avatar_url TEXT,
   score INTEGER DEFAULT 0,
   is_connected BOOLEAN DEFAULT true,
@@ -247,11 +247,11 @@ BEGIN
   SELECT * INTO v_request FROM join_requests WHERE id = p_request_id;
 
   IF v_request IS NULL THEN
-    RETURN jsonb_build_object('error', 'request_not_found');
+    RETURN jsonb_build_object('success', false, 'error', 'request_not_found');
   END IF;
 
   IF v_request.status != 'pending' THEN
-    RETURN jsonb_build_object('error', 'already_processed');
+    RETURN jsonb_build_object('success', false, 'error', 'already_processed', 'status', v_request.status);
   END IF;
 
   -- Update request status
@@ -261,11 +261,17 @@ BEGIN
 
   -- If approved, add player to the room
   IF p_action = 'approved' THEN
-    INSERT INTO players (room_id, user_id, nickname, avatar_url)
-    VALUES (v_request.room_id, v_request.player_id, v_request.player_name, v_request.player_avatar);
+    BEGIN
+      INSERT INTO players (room_id, user_id, nickname, avatar_url)
+      VALUES (v_request.room_id, v_request.player_id, v_request.player_name, v_request.player_avatar);
+    EXCEPTION WHEN OTHERS THEN
+      -- Revert status if insert fails
+      UPDATE join_requests SET status = 'pending', reviewed_at = NULL WHERE id = p_request_id;
+      RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+    END;
   END IF;
 
-  RETURN jsonb_build_object('status', p_action, 'player_id', v_request.player_id);
+  RETURN jsonb_build_object('success', true, 'status', p_action, 'player_id', v_request.player_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

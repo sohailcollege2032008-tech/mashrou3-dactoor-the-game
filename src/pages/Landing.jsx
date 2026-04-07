@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '../stores/authStore'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
@@ -8,8 +8,25 @@ import { supabase } from '../lib/supabase'
 export default function Landing() {
   const session = useAuthStore(state => state.session)
   const profile = useAuthStore(state => state.profile)
-  const loading = useAuthStore(state => state.loading)
+  const initialized = useAuthStore(state => state.initialized)
   const [isRetrying, setIsRetrying] = useState(false)
+  const navigate = useNavigate()
+
+  // Auto-redirect if already logged in
+  React.useEffect(() => {
+    if (initialized && session && profile) {
+      const targetPath = profile.role === 'owner' 
+        ? '/owner/dashboard' 
+        : profile.role === 'host' 
+        ? '/host/dashboard' 
+        : '/player/join'
+      
+      // Only redirect if we are exactly on "/"
+      if (window.location.pathname === '/') {
+        navigate(targetPath, { replace: true })
+      }
+    }
+  }, [initialized, session, profile, navigate])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -41,7 +58,7 @@ export default function Landing() {
           <p className="text-xl text-gray-400 font-sans">Welcome to the Medical Battleground</p>
         </div>
 
-        {loading ? (
+        {!initialized ? (
           <div className="text-primary animate-pulse py-8 font-sans">Loading...</div>
 
         ) : !session ? (

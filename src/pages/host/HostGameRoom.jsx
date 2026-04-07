@@ -134,9 +134,31 @@ export default function HostGameRoom() {
   }, [room?.status])
 
   const handleRequest = async (requestId, action) => {
+    const currentRequest = requests.find(r => r.id === requestId)
+    if (!currentRequest) return
+
     // Optimistic: remove from list immediately
     setRequests(prev => prev.filter(r => r.id !== requestId))
-    await supabase.rpc('process_join_request', { p_request_id: requestId, p_action: action })
+
+    try {
+      const { data, error } = await supabase.rpc('process_join_request', { 
+        p_request_id: requestId, 
+        p_action: action 
+      })
+
+      if (error || (data && data.success === false)) {
+        const errorMsg = error?.message || data?.error || 'Unknown error'
+        console.error('[Host] Join request failed:', errorMsg)
+        alert(`❌ Failed to ${action} ${currentRequest.player_name}: ${errorMsg}`)
+        
+        // Rollback: put it back in the list
+        setRequests(prev => [...prev, currentRequest])
+      }
+    } catch (err) {
+      console.error('[Host] Join request exception:', err)
+      alert(`❌ Error processing request: ${err.message}`)
+      setRequests(prev => [...prev, currentRequest])
+    }
   }
 
   const startGame = async () => {
