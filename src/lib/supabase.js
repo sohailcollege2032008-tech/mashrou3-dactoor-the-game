@@ -8,5 +8,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storageKey: 'mashrou3-dactoor-auth',   // dedicated localStorage key
+    storage: window.localStorage,          // explicit — survives all tabs & restarts
   }
 })

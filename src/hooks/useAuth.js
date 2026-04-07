@@ -46,12 +46,14 @@ function initAuthListener() {
   }
 
   // ── Safety timeout ────────────────────────────────────────────────────────
+  // Must be > max possible getProfile time: 3 retries × (6s abort + 1.5s delay) ≈ 23s
+  // We use 35s as a generous upper bound
   const safetyTimeout = setTimeout(() => {
     if (useAuthStore.getState().loading) {
       console.warn('[Auth] Safety timeout — forcing clearAuth()')
       useAuthStore.getState().clearAuth()
     }
-  }, 8000)
+  }, 35000)
 
   // ── Single source of truth: onAuthStateChange ─────────────────────────────
   supabase.auth.onAuthStateChange(async (event, currentSession) => {
