@@ -79,18 +79,23 @@ export default function PlayerGameView() {
     }
     setPlayer(p)
 
-    const { data: r } = await supabase.from('rooms').select('*').eq('id', roomId).single()
-    if (!r) return
+    if (rError || !r) {
+      console.error('[Player] Error fetching room:', rError)
+      alert("Error loading game data")
+      return
+    }
     setRoom(r)
 
     if (r.status === 'playing' || r.status === 'revealing') {
       // Check if already answered current question
-      const { data: a } = await supabase.from('answers').select('*')
+      const { data: a, error: aError } = await supabase.from('answers').select('*')
         .eq('room_id', roomId)
         .eq('player_id', p.id)
         .eq('question_index', r.current_question_index)
-        .single()
+        .maybeSingle()
 
+      if (aError) console.error('[Player] Error fetching initial answer:', aError)
+      
       if (a) {
         setSelectedChoice(a.selected_choice)
         setAnswerLocked(true)
@@ -111,11 +116,16 @@ export default function PlayerGameView() {
 
     if (!myPlayer) return
 
-    const { data: a } = await supabase.from('answers').select('is_correct, is_first_correct')
+    const { data: a, error } = await supabase.from('answers').select('is_correct, is_first_correct')
       .eq('room_id', roomId)
       .eq('player_id', myPlayer.id)
       .eq('question_index', questionIndex)
-      .single()
+      .maybeSingle()
+
+    if (error) {
+      console.error('[Player] Error fetching answer result:', error)
+      return
+    }
 
     if (a) {
       setRevealedResult({ is_correct: a.is_correct, is_first_correct: a.is_first_correct })
@@ -128,12 +138,10 @@ export default function PlayerGameView() {
     }
   }
 
-  const submitAnswer = async (choiceIndex) => {
+  const handleChoiceClick = async (choiceIndex) => {
     if (answerLocked) return   // already picked
 
     // Fair reaction time: (server-corrected click time) - (server-corrected question-shown time)
-    // Because BOTH timestamps use the same clock reference (server epoch),
-    // slow networks don't give any advantage — only actual click speed matters.
     const serverClickTime = Date.now() + clockOffset.current
     const reactionMs = questionServerStartRef.current
       ? Math.round(serverClickTime - questionServerStartRef.current)
@@ -155,9 +163,9 @@ export default function PlayerGameView() {
     })
 
     if (error || data?.error) {
-      // Network error or race condition — answer still locked locally
-      // User sees "Waiting for host" and that's fine
-      console.warn('[Game] Submit error (non-critical):', error || data?.error)
+      console.warn('[Game] Submit error:', error || data?.error)
+      // Optional: show a small toast or just let it be. 
+      // We don't want to alert() here to avoid breaking user flow during intense play.
     }
   }
 
@@ -222,7 +230,7 @@ export default function PlayerGameView() {
                   {currentQuestion.choices.map((choice, idx) => (
                     <button
                       key={idx}
-                      onClick={() => submitAnswer(idx)}
+                      onClick={() => handleChoiceClick(idx)}
                       className="group relative p-6 bg-gray-800 border-2 border-gray-700 rounded-2xl hover:border-primary hover:bg-gray-700 transition-all text-left active:scale-95 overflow-hidden"
                     >
                       <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity" />

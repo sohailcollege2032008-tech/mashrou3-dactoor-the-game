@@ -11,14 +11,16 @@ export default function WaitingRoom() {
 
   useEffect(() => {
     const checkStatus = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('join_requests')
         .select('status')
         .eq('room_id', roomId)
         .eq('player_id', session.user.id)
-        .single()
+        .maybeSingle()
       
-      if (data) {
+      if (error) {
+        console.error('[WaitingRoom] Error checking status:', error)
+      } else if (data) {
         setStatus(data.status)
         if (data.status === 'approved') navigate(`/player/game/${roomId}`)
       }

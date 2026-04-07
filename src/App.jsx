@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { useAuth } from './hooks/useAuth'
+import { useEffect } from 'react'
+import { useAuthStore } from './stores/authStore'
 import Landing from './pages/Landing'
 import AuthCallback from './pages/AuthCallback'
 import NotAuthorized from './pages/NotAuthorized'
@@ -12,7 +13,9 @@ import WaitingRoom from './pages/player/WaitingRoom'
 import PlayerGameView from './pages/player/PlayerGameView'
 
 export default function App() {
-  useAuth() // Single global auth subscription for the entire app
+  useEffect(() => {
+    useAuthStore.getState().initialize()
+  }, [])
   return (
     <BrowserRouter>
       <Routes>

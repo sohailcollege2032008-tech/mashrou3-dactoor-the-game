@@ -27,22 +27,46 @@ export default function JoinGame() {
       return
     }
 
-    // 2. Submit Join Request
-    const { error: requestError } = await supabase
+    // 2. Check for Existing Request
+    const { data: existing, error: checkError } = await supabase
       .from('join_requests')
-      .insert({
-        room_id: room.id,
-        player_id: session.user.id,
-        player_email: profile.email,
-        player_name: profile.display_name,
-        player_avatar: profile.avatar_url
-      })
+      .select('*')
+      .eq('room_id', room.id)
+      .eq('player_id', session.user.id)
+      .maybeSingle()
 
-    if (requestError && !requestError.message.includes('duplicate key')) {
-      alert("Error joining: " + requestError.message)
+    if (existing) {
+      if (existing.status === 'rejected') {
+        // BUG 7 FIX: If previously rejected, "reset" to pending to allow re-evaluation
+        const { error: updateError } = await supabase
+          .from('join_requests')
+          .update({ status: 'pending', created_at: new Date().toISOString() })
+          .eq('id', existing.id)
+        
+        if (updateError) alert("Error re-joining: " + updateError.message)
+        else navigate(`/player/waiting/${room.id}`)
+      } else {
+        // Already pending or approved (though approved should usually navigate away)
+        navigate(`/player/waiting/${room.id}`)
+      }
     } else {
-      // Navigate to Waiting Room
-      navigate(`/player/waiting/${room.id}`)
+      // 3. Submit New Join Request
+      const { error: insertError } = await supabase
+        .from('join_requests')
+        .insert({
+          room_id: room.id,
+          player_id: session.user.id,
+          player_email: profile.email,
+          player_name: profile.display_name,
+          player_avatar: profile.avatar_url,
+          status: 'pending'
+        })
+
+      if (insertError) {
+        alert("Error joining: " + insertError.message)
+      } else {
+        navigate(`/player/waiting/${room.id}`)
+      }
     }
     setLoading(false)
   }

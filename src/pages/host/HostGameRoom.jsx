@@ -92,29 +92,37 @@ export default function HostGameRoom() {
   }, [roomId])
 
   const fetchInitialData = async () => {
-    const { data: roomData } = await supabase.from('rooms').select('*').eq('id', roomId).single()
-    if (roomData) setRoom(roomData)
+    const { data: roomData, error } = await supabase.from('rooms').select('*').eq('id', roomId).single()
+    if (error) {
+      console.error('[Host] Error fetching room:', error)
+      alert('Error loading room: ' + error.message)
+      return
+    }
+    setRoom(roomData)
     fetchRequests()
     fetchPlayers()
     fetchAnswers(roomData)
   }
 
   const fetchRequests = async () => {
-    const { data } = await supabase.from('join_requests').select('*').eq('room_id', roomId).eq('status', 'pending')
-    if (data) setRequests(data)
+    const { data, error } = await supabase.from('join_requests').select('*').eq('room_id', roomId).eq('status', 'pending')
+    if (error) console.error('[Host] Error fetching requests:', error)
+    else setRequests(data || [])
   }
 
   const fetchPlayers = async () => {
-    const { data } = await supabase.from('players').select('*').eq('room_id', roomId).order('score', { ascending: false })
-    if (data) setPlayers(data)
+    const { data, error } = await supabase.from('players').select('*').eq('room_id', roomId).order('score', { ascending: false })
+    if (error) console.error('[Host] Error fetching players:', error)
+    else setPlayers(data || [])
   }
 
   const fetchAnswers = async (currentRoom) => {
     const r = currentRoom || room
     if (!r || r.current_question_index < 0) return
-    const { data } = await supabase.from('answers').select('*')
+    const { data, error } = await supabase.from('answers').select('*')
       .eq('room_id', roomId).eq('question_index', r.current_question_index)
-    if (data) setAnswers(data)
+    if (error) console.error('[Host] Error fetching answers:', error)
+    else setAnswers(data || [])
   }
 
   // Reset answers on question change
@@ -162,22 +170,37 @@ export default function HostGameRoom() {
   }
 
   const startGame = async () => {
-    await supabase.from('rooms').update({
+    const { error } = await supabase.from('rooms').update({
       status: 'playing',
       current_question_index: 0,
       question_started_at: new Date().toISOString()
     }).eq('id', roomId)
-    setTimerKey(k => k + 1)
+    
+    if (error) {
+      console.error('[Host] Error starting game:', error)
+      alert('Failed to start game: ' + error.message)
+    } else {
+      setTimerKey(k => k + 1)
+    }
   }
 
   const revealAnswer = async () => {
     setIsRevealing(true)
+    
+    // BUG 4 FIX: Fetch fresh players first so leaderboard is accurate when host reveals
+    await fetchPlayers()
+
     const { data, error } = await supabase.rpc('reveal_answer', {
       p_room_id: roomId,
       p_question_index: room.current_question_index
     })
     setIsRevealing(false)
-    if (!error) setRevealResult(data)
+    if (error) {
+      console.error('[Host] Error revealing answer:', error)
+      alert('Failed to reveal answer: ' + error.message)
+    } else {
+      setRevealResult(data)
+    }
   }
 
   const nextQuestion = async () => {
@@ -186,12 +209,20 @@ export default function HostGameRoom() {
     const isFinished = room.current_question_index + 1 >= total
 
     if (isFinished) {
-      await supabase.from('rooms').update({ status: 'finished' }).eq('id', roomId)
+      const { error } = await supabase.from('rooms').update({ status: 'finished' }).eq('id', roomId)
+      if (error) {
+        console.error('[Host] Error finishing game:', error)
+        alert('Failed to finish game: ' + error.message)
+      }
     } else {
-      await supabase.rpc('start_next_question', {
+      const { error } = await supabase.rpc('start_next_question', {
         p_room_id: roomId,
         p_next_question_index: room.current_question_index + 1
       })
+      if (error) {
+        console.error('[Host] Error starting next question:', error)
+        alert('Failed to advance: ' + error.message)
+      }
     }
     setRevealResult(null)
   }
@@ -284,6 +315,13 @@ export default function HostGameRoom() {
         )}
 
         {/* ─── PLAYING & REVEALING ───────────────────────────────────────── */}
+        {(room.status === 'playing' || room.status === 'revealing') && !currentQuestion && (
+          <div className="bg-gray-900/50 p-12 rounded-2xl border border-gray-800 text-center animate-pulse">
+            <h2 className="text-2xl font-bold text-gray-400">Preparing first question...</h2>
+            <p className="text-gray-500 mt-2">The game is about to begin.</p>
+          </div>
+        )}
+
         {(room.status === 'playing' || room.status === 'revealing') && currentQuestion && (
           <div className="space-y-6">
             {/* Question card */}

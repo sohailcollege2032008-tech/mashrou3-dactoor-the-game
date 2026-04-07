@@ -23,8 +23,12 @@ export default function HostDashboard() {
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (error) console.error('Error fetching question banks:', error)
-    else setBanks(data || [])
+    if (error) {
+      console.error('Error fetching question banks:', error)
+      alert('خطأ في تحميل بنوك الأسئلة: ' + error.message)
+    } else {
+      setBanks(data || [])
+    }
     setLoading(false)
   }
 
@@ -39,18 +43,39 @@ export default function HostDashboard() {
 
   const handleStartGame = async (bank) => {
     if (!profile) return
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase()
-    const { data, error } = await supabase.from('rooms').insert({
-      code,
-      host_id: profile.id,
-      question_set_id: bank.id,
-      title: bank.title + ' Room',
-      questions: bank.questions,
-      status: 'lobby'
-    }).select().single()
+    
+    let attempts = 0
+    const MAX_ATTEMPTS = 5
+    let success = false
+    let lastError = null
 
-    if (error) alert('Error creating room: ' + error.message)
-    else navigate(`/host/game/${data.id}`)
+    while (attempts < MAX_ATTEMPTS && !success) {
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+      const { data, error } = await supabase.from('rooms').insert({
+        code,
+        host_id: profile.id,
+        question_set_id: bank.id,
+        title: bank.title + ' Room',
+        questions: bank.questions,
+        status: 'lobby'
+      }).select().single()
+
+      if (!error) {
+        success = true
+        navigate(`/host/game/${data.id}`)
+      } else if (error.code === '23505') { // Unique violation
+        attempts++
+        lastError = error
+        console.warn(`[Dashboard] Room code collision (${code}), retrying... attempt ${attempts}`)
+      } else {
+        lastError = error
+        break // Other error (RLS, etc.)
+      }
+    }
+
+    if (!success) {
+      alert('Error creating room: ' + (lastError?.message || 'Failed after multiple attempts'))
+    }
   }
 
   return (
