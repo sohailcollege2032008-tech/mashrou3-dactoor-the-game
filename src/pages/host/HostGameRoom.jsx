@@ -23,6 +23,11 @@ function QuestionTimer({ started, duration }) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [started, duration])
 
+  useEffect(() => {
+    // Initial fetch for everything
+    fetchInitialData()
+  }, [])
+
   const remaining = Math.max(0, duration - elapsed)
   const pct = ((duration - remaining) / duration) * 100
   const isUrgent = remaining < duration * 0.3
@@ -60,22 +65,17 @@ export default function HostGameRoom() {
 
   useEffect(() => {
     if (!session) return
-    fetchInitialData()
 
-<<<<<<< HEAD
     // Explicitly set Realtime auth token to ensure RLS evaluates with the correct user
     supabase.realtime.setAuth(session.access_token)
 
-    const sub = supabase.channel(`host_room_${roomId}_${Date.now()}`)      // Join requests: push payload directly (no fetch!)
-=======
     const sub = supabase.channel(`host_room_${roomId}_${Date.now()}`)
       // Join requests: push payload directly (no fetch!)
->>>>>>> d293c1543b9d4ca2e3923d22f2d6cfcbce8b64e1
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'join_requests', filter: `room_id=eq.${roomId}` }, (payload) => {
         setRequests(prev => [...prev, payload.new])
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'join_requests', filter: `room_id=eq.${roomId}` }, () => {
-        fetchRequests() // only on update (approval/rejection) do we need fresh data
+        fetchRequests() 
       })
       // Players: push/update locally
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, (payload) => {
@@ -90,11 +90,11 @@ export default function HostGameRoom() {
             .sort((a, b) => b.score - a.score)
         )
       })
-      // Answers: push payload directly — ZERO db reads for answers!
+      // Answers: push payload directly 
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'answers', filter: `room_id=eq.${roomId}` }, (payload) => {
         setAnswers(prev => [...prev, payload.new])
       })
-      // Room updates: merge (preserve TOAST/JSONB columns)
+      // Room updates: merge 
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, (payload) => {
         setRoom(prev => ({ ...prev, ...payload.new }))
       })
@@ -146,11 +146,7 @@ export default function HostGameRoom() {
   // Reset answers on question change
   useEffect(() => {
     if (room?.status === 'playing') {
-<<<<<<< HEAD
-      fetchAnswers() // تم استبدال setAnswers([]) هنا
-=======
       fetchAnswers() // Fetch to catch rapid answers instead of just emptying
->>>>>>> d293c1543b9d4ca2e3923d22f2d6cfcbce8b64e1
       setRevealResult(null)
       setTimerKey(k => k + 1)
     }
@@ -215,22 +211,6 @@ export default function HostGameRoom() {
 
   const revealAnswer = async () => {
     setIsRevealing(true)
-<<<<<<< HEAD
-
-    // BUG 4 FIX: Fetch fresh players first so leaderboard is accurate when host reveals
-    await fetchPlayers()
-
-    const { data, error } = await supabase.rpc('reveal_answer', {
-      p_room_id: roomId,
-      p_question_index: room.current_question_index
-    })
-    setIsRevealing(false)
-    if (error) {
-      console.error('[Host] Error revealing answer:', error)
-      alert('Failed to reveal answer: ' + error.message)
-    } else {
-      setRevealResult(data)
-=======
     try {
       const { data, error } = await supabase.rpc('reveal_answer', {
         p_room_id: roomId,
@@ -247,7 +227,6 @@ export default function HostGameRoom() {
       console.error('[Host] revealAnswer exception:', err)
     } finally {
       setIsRevealing(false)
->>>>>>> d293c1543b9d4ca2e3923d22f2d6cfcbce8b64e1
     }
   }
 
