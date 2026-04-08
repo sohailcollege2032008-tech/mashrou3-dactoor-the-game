@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 
 const OWNER_EMAIL = import.meta.env.VITE_OWNER_EMAIL
@@ -53,23 +53,31 @@ export const useAuthStore = create((set, get) => ({
       const profileRef = doc(db, 'profiles', user.uid)
       const snap = await getDoc(profileRef)
 
+      // Calculate the correct role fresh every login
+      const correctRole = user.email === OWNER_EMAIL
+        ? 'owner'
+        : await get().checkIfHost(user.email)
+          ? 'host'
+          : 'player'
+
       if (snap.exists()) {
         const profile = snap.data()
+
+        // If role changed (e.g. owner added this user as host), update it
+        if (profile.role !== correctRole) {
+          await updateDoc(profileRef, { role: correctRole })
+          profile.role = correctRole
+        }
+
         set({ session: user, profile, loading: false, initialized: true })
       } else {
         // First-time login: create profile
-        const role = user.email === OWNER_EMAIL
-          ? 'owner'
-          : await get().checkIfHost(user.email)
-            ? 'host'
-            : 'player'
-
         const newProfile = {
           id: user.uid,
           email: user.email,
           display_name: user.displayName || null,
           avatar_url: user.photoURL || null,
-          role,
+          role: correctRole,
         }
         await setDoc(profileRef, newProfile)
         set({ session: user, profile: newProfile, loading: false, initialized: true })
@@ -82,7 +90,6 @@ export const useAuthStore = create((set, get) => ({
 
   checkIfHost: async (email) => {
     try {
-      const { collection, query, where, getDocs } = await import('firebase/firestore')
       const q = query(
         collection(db, 'authorized_hosts'),
         where('email', '==', email),
