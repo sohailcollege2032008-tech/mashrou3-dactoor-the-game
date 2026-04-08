@@ -62,7 +62,7 @@ export default function HostDashboard() {
 
       if (!error) {
         success = true
-        navigate(`/host/game/${data.id}`)
+        navigate(`/host/game/${data.id}`, { state: { room: data } })
       } else if (error.code === '23505') { // Unique violation
         attempts++
         lastError = error

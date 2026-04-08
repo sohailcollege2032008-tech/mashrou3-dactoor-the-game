@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { Play, UserCheck, XCircle, CheckCircle, SkipForward, Trophy, Eye, Timer, Loader2 } from 'lucide-react'
@@ -47,8 +47,9 @@ export default function HostGameRoom() {
   const { roomId } = useParams()
   const { session } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
-  const [room, setRoom] = useState(null)
+  const [room, setRoom] = useState(location.state?.room || null)
   const [requests, setRequests] = useState([])
   const [players, setPlayers] = useState([])
   const [answers, setAnswers] = useState([])
@@ -57,9 +58,18 @@ export default function HostGameRoom() {
   const [timerKey, setTimerKey] = useState(0)
   const [showTimer, setShowTimer] = useState(false)
   const [processingRequests, setProcessingRequests] = useState(new Set())
+  const [loadError, setLoadError] = useState(null)
 
   useEffect(() => {
-    fetchInitialData()
+    // Only fetch if we don't already have room data from navigation state
+    if (!location.state?.room) {
+      fetchInitialData()
+    } else {
+      // Still need to fetch requests, players, answers for the pre-loaded room
+      fetchRequests()
+      fetchPlayers()
+      fetchAnswers(location.state.room)
+    }
 
     const sub = supabase.channel(`host_room_${roomId}_${Date.now()}`)
       // Join requests: push payload directly (no fetch!)
@@ -99,9 +109,10 @@ export default function HostGameRoom() {
     const { data: roomData, error } = await supabase.from('rooms').select('*').eq('id', roomId).single()
     if (error) {
       console.error('[Host] Error fetching room:', error)
-      alert('Error loading room: ' + error.message)
+      setLoadError(error.message)
       return
     }
+    setLoadError(null)
     setRoom(roomData)
     fetchRequests()
     fetchPlayers()
@@ -240,6 +251,12 @@ export default function HostGameRoom() {
     setRevealResult(null)
   }
 
+  if (!room && loadError) return (
+    <div className="text-white p-6 space-y-3">
+      <p className="text-red-400 font-bold">Failed to load room: {loadError}</p>
+      <button onClick={fetchInitialData} className="bg-primary text-background font-bold px-4 py-2 rounded-lg">Retry</button>
+    </div>
+  )
   if (!room) return <div className="text-white p-6 flex items-center gap-3"><div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" /> Loading Room...</div>
 
   const currentQuestion = room.questions?.questions?.[room.current_question_index]
