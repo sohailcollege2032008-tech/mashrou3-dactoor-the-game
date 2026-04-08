@@ -4,7 +4,7 @@ import { ref, onValue, get, set, runTransaction, onDisconnect } from 'firebase/d
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
-import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Download, Loader2 } from 'lucide-react'
+import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Download, Loader2, Edit2, Check, X } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
 // ── Mini leaderboard strip ────────────────────────────────────────────────────
@@ -108,6 +108,11 @@ export default function PlayerGameView() {
   const [answerLocked, setAnswerLocked]     = useState(false)
   const [revealedResult, setRevealedResult] = useState(null)
   const [hostOnline, setHostOnline]         = useState(true)
+
+  // Nickname editing
+  const [editingName, setEditingName]   = useState(false)
+  const [nameInput, setNameInput]       = useState('')
+  const [savingName, setSavingName]     = useState(false)
 
   const questionServerStartRef = useRef(null)
   const prevQuestionIndexRef   = useRef(null)
@@ -270,6 +275,17 @@ export default function PlayerGameView() {
     })
   }
 
+  // ── Nickname editing ──────────────────────────────────────────────────────
+  const saveNickname = async () => {
+    const trimmed = nameInput.trim()
+    if (!trimmed || trimmed === player?.nickname) { setEditingName(false); return }
+    setSavingName(true)
+    try {
+      await update(ref(rtdb, `rooms/${roomId}/players/${session.uid}`), { nickname: trimmed })
+    } catch (err) { alert('Error: ' + err.message) }
+    finally { setSavingName(false); setEditingName(false) }
+  }
+
   // ── Download game logs ────────────────────────────────────────────────────
   const [downloadingLogs, setDownloadingLogs] = useState(false)
 
@@ -370,13 +386,47 @@ export default function PlayerGameView() {
 
       {/* Top bar */}
       <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex justify-between items-center shadow-lg flex-shrink-0">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
           {player.avatar_url && (
-            <img src={player.avatar_url} alt="" className="w-9 h-9 rounded-full border-2 border-primary" />
+            <img src={player.avatar_url} alt="" className="w-9 h-9 rounded-full border-2 border-primary flex-shrink-0" />
           )}
-          <span className="font-bold text-base">{player.nickname}</span>
+          {/* Inline nickname editor — only in lobby */}
+          {editingName ? (
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <input
+                autoFocus
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveNickname(); if (e.key === 'Escape') setEditingName(false) }}
+                maxLength={30}
+                className="flex-1 min-w-0 bg-gray-800 border border-primary rounded-lg px-3 py-1 text-white font-bold text-sm focus:outline-none"
+              />
+              <button onClick={saveNickname} disabled={savingName}
+                className="p-1.5 bg-primary/20 text-primary rounded-lg hover:bg-primary/30 transition-colors flex-shrink-0">
+                {savingName ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              </button>
+              <button onClick={() => setEditingName(false)}
+                className="p-1.5 bg-gray-700 text-gray-400 rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0">
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-bold text-base truncate">{player.nickname}</span>
+              {/* Edit icon — only in lobby */}
+              {room?.status === 'lobby' && (
+                <button
+                  onClick={() => { setNameInput(player.nickname); setEditingName(true) }}
+                  className="p-1 text-gray-600 hover:text-primary transition-colors flex-shrink-0"
+                  title="تغيير الاسم"
+                >
+                  <Edit2 size={13} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2 bg-gray-800 px-3 py-1.5 rounded-xl">
+        <div className="flex items-center gap-2 bg-gray-800 px-3 py-1.5 rounded-xl flex-shrink-0">
           <Trophy className="text-[#FFD700]" size={16} />
           <span className="font-mono text-lg font-bold">{player.score} PTS</span>
         </div>

@@ -7,9 +7,16 @@ import { useAuthStore } from '../../stores/authStore'
 
 export default function JoinGame() {
   const { profile, session } = useAuth()
-  const [code, setCode] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [code, setCode]         = useState('')
+  const [nickname, setNickname] = useState('')
+  const [loading, setLoading]   = useState(false)
   const navigate = useNavigate()
+
+  // Pre-fill nickname from Google profile once it loads
+  React.useEffect(() => {
+    if (profile?.display_name && !nickname)
+      setNickname(profile.display_name)
+  }, [profile?.display_name])
 
   const handleSignOut = () => useAuthStore.getState().signOut()
 
@@ -69,7 +76,7 @@ export default function JoinGame() {
         await set(ref(rtdb, `rooms/${roomCode}/join_requests/${userId}`), {
           player_id: userId,
           player_email: profile.email,
-          player_name: profile.display_name || profile.email,
+          player_name: nickname.trim() || profile.display_name || profile.email,
           player_avatar: profile.avatar_url || null,
           status: 'pending',
           created_at: Date.now()
@@ -89,7 +96,7 @@ export default function JoinGame() {
         <h1 className="text-3xl font-display font-bold text-white mb-2">Join a Game</h1>
         <p className="text-gray-400 mb-8 font-sans">Enter the 6-digit code provided by your host</p>
 
-        <form onSubmit={handleJoin} className="space-y-6">
+        <form onSubmit={handleJoin} className="space-y-4">
           <input
             type="text"
             placeholder="e.g. A1B2C3"
@@ -99,6 +106,22 @@ export default function JoinGame() {
             className="w-full text-center text-4xl tracking-[0.5em] font-mono bg-gray-800 border-2 border-gray-700 rounded-xl py-4 focus:outline-none focus:border-primary text-white transition-colors uppercase"
             required
           />
+
+          {/* Nickname field */}
+          <div className="text-left space-y-1.5">
+            <label className="text-xs text-gray-500 font-bold tracking-widest uppercase block">
+              Nickname
+            </label>
+            <input
+              type="text"
+              placeholder="اسمك في اللعبة"
+              maxLength={30}
+              value={nickname}
+              onChange={e => setNickname(e.target.value)}
+              className="w-full bg-gray-800 border-2 border-gray-700 rounded-xl px-4 py-3 text-white font-bold text-lg focus:outline-none focus:border-primary transition-colors placeholder-gray-600"
+            />
+          </div>
+
           <button
             type="submit"
             disabled={loading || code.length !== 6}
