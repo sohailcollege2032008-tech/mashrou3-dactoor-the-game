@@ -40,7 +40,7 @@ export default function PlayerGameView() {
   useEffect(() => {
     fetchInitialData()
 
-    const sub = supabase.channel(`player_room_${roomId}_${session.user.id}`)
+    const sub = supabase.channel(`player_room_${roomId}_${session.user.id}_${Date.now()}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, (payload) => {
         setRoom(prev => {
           const updated = { ...prev, ...payload.new }

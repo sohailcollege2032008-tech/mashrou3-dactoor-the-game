@@ -61,7 +61,7 @@ export default function HostGameRoom() {
   useEffect(() => {
     fetchInitialData()
 
-    const sub = supabase.channel(`host_room_${roomId}`)
+    const sub = supabase.channel(`host_room_${roomId}_${Date.now()}`)
       // Join requests: push payload directly (no fetch!)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'join_requests', filter: `room_id=eq.${roomId}` }, (payload) => {
         setRequests(prev => [...prev, payload.new])
@@ -132,7 +132,7 @@ export default function HostGameRoom() {
   // Reset answers on question change
   useEffect(() => {
     if (room?.status === 'playing') {
-      setAnswers([])
+      fetchAnswers() // Fetch to catch rapid answers instead of just emptying
       setRevealResult(null)
       setTimerKey(k => k + 1)
     }
@@ -164,6 +164,9 @@ export default function HostGameRoom() {
       } else if (action === 'approved') {
         // Fallback: fetch players immediately in case realtime misses the INSERT
         await fetchPlayers()
+        await fetchRequests()
+      } else if (action === 'rejected') {
+        await fetchRequests()
       }
     } catch (err) {
       console.error('[Host] Join request exception:', err)
