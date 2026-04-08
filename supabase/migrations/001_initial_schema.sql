@@ -179,21 +179,21 @@ CREATE POLICY "Players can update own record" ON players FOR UPDATE USING (user_
 CREATE POLICY "Anyone can read answers" ON answers FOR SELECT USING (true);
 CREATE POLICY "Players can submit answers" ON answers FOR INSERT WITH CHECK (player_id IN (SELECT id FROM players WHERE user_id = auth.uid()));
 
--- submit_answer RPC (atomic, race-condition-safe)
+-- submit_answer RPC (atomic, race-condition-safe, server-side validation)
 CREATE OR REPLACE FUNCTION submit_answer(
   p_room_id UUID,
   p_player_id UUID,
   p_question_index INTEGER,
   p_selected_choice INTEGER,
-  p_correct_choice INTEGER,
   p_reaction_time_ms INTEGER
 ) RETURNS JSONB AS $$
 DECLARE
   v_is_correct BOOLEAN;
   v_is_first BOOLEAN;
   v_existing_first UUID;
+  v_correct_choice INTEGER;
 BEGIN
-  -- التحقق مما إذا كان اللاعب قد أجاب بالفعل
+  -- 1. Check if the player already answered
   IF EXISTS (
     SELECT 1 FROM answers
     WHERE room_id = p_room_id AND player_id = p_player_id AND question_index = p_question_index
@@ -201,11 +201,18 @@ BEGIN
     RETURN jsonb_build_object('error', 'already_answered');
   END IF;
 
-  v_is_correct := (p_selected_choice = p_correct_choice);
+  -- 2. Securely fetch the correct choice from the rooms table
+  SELECT (questions->'questions'->p_question_index->>'correct')::INTEGER
+  INTO v_correct_choice
+  FROM rooms
+  WHERE id = p_room_id;
+
+  -- Evaluate correctness
+  v_is_correct := (p_selected_choice = v_correct_choice);
   v_is_first := false;
 
   IF v_is_correct THEN
-    -- حماية من التزامن (Race condition) لمنع فوز شخصين في نفس اللحظة
+    -- Race condition protection to prevent multiple simultaneous firsts
     PERFORM pg_advisory_xact_lock(hashtext(p_room_id::TEXT || p_question_index::TEXT));
 
     SELECT player_id INTO v_existing_first
@@ -218,11 +225,11 @@ BEGIN
     END IF;
   END IF;
 
-  -- تسجيل الإجابة مع إضافة وقت رد الفعل القادم من المتصفح
+  -- 3. Record the answer with the client's reaction time
   INSERT INTO answers (room_id, player_id, question_index, selected_choice, is_correct, is_first_correct, response_time_ms)
   VALUES (p_room_id, p_player_id, p_question_index, p_selected_choice, v_is_correct, v_is_first, p_reaction_time_ms);
 
-  -- زيادة السكور للفائز الأول
+  -- 4. Increment score for the fastest correct player
   IF v_is_first THEN
     UPDATE players SET score = score + 1 WHERE id = p_player_id;
   END IF;
