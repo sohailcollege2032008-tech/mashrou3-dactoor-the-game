@@ -9,6 +9,10 @@ export default function OwnerDashboard() {
   const [emailInput, setEmailInput] = useState('')
   const [loading, setLoading] = useState(true)
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+  }
+
   useEffect(() => {
     fetchHosts()
   }, [])
@@ -77,6 +81,12 @@ export default function OwnerDashboard() {
               Go to Host Dashboard
             </Link>
             <Link to="/" className="text-gray-400 hover:text-white transition-colors">Return Home</Link>
+            <button
+              onClick={handleSignOut}
+              className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 font-bold transition-all text-sm"
+            >
+              تسجيل الخروج
+            </button>
           </div>
         </header>
 
