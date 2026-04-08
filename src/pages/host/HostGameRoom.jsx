@@ -203,6 +203,11 @@ export default function HostGameRoom() {
     points_decrement: 1,
   })
 
+  const [toasts, setToasts]               = useState([])         // correct-answer notifications
+  const [downloadingLogs, setDownloadingLogs] = useState(false)
+  const notifiedAnswersRef = useRef(new Set())   // user_ids already toasted this question
+  const roomStatusRef      = useRef(null)         // mirror of room.status for callbacks
+
   // ── Host presence ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!session) return
@@ -218,6 +223,7 @@ export default function HostGameRoom() {
     const unsubRoom = onValue(ref(rtdb, `rooms/${roomId}`), snap => {
       if (!snap.exists()) return
       const data = snap.val()
+      roomStatusRef.current = data.status   // keep ref in sync for callbacks
       setRoom(prev => {
         if (prev && data.current_question_index !== prev.current_question_index) {
           setAnswers([]); setRevealResult(null); setTimerKey(k => k + 1)
@@ -260,8 +266,20 @@ export default function HostGameRoom() {
   useEffect(() => {
     if (!session || room?.current_question_index === undefined) return
     const qIdx = room.current_question_index
+    notifiedAnswersRef.current = new Set()   // reset for each new question
     const unsubAns = onValue(ref(rtdb, `rooms/${roomId}/answers/${qIdx}`), snap => {
-      setAnswers(snap.exists() ? Object.values(snap.val()) : [])
+      const all = snap.exists() ? Object.values(snap.val()) : []
+      setAnswers(all)
+
+      // Only toast during playing phase
+      if (roomStatusRef.current !== 'playing') return
+      all.filter(a => a.is_correct).forEach(a => {
+        if (notifiedAnswersRef.current.has(a.user_id)) return
+        notifiedAnswersRef.current.add(a.user_id)
+        const id = `${Date.now()}-${a.user_id}`
+        setToasts(prev => [...prev, { id, nickname: a.player_name, time_ms: a.reaction_time_ms }])
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
+      })
     })
     return () => unsubAns()
   }, [roomId, session, room?.current_question_index])
@@ -411,6 +429,73 @@ export default function HostGameRoom() {
     } catch (err) { alert('Error: ' + err.message) }
   }
 
+  // ── Download game logs ────────────────────────────────────────────────────
+  const downloadLogs = async () => {
+    setDownloadingLogs(true)
+    try {
+      const questions = room.questions?.questions || []
+      const lines = []
+      const pad  = (s, n) => String(s).padEnd(n)
+
+      lines.push('=== Mashrou3 Dactoor — Game Log ===')
+      lines.push(`Room      : ${roomId}`)
+      lines.push(`Date      : ${new Date().toLocaleString()}`)
+      lines.push(`Players   : ${players.length}`)
+      lines.push(`Questions : ${questions.length}`)
+      lines.push(`Scoring   : ${room.config?.scoring_mode || 'classic'}`)
+      lines.push('')
+
+      for (let qi = 0; qi < questions.length; qi++) {
+        const q = questions[qi]
+        lines.push('═'.repeat(62))
+        lines.push(`Q${qi + 1}: ${q.question}`)
+        lines.push(`Correct: ${q.choices[q.correct] || '?'}`)
+        lines.push('─'.repeat(62))
+
+        const ansSnap = await get(ref(rtdb, `rooms/${roomId}/answers/${qi}`))
+        const ansMap  = ansSnap.exists() ? ansSnap.val() : {}
+        const answered = Object.values(ansMap)
+        const answeredIds = new Set(answered.map(a => a.user_id))
+
+        const correct  = answered.filter(a => a.is_correct ).sort((a, b) => a.reaction_time_ms - b.reaction_time_ms)
+        const wrong    = answered.filter(a => !a.is_correct).sort((a, b) => a.reaction_time_ms - b.reaction_time_ms)
+        const noAnswer = players.filter(p => !answeredIds.has(p.user_id))
+
+        correct.forEach((a, i) => {
+          const pts = a.points_earned != null ? `  +${a.points_earned}pt` : ''
+          lines.push(`  ✓  #${i + 1}  ${pad(a.player_name || '?', 28)}${pad(a.reaction_time_ms + 'ms', 10)}${pts}`)
+        })
+        wrong.forEach(a => {
+          const chosen = q.choices[a.selected_choice] || '?'
+          lines.push(`  ✗       ${pad(a.player_name || '?', 28)}${pad(a.reaction_time_ms + 'ms', 10)}  chose: ${chosen}`)
+        })
+        noAnswer.forEach(p => {
+          lines.push(`  —       ${pad(p.nickname, 28)}no answer`)
+        })
+        lines.push('')
+      }
+
+      lines.push('═'.repeat(62))
+      lines.push('FINAL SCORES')
+      lines.push('─'.repeat(62))
+      players.forEach((p, i) => {
+        lines.push(`  #${pad(i + 1, 4)}${pad(p.nickname, 32)}${p.score} pts`)
+      })
+
+      const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `dactoor-${roomId}-${new Date().toISOString().slice(0, 10)}.txt`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert('Error downloading logs: ' + err.message)
+    } finally {
+      setDownloadingLogs(false)
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   if (!room) return (
     <div className="text-white p-6 flex items-center gap-3">
@@ -427,6 +512,23 @@ export default function HostGameRoom() {
 
   return (
     <div className="min-h-screen bg-background text-white p-6">
+
+      {/* ── Correct-answer toast notifications ─────────────────────────────── */}
+      {toasts.length > 0 && (
+        <div className="fixed right-5 top-20 z-[200] space-y-2 pointer-events-none max-w-[220px]">
+          {toasts.map(t => (
+            <div key={t.id}
+              className="flex items-center gap-2 bg-green-900/95 border border-green-500/60 text-green-100 px-3 py-2 rounded-xl shadow-2xl shadow-black/40"
+              style={{ animation: 'slideInRight .25s ease-out' }}
+            >
+              <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
+              <span className="font-bold text-sm flex-1 truncate">{t.nickname}</span>
+              <span className="text-green-400 font-mono text-xs flex-shrink-0">{t.time_ms}ms</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto space-y-6">
 
         {/* Header */}
@@ -658,10 +760,21 @@ export default function HostGameRoom() {
                 </div>
               ))}
             </div>
-            <button onClick={() => navigate('/host/dashboard')}
-              className="mt-10 bg-primary text-background font-bold px-8 py-3 rounded-xl hover:bg-[#00D4FF] transition-colors">
-              Back to Dashboard
-            </button>
+            <div className="mt-10 flex items-center justify-center gap-4 flex-wrap">
+              <button
+                onClick={downloadLogs}
+                disabled={downloadingLogs}
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold px-6 py-3 rounded-xl transition-colors disabled:opacity-50"
+              >
+                {downloadingLogs
+                  ? <><Loader2 size={16} className="animate-spin" /> جاري التحميل...</>
+                  : <><Trophy size={16} className="text-[#FFD700]" /> تحميل اللوجز (.txt)</>}
+              </button>
+              <button onClick={() => navigate('/host/dashboard')}
+                className="bg-primary text-background font-bold px-8 py-3 rounded-xl hover:bg-[#00D4FF] transition-colors">
+                Back to Dashboard
+              </button>
+            </div>
           </div>
         )}
       </div>

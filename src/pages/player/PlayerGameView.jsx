@@ -4,7 +4,7 @@ import { ref, onValue, get, set, runTransaction, onDisconnect } from 'firebase/d
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
-import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Star } from 'lucide-react'
+import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Download, Loader2 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
 // ── Mini leaderboard strip ────────────────────────────────────────────────────
@@ -229,6 +229,81 @@ export default function PlayerGameView() {
         submitted_at:     Date.now(),
       }
     })
+  }
+
+  // ── Download game logs ────────────────────────────────────────────────────
+  const [downloadingLogs, setDownloadingLogs] = useState(false)
+
+  const downloadLogs = async () => {
+    if (!room) return
+    setDownloadingLogs(true)
+    try {
+      const questions = room.questions?.questions || []
+      const pad = (s, n) => String(s).padEnd(n)
+      const lines = []
+
+      lines.push('=== Mashrou3 Dactoor — Game Log ===')
+      lines.push(`Room      : ${roomId}`)
+      lines.push(`Date      : ${new Date().toLocaleString()}`)
+      lines.push(`Questions : ${questions.length}`)
+      lines.push(`Scoring   : ${room.config?.scoring_mode || 'classic'}`)
+      lines.push('')
+
+      // Read all players for the room
+      const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`))
+      const allPlayers  = playersSnap.exists()
+        ? Object.values(playersSnap.val()).sort((a, b) => b.score - a.score)
+        : []
+
+      for (let qi = 0; qi < questions.length; qi++) {
+        const q = questions[qi]
+        lines.push('═'.repeat(62))
+        lines.push(`Q${qi + 1}: ${q.question}`)
+        lines.push(`Correct: ${q.choices[q.correct] || '?'}`)
+        lines.push('─'.repeat(62))
+
+        const ansSnap  = await get(ref(rtdb, `rooms/${roomId}/answers/${qi}`))
+        const ansMap   = ansSnap.exists() ? ansSnap.val() : {}
+        const answered = Object.values(ansMap)
+        const answeredIds = new Set(answered.map(a => a.user_id))
+
+        const correct  = answered.filter(a =>  a.is_correct).sort((a, b) => a.reaction_time_ms - b.reaction_time_ms)
+        const wrong    = answered.filter(a => !a.is_correct).sort((a, b) => a.reaction_time_ms - b.reaction_time_ms)
+        const noAnswer = allPlayers.filter(p => !answeredIds.has(p.user_id))
+
+        correct.forEach((a, i) => {
+          const pts = a.points_earned != null ? `  +${a.points_earned}pt` : ''
+          lines.push(`  ✓  #${i + 1}  ${pad(a.player_name || '?', 28)}${pad(a.reaction_time_ms + 'ms', 10)}${pts}`)
+        })
+        wrong.forEach(a => {
+          const chosen = q.choices[a.selected_choice] || '?'
+          lines.push(`  ✗       ${pad(a.player_name || '?', 28)}${pad(a.reaction_time_ms + 'ms', 10)}  chose: ${chosen}`)
+        })
+        noAnswer.forEach(p => {
+          lines.push(`  —       ${pad(p.nickname, 28)}no answer`)
+        })
+        lines.push('')
+      }
+
+      lines.push('═'.repeat(62))
+      lines.push('FINAL SCORES')
+      lines.push('─'.repeat(62))
+      allPlayers.forEach((p, i) => {
+        lines.push(`  #${pad(i + 1, 4)}${pad(p.nickname, 32)}${p.score} pts`)
+      })
+
+      const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url
+      a.download = `dactoor-${roomId}-${new Date().toISOString().slice(0, 10)}.txt`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert('Error downloading logs: ' + err.message)
+    } finally {
+      setDownloadingLogs(false)
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -497,10 +572,21 @@ export default function PlayerGameView() {
                   ))}
                 </div>
               )}
-              <button onClick={() => navigate('/')}
-                className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-xl transition-colors">
-                الرئيسية
-              </button>
+              <div className="flex gap-3 justify-center flex-wrap">
+                <button
+                  onClick={downloadLogs}
+                  disabled={downloadingLogs}
+                  className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold py-3 px-6 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {downloadingLogs
+                    ? <><Loader2 size={15} className="animate-spin" /> جاري التحميل...</>
+                    : <><Download size={15} /> تحميل اللوجز</>}
+                </button>
+                <button onClick={() => navigate('/')}
+                  className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-xl transition-colors">
+                  الرئيسية
+                </button>
+              </div>
             </div>
           </div>
         )}
