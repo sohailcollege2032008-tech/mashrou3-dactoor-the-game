@@ -15,9 +15,30 @@ export default function HostDashboard() {
   const [showUpload, setShowUpload] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [selectedBank, setSelectedBank] = useState(null)
+  const [activeRoom, setActiveRoom] = useState(null)   // { code, title } if host has live game
 
   useEffect(() => {
     if (profile) fetchBanks()
+  }, [profile])
+
+  // Check if host has an unfinished game room to rejoin
+  useEffect(() => {
+    if (!profile) return
+    const check = async () => {
+      try {
+        const snap = await get(ref(rtdb, `host_rooms/${profile.id}/active`))
+        if (!snap.exists()) return
+        const { code, title } = snap.val()
+        const statusSnap = await get(ref(rtdb, `rooms/${code}/status`))
+        if (statusSnap.exists() && statusSnap.val() !== 'finished') {
+          setActiveRoom({ code, title })
+        } else {
+          // Stale entry — clean up
+          set(ref(rtdb, `host_rooms/${profile.id}/active`), null)
+        }
+      } catch (_) {}
+    }
+    check()
   }, [profile])
 
   const fetchBanks = async () => {
@@ -69,12 +90,14 @@ export default function HostDashboard() {
           continue
         }
 
+        const roomTitle = bank.title + ' Room'
+
         // Create room in RTDB
         await set(roomRef, {
           code,
           host_id: profile.id,
           question_set_id: bank.id,
-          title: bank.title + ' Room',
+          title: roomTitle,
           questions: bank.questions,
           status: 'lobby',
           current_question_index: 0,
@@ -82,6 +105,9 @@ export default function HostDashboard() {
           reveal_data: null,
           created_at: Date.now()
         })
+
+        // Track active room so host can rejoin if they navigate away
+        await set(ref(rtdb, `host_rooms/${profile.id}/active`), { code, title: roomTitle })
 
         navigate(`/host/game/${code}`)
         return
@@ -130,6 +156,23 @@ export default function HostDashboard() {
             </button>
           </div>
         </header>
+
+        {/* ── Active game rejoin banner ──────────────────────────────────── */}
+        {activeRoom && (
+          <div className="bg-primary/10 border border-primary/40 rounded-2xl p-5 flex items-center justify-between gap-4 shadow-lg shadow-primary/5">
+            <div className="min-w-0">
+              <p className="text-primary text-xs font-bold tracking-widest uppercase mb-1">🎮 جيم نشط</p>
+              <h3 className="text-white font-bold text-lg leading-snug truncate">{activeRoom.title}</h3>
+              <p className="text-gray-400 text-sm font-mono mt-0.5">كود: <span className="text-primary font-bold tracking-widest">{activeRoom.code}</span></p>
+            </div>
+            <Link
+              to={`/host/game/${activeRoom.code}`}
+              className="flex-shrink-0 bg-primary text-background font-bold px-6 py-3 rounded-xl hover:bg-[#00D4FF] transition-all active:scale-95 text-sm"
+            >
+              Rejoin →
+            </Link>
+          </div>
+        )}
 
         <section className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 backdrop-blur-sm shadow-xl">
           <div className="flex justify-between items-center mb-6">

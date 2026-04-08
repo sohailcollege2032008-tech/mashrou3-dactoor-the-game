@@ -362,7 +362,10 @@ export default function HostGameRoom() {
   const endCompetition = async () => {
     if (!window.confirm('إنهاء المسابقة الآن؟')) return
     setEndingGame(true)
-    try { await update(ref(rtdb, `rooms/${roomId}`), { status: 'finished' }) }
+    try {
+      await update(ref(rtdb, `rooms/${roomId}`), { status: 'finished' })
+      await set(ref(rtdb, `host_rooms/${session.uid}/active`), null)
+    }
     catch (err) { alert('Error: ' + err.message) }
     finally { setEndingGame(false) }
   }
@@ -463,6 +466,7 @@ export default function HostGameRoom() {
     try {
       if (isFinished) {
         await update(ref(rtdb, `rooms/${roomId}`), { status: 'finished' })
+        await set(ref(rtdb, `host_rooms/${session.uid}/active`), null)
       } else {
         await update(ref(rtdb, `rooms/${roomId}`), {
           status: 'playing',
