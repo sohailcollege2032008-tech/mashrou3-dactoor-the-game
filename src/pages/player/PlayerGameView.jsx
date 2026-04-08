@@ -48,6 +48,45 @@ function MiniLeaderboard({ players, myId }) {
   )
 }
 
+// ── Player-side countdown bar ─────────────────────────────────────────────────
+function PlayerCountdown({ startedAt, duration }) {
+  const [remaining, setRemaining] = useState(duration)
+  const rafRef = useRef(null)
+
+  useEffect(() => {
+    const tick = () => {
+      const rem = Math.max(0, duration - (Date.now() - startedAt) / 1000)
+      setRemaining(rem)
+      if (rem > 0) rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [startedAt, duration])
+
+  const pct    = (remaining / duration) * 100
+  const urgent  = remaining < duration * 0.25
+  const expired = remaining === 0
+
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors ${
+      expired ? 'border-gray-700 bg-gray-800/40'
+      : urgent ? 'border-red-500/50 bg-red-500/10'
+      : 'border-primary/40 bg-primary/5'
+    }`}>
+      <Clock size={13} className={expired ? 'text-gray-600' : urgent ? 'text-red-400 animate-pulse' : 'text-primary'} />
+      <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-none ${expired ? 'bg-gray-600' : urgent ? 'bg-red-400' : 'bg-primary'}`}
+          style={{ width: `${pct}%` }} />
+      </div>
+      <span className={`font-mono font-bold text-sm w-10 text-right tabular-nums ${
+        expired ? 'text-gray-500' : urgent ? 'text-red-400' : 'text-primary'
+      }`}>
+        {expired ? 'Done' : `${Math.ceil(remaining)}s`}
+      </span>
+    </div>
+  )
+}
+
 // ── Dynamic font size for question text ───────────────────────────────────────
 function questionFontClass(text = '') {
   const len = text.length
@@ -367,15 +406,19 @@ export default function PlayerGameView() {
             <MiniLeaderboard players={leaderboard} myId={myId} />
 
             {/* Question card */}
-            <div className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0">
-              <span className="text-primary font-bold text-xs tracking-widest uppercase block mb-2">
+            <div className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0 space-y-3">
+              <span className="text-primary font-bold text-xs tracking-widest uppercase block">
                 سؤال {room.current_question_index + 1} / {room.questions.questions.length}
               </span>
               <p className={`text-white font-bold ${questionFontClass(currentQ.question)} leading-snug`}>
                 {currentQ.question}
               </p>
               {currentQ.image_url && (
-                <img src={currentQ.image_url} alt="q" className="mt-3 w-full max-h-36 object-contain rounded-xl border border-gray-700 bg-gray-950" />
+                <img src={currentQ.image_url} alt="q" className="w-full max-h-36 object-contain rounded-xl border border-gray-700 bg-gray-950" />
+              )}
+              {/* Countdown bar — appears when host starts it */}
+              {room.countdown_started_at && (
+                <PlayerCountdown startedAt={room.countdown_started_at} duration={room.countdown_duration} />
               )}
             </div>
 
@@ -435,12 +478,12 @@ export default function PlayerGameView() {
             <MiniLeaderboard players={leaderboard} myId={myId} />
 
             {/* Question */}
-            <div className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0">
+            <div className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0 space-y-2">
               <p className={`text-gray-300 font-medium ${questionFontClass(currentQ.question)} leading-snug`}>
                 {currentQ.question}
               </p>
               {currentQ.image_url && (
-                <img src={currentQ.image_url} alt="q" className="mt-2 w-full max-h-28 object-contain rounded-xl border border-gray-700 bg-gray-950" />
+                <img src={currentQ.image_url} alt="q" className="w-full max-h-28 object-contain rounded-xl border border-gray-700 bg-gray-950" />
               )}
             </div>
 

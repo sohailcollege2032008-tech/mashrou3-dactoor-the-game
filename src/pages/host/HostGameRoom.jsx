@@ -9,37 +9,40 @@ import {
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
-// ── Timer bar ─────────────────────────────────────────────────────────────────
-function QuestionTimer({ started, duration }) {
-  const [elapsed, setElapsed] = useState(0)
-  const rafRef  = useRef(null)
-  const t0Ref   = useRef(performance.now())
+// ── Countdown bar (manual, host-triggered) ─────────────────────────────────
+function CountdownBar({ startedAt, duration }) {
+  const [remaining, setRemaining] = useState(duration)
+  const rafRef = useRef(null)
 
   useEffect(() => {
-    t0Ref.current = performance.now()
-    setElapsed(0)
     const tick = () => {
-      const diff = (performance.now() - t0Ref.current) / 1000
-      setElapsed(diff)
-      if (diff < duration) rafRef.current = requestAnimationFrame(tick)
+      const rem = Math.max(0, duration - (Date.now() - startedAt) / 1000)
+      setRemaining(rem)
+      if (rem > 0) rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [started, duration])
+  }, [startedAt, duration])
 
-  const remaining = Math.max(0, duration - elapsed)
-  const pct       = ((duration - remaining) / duration) * 100
-  const urgent    = remaining < duration * 0.3
+  const pct    = (remaining / duration) * 100
+  const urgent  = remaining < duration * 0.25
+  const expired = remaining === 0
 
   return (
-    <div className="flex items-center gap-3">
-      <Timer size={18} className={urgent ? 'text-red-400 animate-pulse' : 'text-gray-400'} />
+    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-colors ${
+      expired ? 'border-gray-700 bg-gray-800/60'
+      : urgent ? 'border-red-500/60 bg-red-500/10'
+      : 'border-primary/50 bg-primary/10'
+    }`}>
+      <Timer size={16} className={expired ? 'text-gray-500' : urgent ? 'text-red-400 animate-pulse' : 'text-primary'} />
       <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-none ${urgent ? 'bg-red-400' : 'bg-primary'}`}
+        <div className={`h-full rounded-full transition-none ${expired ? 'bg-gray-600' : urgent ? 'bg-red-400' : 'bg-primary'}`}
           style={{ width: `${pct}%` }} />
       </div>
-      <span className={`font-mono font-bold w-8 text-right ${urgent ? 'text-red-400' : 'text-gray-300'}`}>
-        {Math.ceil(remaining)}s
+      <span className={`font-mono font-bold text-lg w-12 text-right tabular-nums ${
+        expired ? 'text-gray-500' : urgent ? 'text-red-400' : 'text-primary'
+      }`}>
+        {expired ? 'Done' : `${Math.ceil(remaining)}s`}
       </span>
     </div>
   )
@@ -54,6 +57,23 @@ function GameConfigPanel({ config, onChange }) {
       <h3 className="text-base font-bold text-white flex items-center gap-2">
         <Settings size={16} className="text-primary" /> إعدادات الجيم
       </h3>
+
+      {/* Timer duration */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Timer size={15} className="text-gray-400" />
+          <span className="ar text-sm text-gray-200 font-medium">وقت العد التنازلي</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number" min={5} max={300}
+            value={config.timer_seconds}
+            onChange={e => set('timer_seconds', Math.max(5, Number(e.target.value)))}
+            className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary text-center"
+          />
+          <span className="text-xs text-gray-500">ث</span>
+        </div>
+      </div>
 
       {/* Shuffle toggle */}
       <label className="flex items-center justify-between cursor-pointer select-none">
@@ -190,8 +210,7 @@ export default function HostGameRoom() {
   const [answers, setAnswers]   = useState([])
   const [revealResult, setRevealResult] = useState(null)
   const [isRevealing, setIsRevealing]   = useState(false)
-  const [timerKey, setTimerKey]   = useState(0)
-  const [showTimer, setShowTimer] = useState(false)
+  const [startingCountdown, setStartingCountdown] = useState(false)
   const [processingRequests, setProcessingRequests] = useState(new Set())
   const [endingGame, setEndingGame] = useState(false)
 
@@ -201,6 +220,7 @@ export default function HostGameRoom() {
     first_correct_points: 3,
     other_correct_points: 1,
     points_decrement: 1,
+    timer_seconds: 30,
   })
 
   const [toasts, setToasts]               = useState([])         // correct-answer notifications
@@ -226,7 +246,7 @@ export default function HostGameRoom() {
       roomStatusRef.current = data.status   // keep ref in sync for callbacks
       setRoom(prev => {
         if (prev && data.current_question_index !== prev.current_question_index) {
-          setAnswers([]); setRevealResult(null); setTimerKey(k => k + 1)
+          setAnswers([]); setRevealResult(null)
         }
         if (data.status === 'finished' && prev?.status !== 'finished')
           confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } })
@@ -331,9 +351,10 @@ export default function HostGameRoom() {
         current_question_index: 0,
         question_started_at: Date.now(),
         config: gameConfig,
-        questions,   // may be shuffled version
+        questions,
+        countdown_started_at: null,
+        countdown_duration: null,
       })
-      setTimerKey(k => k + 1)
     } catch (err) { alert('Failed to start: ' + err.message) }
   }
 
@@ -423,10 +444,25 @@ export default function HostGameRoom() {
           current_question_index: room.current_question_index + 1,
           question_started_at: Date.now(),
           reveal_data: null,
+          countdown_started_at: null,
+          countdown_duration: null,
         })
       }
       setRevealResult(null)
     } catch (err) { alert('Error: ' + err.message) }
+  }
+
+  // ── Start manual countdown ────────────────────────────────────────────────
+  const startCountdown = async () => {
+    setStartingCountdown(true)
+    try {
+      const dur = room.config?.timer_seconds || 30
+      await update(ref(rtdb, `rooms/${roomId}`), {
+        countdown_started_at: Date.now(),
+        countdown_duration: dur,
+      })
+    } catch (err) { alert('Error: ' + err.message) }
+    finally { setStartingCountdown(false) }
   }
 
   // ── Download game logs ────────────────────────────────────────────────────
@@ -649,9 +685,10 @@ export default function HostGameRoom() {
                 </div>
               </div>
 
-              {showTimer && !isRevealPhase && (
+              {/* Countdown bar — shown when active (both playing & revealing) */}
+              {room.countdown_started_at && (
                 <div className="mb-4">
-                  <QuestionTimer key={timerKey} started={room.question_started_at} duration={currentQ.time_limit || 30} />
+                  <CountdownBar startedAt={room.countdown_started_at} duration={room.countdown_duration} />
                 </div>
               )}
 
@@ -699,12 +736,24 @@ export default function HostGameRoom() {
               )}
 
               {/* Controls */}
-              <div className="mt-6 flex items-center justify-between gap-4">
-                <button onClick={() => setShowTimer(v => !v)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm transition-colors ${showTimer ? 'border-primary text-primary bg-primary/10' : 'border-gray-700 text-gray-500 hover:border-gray-600'}`}>
-                  <Timer size={15} /> {showTimer ? 'Hide Timer' : 'Show Timer'}
-                </button>
-                <div className="flex gap-3">
+              <div className="mt-6 flex items-center justify-between gap-4 flex-wrap">
+                {/* Countdown button — only during playing phase */}
+                {room.status === 'playing' && (
+                  <button
+                    onClick={startCountdown}
+                    disabled={!!room.countdown_started_at || startingCountdown}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-default
+                      border-primary/60 text-primary bg-primary/5 hover:bg-primary/15 active:scale-95"
+                  >
+                    <Timer size={15} />
+                    {room.countdown_started_at
+                      ? `العد جاري...`
+                      : `Start Countdown ${room.config?.timer_seconds || 30}s`}
+                  </button>
+                )}
+                {room.status === 'revealing' && <div />}
+
+                <div className="flex gap-3 ml-auto">
                   {room.status === 'playing' && (
                     <button onClick={revealAnswer} disabled={isRevealing}
                       className="bg-yellow-500 text-black font-bold px-6 py-2.5 rounded-xl flex items-center gap-2 hover:bg-yellow-400 disabled:opacity-50 transition-colors active:scale-95">

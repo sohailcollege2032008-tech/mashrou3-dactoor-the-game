@@ -203,18 +203,6 @@ function QuestionEditor({ question, index, bankId, onSave, onClose }) {
             <p className="text-xs text-gray-500 mt-2">اضغط على الحرف لتحديد الإجابة الصحيحة</p>
           </div>
 
-          {/* Time limit */}
-          <div>
-            <label className="text-sm text-gray-400 font-bold mb-2 block">وقت الإجابة (ثانية)</label>
-            <input
-              type="number"
-              min={5}
-              max={120}
-              value={q.time_limit || 20}
-              onChange={e => setQ(prev => ({ ...prev, time_limit: Number(e.target.value) }))}
-              className="w-32 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-primary transition-colors"
-            />
-          </div>
         </div>
 
         {/* Footer */}
@@ -258,8 +246,6 @@ const QuestionItem = memo(function QuestionItem({
           <p className="text-white font-medium text-sm leading-snug line-clamp-2">{q.question}</p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className="text-xs text-green-400 font-mono truncate max-w-[160px]">{correctLabel}</span>
-            <span className="text-gray-700 text-xs">·</span>
-            <span className="text-xs text-gray-500 font-mono">{q.time_limit || 20}s</span>
             {hasImage && (
               <span className="flex items-center gap-1 text-xs text-blue-400">
                 <Image size={10} /> صورة

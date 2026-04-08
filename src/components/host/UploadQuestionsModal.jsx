@@ -47,7 +47,6 @@ Your task is to extract ALL questions from the document and return them in this 
       "question_ar": "<Arabic version if the original is in Arabic, otherwise null>",
       "choices": ["<choice A>", "<choice B>", "<choice C>", "<choice D>"],
       "correct": <0-indexed position of the correct answer>,
-      "time_limit": 20,
       "needs_image": false,
       "image_url": null
     }
@@ -61,9 +60,8 @@ RULES:
 4. If the question is in Arabic, put it in both "question" and "question_ar". If in English, put in "question" only and set "question_ar" to null.
 5. Preserve the original wording of questions and choices exactly as written.
 6. If choices are labeled A/B/C/D or 1/2/3/4, remove the labels and just keep the text.
-7. Set time_limit to 20 for normal questions, 30 for long/complex ones, 10 for simple recall.
-8. Set "needs_image" to true if the question refers to a figure, image, photograph, diagram, graph, table, or any visual element that is required to answer correctly. Set to false otherwise.
-9. Return ONLY the JSON object. No markdown backticks, no commentary.`
+7. Set "needs_image" to true if the question refers to a figure, image, photograph, diagram, graph, table, or any visual element that is required to answer correctly. Set to false otherwise.
+8. Return ONLY the JSON object. No markdown backticks, no commentary.`
 
 // ── Questions preview ──────────────────────────────────────────────────────────
 function QuestionsPreview({ data }) {
