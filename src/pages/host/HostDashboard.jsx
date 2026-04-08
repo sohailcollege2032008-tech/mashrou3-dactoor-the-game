@@ -78,6 +78,10 @@ export default function HostDashboard() {
     }
   }
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+  }
+
   return (
     <div className="min-h-screen bg-background text-white p-8">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -88,7 +92,15 @@ export default function HostDashboard() {
             <h1 className="text-3xl font-display font-bold text-primary">Host Dashboard</h1>
             <p className="text-gray-400 mt-2 font-sans">Manage your Question Banks and Game Rooms</p>
           </div>
-          <Link to="/" className="text-gray-400 hover:text-white transition-colors font-sans">Return Home</Link>
+          <div className="flex items-center gap-4">
+            <Link to="/" className="text-gray-400 hover:text-white transition-colors font-sans">Return Home</Link>
+            <button
+              onClick={handleSignOut}
+              className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 font-bold transition-all text-sm"
+            >
+              تسجيل الخروج
+            </button>
+          </div>
         </header>
 
         {/* Question Banks section */}
