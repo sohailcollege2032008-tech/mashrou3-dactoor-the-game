@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ref, onValue, get, set, runTransaction } from 'firebase/database'
+import { ref, onValue, get, set, runTransaction, onDisconnect } from 'firebase/database'
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
-import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap } from 'lucide-react'
+import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
 export default function PlayerGameView() {
@@ -18,6 +18,7 @@ export default function PlayerGameView() {
   const [selectedChoice, setSelectedChoice] = useState(null)
   const [answerLocked, setAnswerLocked] = useState(false)
   const [revealedResult, setRevealedResult] = useState(null)
+  const [hostOnline, setHostOnline] = useState(true)
 
   const questionServerStartRef = useRef(null)
   const prevQuestionIndexRef = useRef(null)
@@ -29,6 +30,31 @@ export default function PlayerGameView() {
     setRevealedResult(null)
     questionServerStartRef.current = Date.now() + clockOffset.current
   }
+
+  // ── Player presence ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!session) return
+    const userId = session.uid
+    const playerPresenceRef = ref(rtdb, `rooms/${roomId}/presence/players/${userId}`)
+
+    set(playerPresenceRef, { online: true, last_seen: Date.now() })
+    onDisconnect(playerPresenceRef).set({ online: false, last_seen: Date.now() })
+
+    return () => {
+      set(playerPresenceRef, { online: false, last_seen: Date.now() })
+    }
+  }, [roomId, session])
+
+  // ── Subscribe to host presence ────────────────────────────────────────────
+  useEffect(() => {
+    if (!session) return
+    const hostPresenceRef = ref(rtdb, `rooms/${roomId}/presence/host`)
+    const unsubHost = onValue(hostPresenceRef, (snap) => {
+      if (!snap.exists()) { setHostOnline(true); return }
+      setHostOnline(snap.val().online !== false)
+    })
+    return () => unsubHost()
+  }, [roomId, session])
 
   // ── Subscribe to room ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -191,6 +217,12 @@ export default function PlayerGameView() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-white">
+      {/* Host offline banner */}
+      {!hostOnline && room?.status !== 'finished' && (
+        <div className="bg-red-500/20 border-b border-red-500/40 px-4 py-2 flex items-center justify-center gap-2 text-red-300 text-sm font-bold">
+          <WifiOff size={16} /> الهوست خرج من اللعبة — في انتظار عودته...
+        </div>
+      )}
       {/* Top Bar */}
       <div className="bg-gray-900 border-b border-gray-800 p-4 flex justify-between items-center shadow-lg">
         <div className="flex items-center gap-3">

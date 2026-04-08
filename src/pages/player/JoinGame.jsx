@@ -21,32 +21,51 @@ export default function JoinGame() {
     const roomCode = code.toUpperCase()
 
     try {
-      // 1. Verify room exists
+      // 1. Verify room exists and is not finished
       const roomSnap = await get(ref(rtdb, `rooms/${roomCode}`))
       if (!roomSnap.exists()) {
         alert('Invalid Room Code')
         setLoading(false)
         return
       }
+      const roomData = roomSnap.val()
+      if (roomData.status === 'finished') {
+        alert('هذه المسابقة انتهت بالفعل')
+        setLoading(false)
+        return
+      }
 
       const userId = session.uid
 
-      // 2. Check for existing request
+      // 2. Check if already a player (REJOIN)
+      const playerSnap = await get(ref(rtdb, `rooms/${roomCode}/players/${userId}`))
+      if (playerSnap.exists()) {
+        // Already approved and in game — rejoin directly
+        navigate(`/player/game/${roomCode}`)
+        return
+      }
+
+      // 3. Check for existing request
       const existingSnap = await get(ref(rtdb, `rooms/${roomCode}/join_requests/${userId}`))
 
       if (existingSnap.exists()) {
         const existing = existingSnap.val()
-        if (existing.status === 'rejected') {
-          // Reset to pending to allow re-joining
+        if (existing.status === 'approved') {
+          // Approved but not in players yet (edge case) — go to game
+          navigate(`/player/game/${roomCode}`)
+        } else if (existing.status === 'rejected') {
+          // Reset to pending
           await update(ref(rtdb, `rooms/${roomCode}/join_requests/${userId}`), {
             status: 'pending',
             created_at: Date.now()
           })
+          navigate(`/player/waiting/${roomCode}`)
+        } else {
+          // Still pending
+          navigate(`/player/waiting/${roomCode}`)
         }
-        // Either way, go to waiting room
-        navigate(`/player/waiting/${roomCode}`)
       } else {
-        // 3. Submit new join request
+        // 4. Submit new join request
         await set(ref(rtdb, `rooms/${roomCode}/join_requests/${userId}`), {
           player_id: userId,
           player_email: profile.email,
