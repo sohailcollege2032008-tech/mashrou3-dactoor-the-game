@@ -6,7 +6,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
 import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Download, Loader2, Edit2, Check, X } from 'lucide-react'
 import confetti from 'canvas-confetti'
-import { signAnswer, validateReactionTime } from '../../utils/crypto'
+import { signAnswer, validateReactionTime, verifyAnswerHash } from '../../utils/crypto'
 import { initActivityLogger, getActivityLogger, logActivity } from '../../utils/activityLogger'
 
 // ── Mini leaderboard strip ────────────────────────────────────────────────────
@@ -373,7 +373,22 @@ export default function PlayerGameView() {
         const q = questions[qi]
         lines.push('═'.repeat(62))
         lines.push(`Q${qi + 1}: ${q.question}`)
-        lines.push(`Correct: ${q.choices[q.correct] || '?'}`)
+        const secretKey = `${roomId}:${room.created_at}`
+        let correctIdx = -1
+        for (let i = 0; i < q.choices.length; i++) {
+          const isMatch = await verifyAnswerHash(
+            i, 
+            q.correct_hash, 
+            `${roomId}-q${qi}`, 
+            roomId, 
+            secretKey
+          )
+          if (isMatch) {
+            correctIdx = i
+            break
+          }
+        }
+        lines.push(`Correct: ${q.choices[correctIdx] || '?'}`)
         lines.push('─'.repeat(62))
 
         const ansSnap  = await get(ref(rtdb, `rooms/${roomId}/answers/${qi}`))

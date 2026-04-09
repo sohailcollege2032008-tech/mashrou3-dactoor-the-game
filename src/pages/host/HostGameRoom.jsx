@@ -516,11 +516,23 @@ export default function HostGameRoom() {
       }
 
       // Store the correct answer for reveal after game ends
-      const correctAnswerText = currentQuestion.choices[
-        correct.length > 0
-          ? allAnswers.find(a => correct.includes(a))?.selected_choice
-          : -1
-      ] || 'Not available'
+      // (secretKey already declared at line 437)
+      let correctIdx = -1
+      for (let i = 0; i < currentQuestion.choices.length; i++) {
+        const isMatch = await verifyAnswerHash(
+          i, 
+          currentQuestion.correct_hash, 
+          `${roomId}-q${qIdx}`, 
+          roomId, 
+          secretKey
+        )
+        if (isMatch) {
+          correctIdx = i
+          break
+        }
+      }
+
+      const correctAnswerText = currentQuestion.choices[correctIdx] || 'Not available'
 
       await update(ref(rtdb), {
         ...scoreUpdates,
@@ -529,6 +541,7 @@ export default function HostGameRoom() {
         [`rooms/${roomId}/status`]:      'revealing',
         [`rooms/${roomId}/reveal_data`]: revealData,
         [`rooms/${roomId}/revealed_answers/${qIdx}`]: correctAnswerText,
+        [`rooms/${roomId}/revealed_correct_index`]:   correctIdx,
       })
       setRevealResult(revealData)
     } catch (err) { alert('Reveal failed: ' + err.message) }
@@ -549,6 +562,7 @@ export default function HostGameRoom() {
           current_question_index: room.current_question_index + 1,
           question_started_at: Date.now(),
           reveal_data: null,
+          revealed_correct_index: null,
           countdown_started_at: null,
           countdown_duration: null,
         })
@@ -590,7 +604,23 @@ export default function HostGameRoom() {
         const q = questions[qi]
         lines.push('═'.repeat(62))
         lines.push(`Q${qi + 1}: ${q.question}`)
-        lines.push(`Correct: ${q.choices[q.correct] || '?'}`)
+        let correctIdx = -1
+        // secretKey handled per question loop if needed, but we can declare it once
+        const sessionSecret = `${roomId}:${room.created_at}`
+        for (let i = 0; i < q.choices.length; i++) {
+          const isMatch = await verifyAnswerHash(
+            i, 
+            q.correct_hash, 
+            `${roomId}-q${qi}`, 
+            roomId, 
+            sessionSecret
+          )
+          if (isMatch) {
+            correctIdx = i
+            break
+          }
+        }
+        lines.push(`Correct: ${q.choices[correctIdx] || '?'}`)
         lines.push('─'.repeat(62))
 
         const ansSnap = await get(ref(rtdb, `rooms/${roomId}/answers/${qi}`))
@@ -866,7 +896,7 @@ export default function HostGameRoom() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {currentQ.choices.map((choice, i) => {
-                  const isCorrect = i === currentQ.correct
+                  const isCorrect = i === room.revealed_correct_index
                   const count     = answers.filter(a => a.selected_choice === i).length
                   return (
                     <div key={i} className={`p-4 rounded-xl border flex justify-between items-center transition-colors ${
