@@ -29,7 +29,7 @@ MODEL_NAME      = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 genai.configure(api_key=GEMINI_API_KEY)
 
 # ── FastAPI ────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Dactoor Processor", version="1.2.0")
+app = FastAPI(title="Dactoor Processor", version="1.3.0")
 
 app.add_middleware(
     CORSMiddleware,

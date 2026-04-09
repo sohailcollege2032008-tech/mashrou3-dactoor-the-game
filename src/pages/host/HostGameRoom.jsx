@@ -75,6 +75,37 @@ function GameConfigPanel({ config, onChange }) {
         </div>
       </div>
 
+      {/* Auto Mode toggle */}
+      <div className="space-y-3 pt-1 border-t border-gray-800">
+        <label className="flex items-center justify-between cursor-pointer select-none">
+          <div className="flex items-center gap-2">
+            <Zap size={15} className="text-yellow-400" />
+            <span className="ar text-sm text-gray-200 font-medium">وضع تلقائي (Auto Mode)</span>
+          </div>
+          <button
+            onClick={() => set('auto_mode', !config.auto_mode)}
+            className={`relative w-11 h-6 rounded-full transition-colors ${config.auto_mode ? 'bg-yellow-500' : 'bg-gray-700'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.auto_mode ? 'translate-x-5' : ''}`} />
+          </button>
+        </label>
+
+        {config.auto_mode && (
+          <div className="flex items-center justify-between pl-7 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center gap-2">
+              <Timer size={14} className="text-gray-500" />
+              <span className="ar text-xs text-gray-400">تايمر إجباري (ثانية)</span>
+            </div>
+            <input
+              type="number" min={5} max={600}
+              value={config.auto_timer}
+              onChange={e => set('auto_timer', Math.max(5, Number(e.target.value)))}
+              className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-500/50 text-center"
+            />
+          </div>
+        )}
+      </div>
+
       {/* Shuffle toggle */}
       <label className="flex items-center justify-between cursor-pointer select-none">
         <div className="flex items-center gap-2">
@@ -221,6 +252,8 @@ export default function HostGameRoom() {
     other_correct_points: 1,
     points_decrement: 1,
     timer_seconds: 30,
+    auto_mode: false,
+    auto_timer: 45,
   })
 
   const [toasts, setToasts]               = useState([])         // correct-answer notifications
@@ -318,6 +351,43 @@ export default function HostGameRoom() {
     })
     return () => unsubAns()
   }, [roomId, session, room?.current_question_index])
+
+  // ── Auto Mode: Reveal ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!room || room.status !== 'playing' || !gameConfig.auto_mode || isRevealing) return
+
+    // Trigger 1: All Answered
+    if (totalPlayers > 0 && answers.length >= totalPlayers) {
+      console.log("Auto-Mode: All players answered. Revealing...")
+      revealAnswer()
+      return
+    }
+
+    // Trigger 2: Mandatory Timer (Forced Timer)
+    const checkTimer = setInterval(() => {
+      if (!room.question_started_at) return
+      const elapsed = (Date.now() - room.question_started_at) / 1000
+      if (elapsed >= gameConfig.auto_timer) {
+        console.log("Auto-Mode: Mandatory Timer expired. Revealing...")
+        revealAnswer()
+        clearInterval(checkTimer)
+      }
+    }, 1000)
+
+    return () => clearInterval(checkTimer)
+  }, [room?.status, answers.length, totalPlayers, gameConfig.auto_mode, gameConfig.auto_timer, isRevealing])
+
+  // ── Auto Mode: Next Question ───────────────────────────────────────────
+  useEffect(() => {
+    if (!room || room.status !== 'revealing' || !gameConfig.auto_mode) return
+
+    const timer = setTimeout(() => {
+      console.log("Auto-Mode: 8s delay finished. Moving to next question...")
+      nextQuestion()
+    }, 8000)
+
+    return () => clearTimeout(timer)
+  }, [room?.status, gameConfig.auto_mode])
 
   // ── Handle join request ───────────────────────────────────────────────────
   const handleRequest = async (reqKey, action) => {
@@ -626,9 +696,25 @@ export default function HostGameRoom() {
                 <StopCircle size={15} /> {endingGame ? 'Ending...' : 'End'}
               </button>
             )}
-            <div className="text-right">
-              <div className="text-xl font-bold">{totalPlayers} Players</div>
-              <div className={`capitalize px-3 py-0.5 rounded-full inline-block mt-1 text-xs font-bold ${
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setGameConfig(prev => ({ ...prev, auto_mode: !prev.auto_mode }))}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
+                    gameConfig.auto_mode 
+                      ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400 shadow-[0_0_15px_-5px_rgba(234,179,8,0.4)]' 
+                      : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-gray-400'
+                  }`}
+                  title="Toggle Auto-Progression"
+                >
+                  <Zap size={14} className={gameConfig.auto_mode ? 'animate-pulse' : ''} />
+                  <span className="text-xs font-bold ar">تلقائي</span>
+                </button>
+                <div className="text-right">
+                  <div className="text-xl font-bold">{totalPlayers} Players</div>
+                </div>
+              </div>
+              <div className={`capitalize px-3 py-0.5 rounded-full inline-block text-xs font-bold ${
                 room.status === 'playing'   ? 'bg-green-500/20 text-green-400' :
                 room.status === 'revealing' ? 'bg-yellow-500/20 text-yellow-400' :
                 room.status === 'finished'  ? 'bg-primary/20 text-primary' :
