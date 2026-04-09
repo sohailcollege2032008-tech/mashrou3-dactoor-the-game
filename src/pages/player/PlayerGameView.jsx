@@ -453,6 +453,14 @@ export default function PlayerGameView() {
         {room.status === 'playing' && currentQ && (
           <div className="w-full max-w-2xl flex flex-col gap-3">
 
+            {/* Late-joiner notice */}
+            {player?.joined_at_question_index > 0 && (
+              <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-2 flex items-center gap-2 text-xs text-orange-300">
+                <AlertCircle size={13} className="flex-shrink-0" />
+                <span>دخلت من سؤال {player.joined_at_question_index + 1} — الأسئلة السابقة محسوبة صفر.</span>
+              </div>
+            )}
+
             {/* Mini leaderboard */}
             <MiniLeaderboard top5={top5} myId={myId} myRank={player?.rank} myScore={player?.score} myNickname={player?.nickname} />
 

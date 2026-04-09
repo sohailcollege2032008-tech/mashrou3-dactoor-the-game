@@ -312,11 +312,13 @@ export default function HostGameRoom() {
         const reqSnap = await get(ref(rtdb, `rooms/${roomId}/join_requests/${reqKey}`))
         if (!reqSnap.exists()) return
         const reqData = reqSnap.val()
+        const currentQIdx = roomStatusRef.current === 'lobby' ? 0 : (room?.current_question_index ?? 0)
         await update(ref(rtdb), {
           [`rooms/${roomId}/join_requests/${reqKey}/status`]: 'approved',
           [`rooms/${roomId}/players/${reqKey}`]: {
             user_id: reqKey, nickname: reqData.player_name,
-            avatar_url: reqData.player_avatar || null, score: 0, joined_at: Date.now()
+            avatar_url: reqData.player_avatar || null, score: 0, joined_at: Date.now(),
+            joined_at_question_index: currentQIdx,
           }
         })
       } else {
@@ -817,6 +819,41 @@ export default function HostGameRoom() {
                 ))}
               </div>
             </div>
+
+            {/* ── Late-join requests (mid-game) ───────────────────────────── */}
+            {requests.length > 0 && (
+              <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4">
+                <h3 className="text-sm font-bold text-orange-300 mb-3 flex items-center gap-2">
+                  <UserCheck size={15} />
+                  طلبات دخول متأخر
+                  <span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full text-xs">{requests.length}</span>
+                  <span className="text-orange-400/60 text-xs font-normal mr-1">— فاتهم {room.current_question_index} سؤال</span>
+                </h3>
+                <div className="space-y-2">
+                  {requests.map(req => (
+                    <div key={req.key} className="flex items-center justify-between p-2.5 bg-gray-900/60 rounded-xl border border-gray-700/50">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {req.player_avatar && <img src={req.player_avatar} alt="" className="w-6 h-6 rounded-full flex-shrink-0" />}
+                        <div className="min-w-0">
+                          <div className="font-bold text-sm text-white truncate">{req.player_name}</div>
+                          <div className="text-xs text-gray-500 truncate">{req.player_email}</div>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0 ml-2">
+                        {processingRequests.has(req.key) ? (
+                          <Loader2 size={16} className="text-primary animate-spin" />
+                        ) : (
+                          <>
+                            <button onClick={() => handleRequest(req.key, 'approved')} className="bg-green-500/20 text-green-500 hover:bg-green-500/30 p-1.5 rounded-lg transition-colors" title="قبول"><CheckCircle size={14} /></button>
+                            <button onClick={() => handleRequest(req.key, 'rejected')} className="bg-red-500/20 text-red-500 hover:bg-red-500/30 p-1.5 rounded-lg transition-colors" title="رفض"><XCircle size={14} /></button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

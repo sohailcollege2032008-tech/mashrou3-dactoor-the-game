@@ -10,6 +10,7 @@ export default function JoinGame() {
   const [code, setCode]         = useState('')
   const [nickname, setNickname] = useState('')
   const [loading, setLoading]   = useState(false)
+  const [previewStatus, setPreviewStatus] = useState(null)   // room status preview
   const navigate = useNavigate()
 
   // Pre-fill nickname from Google profile once it loads
@@ -17,6 +18,16 @@ export default function JoinGame() {
     if (profile?.display_name && !nickname)
       setNickname(profile.display_name)
   }, [profile?.display_name])
+
+  // When user finishes typing the 6-char code, peek at room status
+  React.useEffect(() => {
+    if (code.length !== 6) { setPreviewStatus(null); return }
+    let cancelled = false
+    get(ref(rtdb, `rooms/${code.toUpperCase()}/status`)).then(snap => {
+      if (!cancelled) setPreviewStatus(snap.exists() ? snap.val() : 'not_found')
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [code])
 
   const handleSignOut = () => useAuthStore.getState().signOut()
 
@@ -122,12 +133,20 @@ export default function JoinGame() {
             />
           </div>
 
+          {/* Game-in-progress notice */}
+          {(previewStatus === 'playing' || previewStatus === 'revealing') && (
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3 text-sm text-orange-300 text-right space-y-0.5">
+              <p className="font-bold">الجيم شغال دلوقتى!</p>
+              <p className="text-orange-300/70">لو الهوست قبلك هتدخل وتحل الأسئلة الباقية.</p>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={loading || code.length !== 6}
             className="w-full bg-primary text-background font-bold text-lg py-4 rounded-xl hover:bg-[#00D4FF] disabled:opacity-50 disabled:hover:bg-primary transition-all active:scale-95"
           >
-            {loading ? 'Requesting to Join...' : 'Enter Battle'}
+            {loading ? 'Requesting to Join...' : (previewStatus === 'playing' || previewStatus === 'revealing') ? 'اطلب الدخول' : 'Enter Battle'}
           </button>
         </form>
 
