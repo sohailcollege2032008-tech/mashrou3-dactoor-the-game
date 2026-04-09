@@ -9,6 +9,7 @@ import QuestionBankModal from '../../components/host/QuestionBankModal'
 
 export default function HostDashboard() {
   const profile = useAuthStore(state => state.profile)
+  const session = useAuthStore(state => state.session)
   const navigate = useNavigate()
   const [banks, setBanks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -75,27 +76,27 @@ export default function HostDashboard() {
   const handleStartGame = async (bank) => {
     if (!profile) return
 
-    let attempts = 0
+    // Use Firebase Auth UID directly — more reliable than profile.id
+    const hostUid = session?.uid || profile.id
+    if (!hostUid) { alert('خطأ: مش قادر يتعرف على هويتك. حاول تعمل تسجيل خروج ودخول من جديد.'); return }
+
     const MAX_ATTEMPTS = 5
 
-    while (attempts < MAX_ATTEMPTS) {
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      // Generate a 6-char alphanumeric code (letters + digits only, no ambiguous chars)
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+      const code  = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
       const roomRef = ref(rtdb, `rooms/${code}`)
 
       try {
-        // Check if room code already exists
         const existing = await get(roomRef)
-        if (existing.exists()) {
-          attempts++
-          continue
-        }
+        if (existing.exists()) continue   // collision — try a new code
 
         const roomTitle = bank.title + ' Room'
 
-        // Create room in RTDB
         await set(roomRef, {
           code,
-          host_id: profile.id,
+          host_id: hostUid,
           question_set_id: bank.id,
           title: roomTitle,
           questions: bank.questions,
@@ -106,18 +107,22 @@ export default function HostDashboard() {
           created_at: Date.now()
         })
 
-        // Track active room so host can rejoin if they navigate away
-        await set(ref(rtdb, `host_rooms/${profile.id}/active`), { code, title: roomTitle })
+        await set(ref(rtdb, `host_rooms/${hostUid}/active`), { code, title: roomTitle })
 
         navigate(`/host/game/${code}`)
         return
       } catch (err) {
-        console.error('[Dashboard] Error creating room:', err)
-        attempts++
+        console.error('[Dashboard] Error creating room (attempt', attempt + 1, '):', err)
+        // Only retry on collision errors; surface all other errors immediately
+        const isCollision = err?.code === 'ALREADY_EXISTS'
+        if (!isCollision) {
+          alert(`خطأ في إنشاء الأوضة:\n${err?.message || err}\n\nتأكد من إعدادات Firebase RTDB أو تواصل مع المسؤول.`)
+          return
+        }
       }
     }
 
-    alert('Error creating room after multiple attempts')
+    alert('فشل إنشاء الأوضة بعد عدة محاولات — من المحتمل تعارض في الكود. حاول تاني.')
   }
 
   const handleBankUpdate = (bankId, updatedQuestions, updatedTitle) => {
