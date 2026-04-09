@@ -1,0 +1,54 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        // Any authenticated user can read room data (join, see status, etc.)
+        ".read": "auth != null",
+
+        // Host can write the whole room; any auth user can CREATE a new room
+        ".write": "auth != null && (!data.exists() || data.child('host_id').val() === auth.uid)",
+
+        "join_requests": {
+          "$userId": {
+            // Players write their own request; host can approve/reject
+            ".write": "auth != null && (auth.uid === $userId || root.child('rooms').child($roomId).child('host_id').val() === auth.uid)"
+          }
+        },
+
+        "answers": {
+          "$qIdx": {
+            "$userId": {
+              // Players write their own answer; host writes rank/points during reveal
+              ".write": "auth != null && (auth.uid === $userId || root.child('rooms').child($roomId).child('host_id').val() === auth.uid)"
+            }
+          }
+        },
+
+        "players": {
+          "$userId": {
+            // Host creates player records; player can update own nickname/score
+            ".write": "auth != null && (auth.uid === $userId || root.child('rooms').child($roomId).child('host_id').val() === auth.uid)"
+          }
+        },
+
+        "presence": {
+          "host": {
+            ".write": "auth != null && root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+          },
+          "players": {
+            "$userId": {
+              ".write": "auth != null && auth.uid === $userId"
+            }
+          }
+        }
+      }
+    },
+
+    "host_rooms": {
+      "$hostId": {
+        ".read":  "auth != null && auth.uid === $hostId",
+        ".write": "auth != null && auth.uid === $hostId"
+      }
+    }
+  }
+}
