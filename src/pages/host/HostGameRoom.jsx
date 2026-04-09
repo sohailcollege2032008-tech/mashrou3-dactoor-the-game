@@ -229,12 +229,27 @@ export default function HostGameRoom() {
   const roomStatusRef      = useRef(null)         // mirror of room.status for callbacks
 
   // ── Host presence ─────────────────────────────────────────────────────────
+  // Uses .info/connected so we register onDisconnect BEFORE writing online:true.
+  // This prevents the race condition where the old connection's onDisconnect
+  // fires on the server *after* the new connection already wrote online:true,
+  // causing the banner to stay stuck on players' screens.
   useEffect(() => {
     if (!session) return
     const presRef = ref(rtdb, `rooms/${roomId}/presence/host`)
-    set(presRef, { online: true, last_seen: Date.now() })
-    onDisconnect(presRef).set({ online: false, last_seen: Date.now() })
-    return () => set(presRef, { online: false, last_seen: Date.now() })
+    const connRef = ref(rtdb, '.info/connected')
+
+    const unsub = onValue(connRef, async (snap) => {
+      if (!snap.val()) return   // not yet connected — wait
+      // 1. Register onDisconnect first and wait for server ack
+      await onDisconnect(presRef).set({ online: false, last_seen: Date.now() })
+      // 2. Only then write online:true — guaranteed to land after old onDisconnect
+      await set(presRef, { online: true, last_seen: Date.now() })
+    })
+
+    return () => {
+      unsub()
+      set(presRef, { online: false, last_seen: Date.now() })
+    }
   }, [roomId, session])
 
   // ── Room subscription ─────────────────────────────────────────────────────
