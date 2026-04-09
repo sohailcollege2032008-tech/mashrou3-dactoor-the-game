@@ -185,13 +185,13 @@ CREATE OR REPLACE FUNCTION submit_answer(
   p_player_id UUID,
   p_question_index INTEGER,
   p_selected_choice INTEGER,
-  p_correct_choice INTEGER,
   p_reaction_time_ms INTEGER
 ) RETURNS JSONB AS $$
 DECLARE
   v_is_correct BOOLEAN;
   v_is_first BOOLEAN;
   v_existing_first UUID;
+  v_correct_choice INTEGER;
 BEGIN
   -- التحقق مما إذا كان اللاعب قد أجاب بالفعل
   IF EXISTS (
@@ -201,7 +201,11 @@ BEGIN
     RETURN jsonb_build_object('error', 'already_answered');
   END IF;
 
-  v_is_correct := (p_selected_choice = p_correct_choice);
+  -- fetch correct choice from room
+  SELECT (questions->'questions'->p_question_index->>'correct')::INTEGER INTO v_correct_choice 
+  FROM rooms WHERE id = p_room_id;
+
+  v_is_correct := (p_selected_choice = v_correct_choice);
   v_is_first := false;
 
   IF v_is_correct THEN

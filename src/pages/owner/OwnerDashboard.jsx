@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
+import { collection, query, getDocs, addDoc, updateDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
+import { useAuthStore } from '../../stores/authStore'
 import { Link } from 'react-router-dom'
 
 export default function OwnerDashboard() {
@@ -9,21 +11,19 @@ export default function OwnerDashboard() {
   const [emailInput, setEmailInput] = useState('')
   const [loading, setLoading] = useState(true)
 
+  const handleSignOut = () => useAuthStore.getState().signOut()
+
   useEffect(() => {
     fetchHosts()
   }, [])
 
   const fetchHosts = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('authorized_hosts')
-      .select('*')
-      .order('created_at', { ascending: false })
-      
-    if (error) {
-      console.error('Error fetching hosts:', error)
-    } else {
-      setHosts(data || [])
+    try {
+      const snap = await getDocs(query(collection(db, 'authorized_hosts'), orderBy('created_at', 'desc')))
+      setHosts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    } catch (err) {
+      console.error('Error fetching hosts:', err)
     }
     setLoading(false)
   }
@@ -32,35 +32,30 @@ export default function OwnerDashboard() {
     e.preventDefault()
     if (!emailInput.trim()) return
 
-    const { error } = await supabase
-      .from('authorized_hosts')
-      .insert({
-        email: emailInput.trim(),
-        added_by: profile.id
+    try {
+      await addDoc(collection(db, 'authorized_hosts'), {
+        email: emailInput.trim().toLowerCase(),
+        added_by: profile.id,
+        is_active: true,
+        display_name: null,
+        created_at: serverTimestamp()
       })
-      
-    if (error) {
-      alert('Error adding host: ' + error.message)
-    } else {
       setEmailInput('')
       fetchHosts()
+    } catch (err) {
+      alert('Error adding host: ' + err.message)
     }
   }
 
   const handleToggleHost = async (id, currentStatus) => {
     if (currentStatus) {
-      if (!window.confirm("Are you sure you want to deactivate this host?")) return;
+      if (!window.confirm('Are you sure you want to deactivate this host?')) return
     }
-
-    const { error } = await supabase
-      .from('authorized_hosts')
-      .update({ is_active: !currentStatus })
-      .eq('id', id)
-      
-    if (error) {
-      alert('Error updating host: ' + error.message)
-    } else {
+    try {
+      await updateDoc(doc(db, 'authorized_hosts', id), { is_active: !currentStatus })
       fetchHosts()
+    } catch (err) {
+      alert('Error updating host: ' + err.message)
     }
   }
 
@@ -77,21 +72,27 @@ export default function OwnerDashboard() {
               Go to Host Dashboard
             </Link>
             <Link to="/" className="text-gray-400 hover:text-white transition-colors">Return Home</Link>
+            <button
+              onClick={handleSignOut}
+              className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 font-bold transition-all text-sm"
+            >
+              تسجيل الخروج
+            </button>
           </div>
         </header>
 
         <section className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 backdrop-blur-sm">
           <h2 className="text-xl font-bold mb-4 font-display">Add New Host</h2>
           <form onSubmit={handleAddHost} className="flex gap-4">
-            <input 
-              type="email" 
-              placeholder="Host Email Address..." 
+            <input
+              type="email"
+              placeholder="Host Email Address..."
               className="flex-1 bg-gray-800/80 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-primary text-white font-mono transition-colors"
               value={emailInput}
               onChange={(e) => setEmailInput(e.target.value)}
               required
             />
-            <button 
+            <button
               type="submit"
               className="bg-primary text-background font-bold px-8 py-3 rounded-lg hover:bg-[#00D4FF] hover:scale-105 active:scale-95 transition-all"
             >
@@ -112,7 +113,6 @@ export default function OwnerDashboard() {
                 <thead>
                   <tr className="border-b border-gray-800 text-gray-400 font-sans tracking-wide text-sm">
                     <th className="p-4 font-medium">Email</th>
-                    <th className="p-4 font-medium">Display Name</th>
                     <th className="p-4 font-medium">Status</th>
                     <th className="p-4 text-right font-medium">Actions</th>
                   </tr>
@@ -121,16 +121,23 @@ export default function OwnerDashboard() {
                   {hosts.map(host => (
                     <tr key={host.id} className="hover:bg-gray-800/20 transition-colors">
                       <td className="p-4 font-mono text-sm text-gray-300">{host.email}</td>
-                      <td className="p-4 text-gray-300">{host.display_name || '-'}</td>
                       <td className="p-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold inline-block shadow-sm ${host.is_active ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold inline-block shadow-sm ${
+                          host.is_active
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                            : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                        }`}>
                           {host.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
                       <td className="p-4 text-right">
-                        <button 
+                        <button
                           onClick={() => handleToggleHost(host.id, host.is_active)}
-                          className={`text-sm px-4 py-1.5 rounded-lg font-medium transition-all hover:scale-105 active:scale-95 ${host.is_active ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30' : 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/30'}`}
+                          className={`text-sm px-4 py-1.5 rounded-lg font-medium transition-all hover:scale-105 active:scale-95 ${
+                            host.is_active
+                              ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30'
+                              : 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/30'
+                          }`}
                         >
                           {host.is_active ? 'Remove' : 'Reactivate'}
                         </button>

@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '../stores/authStore'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
-import { supabase } from '../lib/supabase'
 
 export default function Landing() {
   const session = useAuthStore(state => state.session)
@@ -28,19 +27,12 @@ export default function Landing() {
     }
   }, [initialized, session, profile, navigate])
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-  }
+  const handleSignOut = () => useAuthStore.getState().signOut()
 
   const handleRetry = async () => {
     if (!session) return
     setIsRetrying(true)
-    // Re-fetch profile manually and update store
-    const { data } = await supabase
-      .from('profiles').select('*').eq('id', session.user.id).single()
-    if (data) {
-      useAuthStore.getState().setAuth(session, data)
-    }
+    await useAuthStore.getState().fetchProfile(session)
     setIsRetrying(false)
   }
 

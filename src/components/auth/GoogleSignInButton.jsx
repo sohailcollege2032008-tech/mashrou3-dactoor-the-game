@@ -1,17 +1,20 @@
-import React from 'react';
-import { supabase } from '../../lib/supabase';
+import React from 'react'
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
+import { auth } from '../../lib/firebase'
+
+const provider = new GoogleAuthProvider()
 
 export default function GoogleSignInButton() {
   const handleSignIn = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin + '/auth/callback',
-      },
-    });
-
-    if (error) console.error('Error signing in:', error.message);
-  };
+    try {
+      await signInWithPopup(auth, provider)
+      // onAuthStateChanged in authStore handles the rest
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user') {
+        console.error('Error signing in:', err.message)
+      }
+    }
+  }
 
   return (
     <button
@@ -28,5 +31,5 @@ export default function GoogleSignInButton() {
       </div>
       <span>Sign in with Google</span>
     </button>
-  );
+  )
 }

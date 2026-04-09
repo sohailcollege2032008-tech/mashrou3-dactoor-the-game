@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
+import { collection, query, where, getDocs, deleteDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore'
+import { ref, set, get } from 'firebase/database'
+import { db, rtdb } from '../../lib/firebase'
 import { useAuthStore } from '../../stores/authStore'
 import { Link, useNavigate } from 'react-router-dom'
 import UploadQuestionsModal from '../../components/host/UploadQuestionsModal'
+import QuestionBankModal from '../../components/host/QuestionBankModal'
 
 export default function HostDashboard() {
   const profile = useAuthStore(state => state.profile)
@@ -11,23 +14,48 @@ export default function HostDashboard() {
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [selectedBank, setSelectedBank] = useState(null)
+  const [activeRoom, setActiveRoom] = useState(null)   // { code, title } if host has live game
 
   useEffect(() => {
-    fetchBanks()
-  }, [])
+    if (profile) fetchBanks()
+  }, [profile])
+
+  // Check if host has an unfinished game room to rejoin
+  useEffect(() => {
+    if (!profile) return
+    const check = async () => {
+      try {
+        const snap = await get(ref(rtdb, `host_rooms/${profile.id}/active`))
+        if (!snap.exists()) return
+        const { code, title } = snap.val()
+        const statusSnap = await get(ref(rtdb, `rooms/${code}/status`))
+        if (statusSnap.exists() && statusSnap.val() !== 'finished') {
+          setActiveRoom({ code, title })
+        } else {
+          // Stale entry — clean up
+          set(ref(rtdb, `host_rooms/${profile.id}/active`), null)
+        }
+      } catch (_) {}
+    }
+    check()
+  }, [profile])
 
   const fetchBanks = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('question_sets')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching question banks:', error)
-      alert('خطأ في تحميل بنوك الأسئلة: ' + error.message)
-    } else {
-      setBanks(data || [])
+    try {
+      const q = query(
+        collection(db, 'question_sets'),
+        where('host_id', '==', profile.id)
+      )
+      const snap = await getDocs(q)
+      const data = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0))
+      setBanks(data)
+    } catch (err) {
+      console.error('Error fetching question banks:', err)
+      alert('خطأ في تحميل بنوك الأسئلة: ' + err.message)
     }
     setLoading(false)
   }
@@ -35,63 +63,117 @@ export default function HostDashboard() {
   const handleDelete = async (id) => {
     if (!window.confirm('حذف بنك الأسئلة ده؟ مش هترجعه.')) return
     setDeletingId(id)
-    const { error } = await supabase.from('question_sets').delete().eq('id', id)
-    if (error) alert('خطأ في الحذف: ' + error.message)
-    else setBanks(prev => prev.filter(b => b.id !== id))
+    try {
+      await deleteDoc(doc(db, 'question_sets', id))
+      setBanks(prev => prev.filter(b => b.id !== id))
+    } catch (err) {
+      alert('خطأ في الحذف: ' + err.message)
+    }
     setDeletingId(null)
   }
 
   const handleStartGame = async (bank) => {
     if (!profile) return
-    
+
     let attempts = 0
     const MAX_ATTEMPTS = 5
-    let success = false
-    let lastError = null
 
-    while (attempts < MAX_ATTEMPTS && !success) {
+    while (attempts < MAX_ATTEMPTS) {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase()
-      const { data, error } = await supabase.from('rooms').insert({
-        code,
-        host_id: profile.id,
-        question_set_id: bank.id,
-        title: bank.title + ' Room',
-        questions: bank.questions,
-        status: 'lobby'
-      }).select().single()
+      const roomRef = ref(rtdb, `rooms/${code}`)
 
-      if (!error) {
-        success = true
-        navigate(`/host/game/${data.id}`)
-      } else if (error.code === '23505') { // Unique violation
+      try {
+        // Check if room code already exists
+        const existing = await get(roomRef)
+        if (existing.exists()) {
+          attempts++
+          continue
+        }
+
+        const roomTitle = bank.title + ' Room'
+
+        // Create room in RTDB
+        await set(roomRef, {
+          code,
+          host_id: profile.id,
+          question_set_id: bank.id,
+          title: roomTitle,
+          questions: bank.questions,
+          status: 'lobby',
+          current_question_index: 0,
+          question_started_at: null,
+          reveal_data: null,
+          created_at: Date.now()
+        })
+
+        // Track active room so host can rejoin if they navigate away
+        await set(ref(rtdb, `host_rooms/${profile.id}/active`), { code, title: roomTitle })
+
+        navigate(`/host/game/${code}`)
+        return
+      } catch (err) {
+        console.error('[Dashboard] Error creating room:', err)
         attempts++
-        lastError = error
-        console.warn(`[Dashboard] Room code collision (${code}), retrying... attempt ${attempts}`)
-      } else {
-        lastError = error
-        break // Other error (RLS, etc.)
       }
     }
 
-    if (!success) {
-      alert('Error creating room: ' + (lastError?.message || 'Failed after multiple attempts'))
-    }
+    alert('Error creating room after multiple attempts')
+  }
+
+  const handleBankUpdate = (bankId, updatedQuestions, updatedTitle) => {
+    setBanks(prev => prev.map(b =>
+      b.id === bankId
+        ? { ...b, questions: updatedQuestions, title: updatedTitle, question_count: updatedQuestions.questions.length }
+        : b
+    ))
+    // Update selectedBank so modal reflects changes immediately
+    setSelectedBank(prev => prev && prev.id === bankId
+      ? { ...prev, questions: updatedQuestions, title: updatedTitle }
+      : prev
+    )
+  }
+
+  const handleSignOut = async () => {
+    useAuthStore.getState().signOut()
   }
 
   return (
     <div className="min-h-screen bg-background text-white p-8">
       <div className="max-w-5xl mx-auto space-y-8">
 
-        {/* Header */}
         <header className="flex justify-between items-center bg-gray-900/50 p-6 rounded-2xl border border-gray-800 backdrop-blur-sm">
           <div>
             <h1 className="text-3xl font-display font-bold text-primary">Host Dashboard</h1>
             <p className="text-gray-400 mt-2 font-sans">Manage your Question Banks and Game Rooms</p>
           </div>
-          <Link to="/" className="text-gray-400 hover:text-white transition-colors font-sans">Return Home</Link>
+          <div className="flex items-center gap-4">
+            <Link to="/" className="text-gray-400 hover:text-white transition-colors font-sans">Return Home</Link>
+            <button
+              onClick={handleSignOut}
+              className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 font-bold transition-all text-sm"
+            >
+              تسجيل الخروج
+            </button>
+          </div>
         </header>
 
-        {/* Question Banks section */}
+        {/* ── Active game rejoin banner ──────────────────────────────────── */}
+        {activeRoom && (
+          <div className="bg-primary/10 border border-primary/40 rounded-2xl p-5 flex items-center justify-between gap-4 shadow-lg shadow-primary/5">
+            <div className="min-w-0">
+              <p className="text-primary text-xs font-bold tracking-widest uppercase mb-1">🎮 جيم نشط</p>
+              <h3 className="text-white font-bold text-lg leading-snug truncate">{activeRoom.title}</h3>
+              <p className="text-gray-400 text-sm font-mono mt-0.5">كود: <span className="text-primary font-bold tracking-widest">{activeRoom.code}</span></p>
+            </div>
+            <Link
+              to={`/host/game/${activeRoom.code}`}
+              className="flex-shrink-0 bg-primary text-background font-bold px-6 py-3 rounded-xl hover:bg-[#00D4FF] transition-all active:scale-95 text-sm"
+            >
+              Rejoin →
+            </Link>
+          </div>
+        )}
+
         <section className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 backdrop-blur-sm shadow-xl">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold font-display">My Question Banks</h2>
@@ -108,8 +190,8 @@ export default function HostDashboard() {
           ) : banks.length === 0 ? (
             <div className="text-center py-14 space-y-3">
               <div className="text-5xl">📚</div>
-              <p className="text-gray-400 font-bold text-lg">مفيش بنوك أسئلة لحد دلوقتي</p>
-              <p className="text-gray-600 text-sm">ارفع ملف JSON أو استخدم الذكاء الاصطناعي لاستخراج الأسئلة</p>
+              <p className="ar text-gray-400 font-bold text-lg">مفيش بنوك أسئلة لحد دلوقتي</p>
+              <p className="ar text-gray-600 text-sm">ارفع ملف JSON أو استخدم الذكاء الاصطناعي لاستخراج الأسئلة</p>
               <button
                 onClick={() => setShowUpload(true)}
                 className="mt-2 bg-primary/10 border border-primary/30 text-primary px-6 py-2 rounded-xl hover:bg-primary/20 transition-all font-bold text-sm"
@@ -130,7 +212,9 @@ export default function HostDashboard() {
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md">{bank.question_count} سؤال</span>
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md uppercase">{bank.source_type}</span>
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md">
-                        {new Date(bank.created_at).toLocaleDateString('ar-EG')}
+                        {bank.created_at?.seconds
+                          ? new Date(bank.created_at.seconds * 1000).toLocaleDateString('ar-EG')
+                          : '—'}
                       </span>
                     </div>
                   </div>
@@ -150,6 +234,12 @@ export default function HostDashboard() {
                       {deletingId === bank.id ? '...' : '🗑 حذف'}
                     </button>
                   </div>
+                  <button
+                    onClick={() => setSelectedBank(bank)}
+                    className="w-full mt-2 bg-primary/10 text-primary py-2 rounded-lg hover:bg-primary/20 transition-colors font-bold text-sm border border-primary/30"
+                  >
+                    عرض وتعديل
+                  </button>
                 </div>
               ))}
             </div>
@@ -157,11 +247,18 @@ export default function HostDashboard() {
         </section>
       </div>
 
-      {/* Upload Modal */}
       {showUpload && (
         <UploadQuestionsModal
           onClose={() => setShowUpload(false)}
           onSuccess={fetchBanks}
+        />
+      )}
+
+      {selectedBank && (
+        <QuestionBankModal
+          bank={selectedBank}
+          onClose={() => setSelectedBank(null)}
+          onUpdate={handleBankUpdate}
         />
       )}
     </div>

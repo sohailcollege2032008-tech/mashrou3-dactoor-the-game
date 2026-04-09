@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(not exist:*)",
+      "Bash(powershell -Command \"New-Item -ItemType Directory -Force -Path 'D:\\\\Projects\\\\Antigravity\\\\Web Apps\\\\Mashrou3 Dactoor THE GAME\\\\.claude' | Out-Null; Write-Host 'done'\")"
+    ]
+  }
+}

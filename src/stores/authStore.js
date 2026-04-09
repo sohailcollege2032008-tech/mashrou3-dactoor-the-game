@@ -1,78 +1,109 @@
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth'
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
+import { auth, db } from '../lib/firebase'
+
+const OWNER_EMAIL = import.meta.env.VITE_OWNER_EMAIL
 
 export const useAuthStore = create((set, get) => ({
+  // session = Firebase User object (or null)
   session: null,
   profile: null,
   loading: true,
   initialized: false,
 
-  setAuth: (session, profile) => set({ 
-    session, 
-    profile, 
-    loading: false, 
-    initialized: true 
+  setAuth: (session, profile) => set({
+    session,
+    profile,
+    loading: false,
+    initialized: true
   }),
 
-  setLoading: (loading) => set({ loading }),
-
-  clearAuth: () => set({ 
-    session: null, 
-    profile: null, 
-    loading: false, 
-    initialized: true 
+  clearAuth: () => set({
+    session: null,
+    profile: null,
+    loading: false,
+    initialized: true
   }),
 
-  initialize: async () => {
+  initialize: () => {
     if (get().initialized) return
 
-    // 1. Initial Session Check (Immediate)
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
-      await get().fetchProfile(session.user.id, session)
-    } else {
-      set({ initialized: true, loading: false })
-    }
-
-    // 2. Listen for Auth State Changes
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AuthStore] Event: ${event}`)
-      
-      if (session) {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-          await get().fetchProfile(session.user.id, session)
-        }
+    // Firebase handles session persistence automatically
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        await get().fetchProfile(user)
       } else {
         get().clearAuth()
       }
     })
 
-    // Failsafe
+    // Failsafe: if auth doesn't resolve in 5s, unblock the app
     setTimeout(() => {
       if (!get().initialized) {
         set({ initialized: true, loading: false })
       }
     }, 5000)
+
+    return unsubscribe
   },
 
-  fetchProfile: async (userId, session) => {
+  fetchProfile: async (user) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
+      const profileRef = doc(db, 'profiles', user.uid)
+      const snap = await getDoc(profileRef)
 
-      if (error) {
-        console.warn('[AuthStore] Profile fetch error:', error.message)
-        // If profile doesn't exist yet, we still have the session
-        set({ session, profile: null, loading: false, initialized: true })
+      // Calculate the correct role fresh every login
+      const correctRole = user.email === OWNER_EMAIL
+        ? 'owner'
+        : await get().checkIfHost(user.email)
+          ? 'host'
+          : 'player'
+
+      if (snap.exists()) {
+        const profile = snap.data()
+
+        // If role changed (e.g. owner added this user as host), update it
+        if (profile.role !== correctRole) {
+          await updateDoc(profileRef, { role: correctRole })
+          profile.role = correctRole
+        }
+
+        set({ session: user, profile, loading: false, initialized: true })
       } else {
-        set({ session, profile: data, loading: false, initialized: true })
+        // First-time login: create profile
+        const newProfile = {
+          id: user.uid,
+          email: user.email,
+          display_name: user.displayName || null,
+          avatar_url: user.photoURL || null,
+          role: correctRole,
+        }
+        await setDoc(profileRef, newProfile)
+        set({ session: user, profile: newProfile, loading: false, initialized: true })
       }
     } catch (err) {
-      console.error('[AuthStore] fetchProfile exception:', err)
-      set({ session, profile: null, loading: false, initialized: true })
+      console.error('[AuthStore] fetchProfile error:', err)
+      set({ session: user, profile: null, loading: false, initialized: true })
     }
+  },
+
+  checkIfHost: async (email) => {
+    try {
+      const q = query(
+        collection(db, 'authorized_hosts'),
+        where('email', '==', email),
+        where('is_active', '==', true)
+      )
+      const snap = await getDocs(q)
+      return !snap.empty
+    } catch {
+      return false
+    }
+  },
+
+  signOut: async () => {
+    await firebaseSignOut(auth)
+    get().clearAuth()
   }
 }))
