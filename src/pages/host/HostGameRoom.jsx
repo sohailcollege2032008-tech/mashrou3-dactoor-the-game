@@ -5,7 +5,7 @@ import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import {
   Play, UserCheck, XCircle, CheckCircle, SkipForward, Trophy,
-  Eye, Timer, Loader2, WifiOff, StopCircle, Shuffle, Star, Zap, Settings
+  Eye, Timer, Loader2, WifiOff, StopCircle, Shuffle, Star, Zap, Settings, Layers
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import { generateCorrectAnswerHash, verifyAnswerHash } from '../../utils/crypto'
@@ -109,7 +109,7 @@ function GameConfigPanel({ config, onChange }) {
         )}
       </div>
 
-      {/* Shuffle toggle */}
+      {/* Shuffle Choices toggle */}
       <label className="flex items-center justify-between cursor-pointer select-none">
         <div className="flex items-center gap-2">
           <Shuffle size={15} className="text-gray-400" />
@@ -120,6 +120,20 @@ function GameConfigPanel({ config, onChange }) {
           className={`relative w-11 h-6 rounded-full transition-colors ${config.shuffle_choices ? 'bg-primary' : 'bg-gray-700'}`}
         >
           <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.shuffle_choices ? 'translate-x-5' : ''}`} />
+        </button>
+      </label>
+
+      {/* Shuffle Questions toggle */}
+      <label className="flex items-center justify-between cursor-pointer select-none">
+        <div className="flex items-center gap-2">
+          <Layers size={15} className="text-gray-400" />
+          <span className="ar text-sm text-gray-200 font-medium">ترتيب الأسئلة عشوائي</span>
+        </div>
+        <button
+          onClick={() => set('shuffle_questions', !config.shuffle_questions)}
+          className={`relative w-11 h-6 rounded-full transition-colors ${config.shuffle_questions ? 'bg-secondary' : 'bg-gray-700'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.shuffle_questions ? 'translate-x-5' : ''}`} />
         </button>
       </label>
 
@@ -257,6 +271,7 @@ export default function HostGameRoom() {
     timer_seconds: 30,
     auto_mode: false,
     auto_timer: 45,
+    shuffle_questions: false,
   })
 
   const [toasts, setToasts]               = useState([])         // correct-answer notifications
@@ -425,8 +440,14 @@ export default function HostGameRoom() {
       // Generate secret key from room ID and created_at
       const secretKey = `${roomId}:${room.created_at}`
 
+      let questions = { ...room.questions }
+      
+      // Shuffle questions order if enabled
+      if (gameConfig.shuffle_questions) {
+        questions.questions = shuffleArray(questions.questions)
+      }
+
       // Optionally shuffle choices for every question
-      let questions = room.questions
       if (gameConfig.shuffle_choices) {
         questions = {
           ...questions,
