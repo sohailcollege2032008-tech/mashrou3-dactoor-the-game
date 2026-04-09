@@ -528,9 +528,20 @@ export default function HostGameRoom() {
         rankUpdates[`rooms/${roomId}/players/${p.user_id}/rank`] = i + 1
       })
 
+      const winners = correct
+        .map((a, i) => ({
+          user_id: a.user_id,
+          nickname: a.player_name,
+          time_ms: a.reaction_time_ms,
+          points: getPoints(i),
+          rank: i + 1
+        }))
+        .filter(w => w.points > 0);
+
       const revealData = {
         winner_nickname: winner?.player_name || null,
         winner_time_ms:  winner?.reaction_time_ms || null,
+        winners:         winners,
         correct_count:   correct.length,
       }
 
@@ -849,20 +860,64 @@ export default function HostGameRoom() {
                 })}
               </div>
 
-              {/* Reveal result */}
+              {/* Reveal result - Question Honor Roll */}
               {isRevealPhase && revealResult && (
-                <div className="mt-5 space-y-2">
-                  {revealResult.winner_nickname ? (
-                    <div className="flex items-center gap-3 bg-[#FFD700]/10 border border-[#FFD700]/40 text-[#FFD700] px-5 py-3 rounded-xl">
-                      <Trophy size={18} />
-                      <span className="font-bold">الأول: <span className="text-white">{revealResult.winner_nickname}</span></span>
-                      <span className="text-sm ml-auto opacity-70">{revealResult.winner_time_ms}ms</span>
+                <div className="mt-6 space-y-4">
+                  <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+                    <h3 className="text-sm font-bold text-gray-400 flex items-center gap-2">
+                      <Star size={14} className="text-yellow-500" /> لوحة شرف السؤال
+                    </h3>
+                    <span className="text-xs text-gray-500 font-mono">{revealResult.correct_count} طالب أجابوا صح</span>
+                  </div>
+
+                  {revealResult.winners && revealResult.winners.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                      {revealResult.winners.map((w, idx) => (
+                        <div key={w.user_id} 
+                          className={`relative flex items-center gap-3 p-3 rounded-xl border transition-all animate-in fade-in slide-in-from-bottom-2 duration-300`}
+                          style={{ animationDelay: `${idx * 50}ms` }}
+                        >
+                          {/* Rank badge */}
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                            w.rank === 1 ? 'bg-yellow-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.3)]' :
+                            w.rank === 2 ? 'bg-gray-300 text-black' :
+                            w.rank === 3 ? 'bg-orange-400 text-black' :
+                            'bg-gray-800 text-gray-400 border border-gray-700'
+                          }`}>
+                            {w.rank}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-sm truncate">{w.nickname}</div>
+                            <div className="flex items-center gap-2 text-[10px] text-gray-500 font-mono">
+                              <Timer size={10} /> {w.time_ms}ms
+                            </div>
+                          </div>
+
+                          <div className="text-primary font-bold text-sm px-2 py-0.5 bg-primary/10 rounded-lg">
+                            +{w.points}
+                          </div>
+                          
+                          {w.rank === 1 && (
+                            <div className="absolute -top-1 -right-1">
+                              <Trophy size={14} className="text-yellow-500" fill="currentColor" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : revealResult.correct_count > 0 ? (
+                    /* Fallback for old reveal data or cases where no points were earned but some were correct */
+                    <div className="flex items-center gap-3 bg-gray-800/50 border border-gray-700 text-gray-300 px-5 py-3 rounded-xl">
+                      <CheckCircle size={18} className="text-green-500" />
+                      <span className="font-bold">أول من أجاب: <span className="text-white">{revealResult.winner_nickname}</span></span>
+                      <span className="text-sm ml-auto opacity-70 font-mono">{revealResult.winner_time_ms}ms</span>
                     </div>
                   ) : (
-                    <div className="text-gray-500 text-center text-sm">ما حدش أجاب صح!</div>
-                  )}
-                  {revealResult.correct_count > 0 && (
-                    <p className="text-xs text-gray-500 text-center font-mono">{revealResult.correct_count} طالب أجاب صح</p>
+                    <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 text-center">
+                      <XCircle size={32} className="mx-auto text-gray-700 mb-2" />
+                      <div className="text-gray-500 text-sm">للأسف، ولا حد جابها صح!</div>
+                    </div>
                   )}
                 </div>
               )}

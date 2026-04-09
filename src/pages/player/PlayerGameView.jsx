@@ -4,7 +4,7 @@ import { ref, onValue, get, set, runTransaction, onDisconnect } from 'firebase/d
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
-import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Download, Loader2, Edit2, Check, X } from 'lucide-react'
+import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Download, Loader2, Edit2, Check, X, Star, Timer } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
 // ── Mini leaderboard strip ────────────────────────────────────────────────────
@@ -575,7 +575,7 @@ export default function PlayerGameView() {
             </div>
 
             {/* Result card */}
-            <div className="flex-1 flex items-center">
+            <div className="w-full flex flex-col gap-4">
               {revealedResult ? (
                 <div className={`w-full p-5 rounded-2xl border ${
                   revealedResult.didNotAnswer
@@ -588,66 +588,78 @@ export default function PlayerGameView() {
                     <div className="ar text-center">
                       <AlertCircle size={40} className="mx-auto mb-2 text-gray-500" />
                       <h3 className="text-xl font-bold text-gray-400">انتهى الوقت!</h3>
-                      {revealedResult.winner_nickname && (
-                        <p className="text-gray-500 text-sm mt-1">
-                          الأول: <span className="text-[#FFD700] font-bold">{revealedResult.winner_nickname}</span>
-                        </p>
-                      )}
                     </div>
                   ) : revealedResult.is_correct ? (
                     <div className="ar text-center">
                       <CheckCircle2 size={40} className="mx-auto mb-2 text-primary" />
                       <h3 className="text-2xl font-bold text-primary">صح! 🎉</h3>
-
-                      {revealedResult.is_first_correct ? (
-                        <div className="flex flex-col items-center gap-2 mt-3">
-                          <div className="inline-flex items-center gap-2 bg-[#FFD700]/20 text-[#FFD700] px-4 py-1.5 rounded-full font-bold text-sm">
-                            <Trophy size={14} /> الأول على الإجابة الصحيحة!
-                          </div>
-                          {revealedResult.points_earned > 0 && (
-                            <span className="text-primary font-mono font-bold text-lg">+{revealedResult.points_earned} نقطة</span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2 mt-3">
-                          {revealedResult.winner_nickname && (
-                            <p className="text-gray-400 text-sm">
-                              الأول: <span className="text-[#FFD700] font-bold">{revealedResult.winner_nickname}</span>
-                            </p>
-                          )}
-                          <div className="flex items-center gap-3">
-                            {revealedResult.behind_ms != null && (
-                              <div className="inline-flex items-center gap-1 bg-gray-700/60 text-gray-300 px-3 py-1 rounded-full font-mono text-xs">
-                                <Clock size={11} /> {revealedResult.behind_ms}ms متأخر
-                              </div>
-                            )}
-                            {revealedResult.points_earned > 0 && (
-                              <span className="text-primary font-mono font-bold">+{revealedResult.points_earned} نقطة</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                      <p className="text-primary/70 text-sm mt-1">عاش يا بطل، أخدت {revealedResult.points_earned || 0} نقطة</p>
                     </div>
                   ) : (
                     <div className="ar text-center">
-                      <XCircle size={40} className="mx-auto mb-2 text-red-400" />
-                      <h3 className="text-2xl font-bold text-red-400">غلط!</h3>
-                      {revealedResult.winner_nickname && (
-                        <p className="text-gray-500 text-sm mt-1">
-                          الأول: <span className="text-[#FFD700] font-bold">{revealedResult.winner_nickname}</span>
-                        </p>
-                      )}
+                      <XCircle size={40} className="mx-auto mb-2 text-red-500" />
+                      <h3 className="text-xl font-bold text-red-400">غلط! معلش</h3>
+                      <p className="text-red-400/60 text-sm mt-1">ركز في اللى جاي</p>
                     </div>
                   )}
-                  <p className="ar text-gray-600 mt-3 flex items-center justify-center gap-1.5 text-xs">
-                    <AlertCircle size={12} /> في انتظار الهوست...
-                  </p>
                 </div>
               ) : (
                 <div className="w-full text-center text-gray-500 py-4">
                   <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                   <p className="text-sm">جاري التحميل...</p>
                 </div>
+              )}
+
+              {/* Question Honor Roll */}
+              {revealedResult && revealedResult.winners && revealedResult.winners.length > 0 && (
+                <div className="bg-gray-900/50 rounded-2xl border border-gray-800 p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+                    <h3 className="text-xs font-bold text-gray-400 flex items-center gap-1.5 uppercase tracking-wider">
+                      <Star size={12} className="text-yellow-500" /> لوحة شرف السؤال
+                    </h3>
+                  </div>
+                  
+                  <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                    {revealedResult.winners.map((w, idx) => {
+                      const isMe = w.user_id === myId
+                      return (
+                        <div key={w.user_id} 
+                          className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all ${
+                            isMe 
+                              ? 'bg-primary/10 border-primary shadow-[0_0_10px_rgba(0,255,255,0.1)]' 
+                              : 'bg-gray-800/50 border-gray-700'
+                          }`}
+                        >
+                          <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${
+                            w.rank === 1 ? 'bg-yellow-500 text-black' :
+                            w.rank === 2 ? 'bg-gray-300 text-black' :
+                            w.rank === 3 ? 'bg-orange-400 text-black' :
+                            'bg-gray-700 text-gray-400'
+                          }`}>
+                            {w.rank}
+                          </div>
+                          
+                          <span className={`text-sm font-bold truncate flex-1 ${isMe ? 'text-primary' : 'text-white'}`}>
+                            {isMe ? 'أنا' : w.nickname}
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-500 font-mono italic">{w.time_ms}ms</span>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${isMe ? 'bg-primary/20 text-primary' : 'bg-gray-700 text-gray-400'}`}>
+                              +{w.points}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {revealedResult && (
+                <p className="ar text-gray-600 mt-1 flex items-center justify-center gap-1.5 text-[10px]">
+                  <AlertCircle size={10} /> في انتظار الهوست...
+                </p>
               )}
             </div>
           </div>
