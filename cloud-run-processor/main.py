@@ -169,10 +169,72 @@ def parse_gemini_response(raw: str) -> dict:
     return json.loads(cleaned.strip())
 
 
+# ── Fallback Config ────────────────────────────────────────────────────────────
+MODEL_FALLBACK_LIST = [
+    "gemini-3.1-flash-lite-preview",
+    "gemini-2.5-flash-lite",
+    "gemini-2-flash-lite",
+    "gemini-3-flash",
+    "gemini-2-flash",
+    "gemma-4-31b",
+    "gemma-4-26b"
+]
+
+SAFETY_SETTINGS = [
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+]
+
+def generate_with_fallback(contents, system_prompt):
+    """
+    Attempts generation with fallback sequence.
+    Returns (data, model_used, attempts_log)
+    """
+    attempts_log = []
+    
+    for model_id in MODEL_FALLBACK_LIST:
+        try:
+            log.info(f"Attempting with model: {model_id}")
+            model = genai.GenerativeModel(
+                model_name=model_id,
+                system_instruction=system_prompt
+            )
+            
+            response = model.generate_content(contents, safety_settings=SAFETY_SETTINGS)
+            
+            # Check for safety blocks (finish_reason 4 = RECITING)
+            if response.candidates and response.candidates[0].finish_reason == 4:
+                reason_msg = "Safety block: Copyright/Recitation"
+                log.warning(f"Model {model_id} failed: {reason_msg}")
+                attempts_log.append({"model": model_id, "status": "blocked", "reason": reason_msg})
+                continue
+
+            # Standard success path
+            raw_text = response.text
+            data = parse_gemini_response(raw_text)
+            return data, model_id, attempts_log
+
+        except Exception as e:
+            err_msg = str(e)
+            log.warning(f"Model {model_id} error: {err_msg}")
+            attempts_log.append({"model": model_id, "status": "error", "reason": err_msg})
+            continue
+
+    raise HTTPException(
+        status_code=500,
+        detail={
+            "message": "All AI models failed to process this document.",
+            "attempts": attempts_log
+        }
+    )
+
+
 # ── Health ─────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": MODEL_NAME, "version": "1.2.0"}
+    return {"status": "ok", "version": "1.3.0", "fallback_models": MODEL_FALLBACK_LIST}
 
 
 # ── Main endpoint ──────────────────────────────────────────────────────────────
@@ -199,15 +261,15 @@ async def process_file(
 
     tmp_path      = None
     uploaded_file = None
-    raw_text      = ""
-
+    
     try:
         suffix = f".{ext}" if ext else ""
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
-        model = genai.GenerativeModel(MODEL_NAME)
+        # Prepare contents list
+        contents = []
 
         # ── Path A: PDF or image → Gemini Files API ────────────────────────────
         if mime in GEMINI_FILES_SUPPORTED:
@@ -225,83 +287,51 @@ async def process_file(
                     status_code=500,
                     detail=f"Gemini file processing failed (state={uploaded_file.state.name})"
                 )
+            contents = [uploaded_file]
 
-            response = model.generate_content([SYSTEM_PROMPT, uploaded_file])
-            raw_text = response.text
-
-        # ── Path B: PPTX → extract text + images → send inline ────────────────
+        # ── Path B: PPTX → extract text + images ────────────────────────────
         elif ext in ("pptx", "ppt"):
-            log.info("Path B (PPTX inline multimodal)")
+            log.info("Path B (PPTX multimodal)")
             extracted_text, slide_images = extract_pptx(tmp_path)
-            log.info(f"  {len(extracted_text)} chars, {len(slide_images)} images found")
-
-            # Build multimodal content list
-            content_parts = [
-                SYSTEM_PROMPT,
-                f"\n\nBelow is the full text extracted from the PowerPoint file '{filename}':\n\n{extracted_text}",
-            ]
-
-            # Append slide images so Gemini can see them
+            contents = [f"Below is the text extracted from the PowerPoint file '{filename}':\n\n{extracted_text}"]
             capped = slide_images[:MAX_INLINE_IMAGES]
-            if len(slide_images) > MAX_INLINE_IMAGES:
-                log.warning(f"Capped images from {len(slide_images)} to {MAX_INLINE_IMAGES}")
-
             for img in capped:
-                content_parts.append(f"\n[Image from Slide {img['slide']}]:")
-                content_parts.append({
+                contents.append({
                     "mime_type": img["mime_type"],
                     "data": base64.b64encode(img["data"]).decode()
                 })
 
-            response = model.generate_content(content_parts)
-            raw_text = response.text
-
-        # ── Path C: DOCX → extract text → send as text ────────────────────────
+        # ── Path C: DOCX → extract text ────────────────────────
         elif ext in ("docx", "doc"):
-            log.info("Path C (DOCX text extraction)")
+            log.info("Path C (DOCX text)")
             extracted_text = extract_docx(tmp_path)
-            log.info(f"  {len(extracted_text)} chars extracted")
-
-            prompt = (
-                f"{SYSTEM_PROMPT}\n\n"
-                f"Below is the full text extracted from the Word document '{filename}':\n\n"
-                f"{extracted_text}"
-            )
-            response = model.generate_content(prompt)
-            raw_text = response.text
+            contents = [f"Below is the text extracted from the Word document '{filename}':\n\n{extracted_text}"]
 
         else:
             raise HTTPException(
                 status_code=415,
-                detail=f"Unsupported file type: .{ext}. Supported: PDF, PPTX, DOCX, and images (JPG/PNG/GIF/WEBP)."
+                detail=f"Unsupported file type: .{ext}. Supported: PDF, PPTX, DOCX, and images."
             )
 
-        # ── Parse response ─────────────────────────────────────────────────────
-        data = parse_gemini_response(raw_text)
+        # ── Run with fallback ──────────────────────────────────────────────────
+        data, model_used, attempts = generate_with_fallback(contents, SYSTEM_PROMPT)
 
+        # ── Post-process and return ───────────────────────────────────────────
         if not isinstance(data.get("title"), str) or not isinstance(data.get("questions"), list):
             raise HTTPException(status_code=422, detail="AI returned unexpected JSON structure")
-        if len(data["questions"]) == 0:
-            raise HTTPException(status_code=422, detail="AI found no questions in the document")
-
+        
         data["questions"] = [{**q, "id": i + 1} for i, q in enumerate(data["questions"])]
+        data["model_used"] = model_used
+        data["is_rollback"] = (model_used != MODEL_FALLBACK_LIST[0])
+        data["attempts_log"] = attempts
 
-        log.info(f"✓ {len(data['questions'])} questions extracted from '{filename}'")
+        log.info(f"✓ {len(data['questions'])} questions extracted via {model_used}")
         return data
-
-    except json.JSONDecodeError as exc:
-        snippet = raw_text[:400] if raw_text else "(no output)"
-        log.error(f"JSON parse error: {exc}\nSnippet: {snippet}")
-        raise HTTPException(
-            status_code=422,
-            detail="AI returned invalid JSON. Make sure the file contains MCQ questions."
-        )
 
     except HTTPException:
         raise
-
     except Exception as exc:
-        log.exception("Unexpected error")
+        log.exception("Unexpected processing error")
         raise HTTPException(status_code=500, detail=str(exc))
 
     finally:

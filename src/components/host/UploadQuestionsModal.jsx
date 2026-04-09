@@ -69,21 +69,34 @@ function QuestionsPreview({ data }) {
   return (
     <div className="bg-gray-800/60 border border-primary/30 rounded-xl p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex-1">
           <h3 className="text-lg font-bold text-white leading-tight">{data.title}</h3>
-          <p className="text-primary font-mono text-sm mt-1">
-            ✅ {data.questions.length} سؤال
+          <div className="flex flex-wrap gap-2 mt-2">
+            <span className="text-primary font-mono text-xs bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+              ✅ {data.questions.length} سؤال
+            </span>
             {data.questions.filter(q => q.correct === -1).length > 0 && (
-              <span className="text-amber-400 mr-2"> ⚠️ {data.questions.filter(q => q.correct === -1).length} بدون إجابة</span>
+              <span className="text-amber-400 font-mono text-xs bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                ⚠️ {data.questions.filter(q => q.correct === -1).length} بدون إجابة
+              </span>
             )}
             {needsImg > 0 && (
-              <span className="text-amber-400 mr-2"> 🖼 {needsImg} تحتاج صورة</span>
+              <span className="text-amber-400 font-mono text-xs bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                🖼 {needsImg} تحتاج صورة
+              </span>
             )}
-          </p>
+          </div>
         </div>
-        <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-mono border border-primary/30 flex-shrink-0">
-          AI ✨
-        </span>
+        <div className="text-right flex flex-col items-end gap-1 select-none">
+          <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-[10px] font-mono border border-primary/30">
+            {data.model_used || 'Gemini'} ✨
+          </span>
+          {data.is_rollback && (
+            <span className="bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded-full text-[9px] font-bold border border-amber-500/30 animate-pulse ar">
+              🔄 تم النقل آلياً (Rollback)
+            </span>
+          )}
+        </div>
       </div>
       <div className="space-y-2 max-h-48 overflow-y-auto">
         {data.questions.slice(0, 5).map((q, i) => (
@@ -136,7 +149,7 @@ function FileUploadTab({ session, onSuccess, onClose }) {
       const formData = new FormData()
       formData.append('file', file)
 
-      setStatusMsg('🤖 Gemini بيحلل الملف — قد يأخذ بضع ثوانٍ...')
+      setStatusMsg('🤖 جاري المعالجة بنظام Multi-Model Fallback...')
 
       const res = await fetch(`${CLOUD_RUN_URL}/process`, {
         method: 'POST',
@@ -146,12 +159,17 @@ function FileUploadTab({ session, onSuccess, onClose }) {
 
       if (!res.ok) {
         let detail = `خطأ ${res.status}`
-        try { detail = (await res.json()).detail || detail } catch (_) {}
+        let errJson = null
+        try { 
+            errJson = await res.json()
+            detail = errJson.detail?.message || errJson.detail || detail 
+        } catch (_) {}
+        
         throw new Error(detail)
       }
 
       const data = await res.json()
-      if (!data.title || !Array.isArray(data.questions) || data.questions.length === 0)
+      if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0)
         throw new Error('الـ AI مرجعش أسئلة صالحة — تأكد إن الملف فيه MCQs')
 
       setParsed(data)
@@ -221,8 +239,9 @@ function FileUploadTab({ session, onSuccess, onClose }) {
           <div className="text-5xl mb-3">📂</div>
           <p className="ar text-gray-200 font-bold text-lg">اسحب الملف هنا أو انقر للاختيار</p>
           <p className="text-gray-500 text-sm mt-2 font-mono">PDF · PPTX · DOCX · صورة</p>
-          <p className="ar text-gray-600 text-xs mt-3">
-            الملف بيتبعت لـ Gemini 3.1 Flash Lite مباشرة ويطلع JSON تلقائياً
+          <p className="ar text-gray-600 text-[10px] mt-3 bg-gray-900/50 py-1 px-2 rounded border border-gray-800/50">
+            نظام المعالجة الذكي: Gemini 3.1 & 2.5 & 2 + Gemma 4 <br/> 
+            (يتم التبديل تلقائياً في حال فشل النموذج الأساسي لضمان الدقة)
           </p>
         </div>
       )}
