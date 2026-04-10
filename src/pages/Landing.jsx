@@ -18,7 +18,7 @@ export default function Landing() {
         ? '/owner/dashboard' 
         : profile.role === 'host' 
         ? '/host/dashboard' 
-        : '/player/join'
+        : '/player/dashboard'
       
       // Only redirect if we are exactly on "/"
       if (window.location.pathname === '/') {
@@ -102,7 +102,7 @@ export default function Landing() {
             {/* Navigation buttons */}
             <div className="flex flex-col gap-3">
               <Link
-                to={profile.role === 'owner' ? '/owner/dashboard' : profile.role === 'host' ? '/host/dashboard' : '/player/join'}
+                to={profile.role === 'owner' ? '/owner/dashboard' : profile.role === 'host' ? '/host/dashboard' : '/player/dashboard'}
                 className="w-full rounded-xl bg-primary px-6 py-4 font-bold text-background transition-colors hover:bg-[#00D4FF]"
               >
                 {profile.role === 'owner' ? 'Owner Dashboard' : profile.role === 'host' ? 'Host Dashboard' : 'Join a Game'}
