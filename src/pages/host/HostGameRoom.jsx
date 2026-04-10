@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, update, get, set, onDisconnect } from 'firebase/database'
-import { rtdb } from '../../lib/firebase'
+import { doc, getDoc } from 'firebase/firestore'
+import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import {
   Play, UserCheck, XCircle, CheckCircle, SkipForward, Trophy,
-  Eye, Timer, Loader2, WifiOff, StopCircle, Shuffle, Star, Zap, Settings, Layers, Shield
+  Eye, Timer, Loader2, WifiOff, StopCircle, Shuffle, Star, Zap, Settings, Layers, Shield,
+  X, Phone, Mail, User
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import QuestionImage from '../../components/QuestionImage'
@@ -246,6 +248,69 @@ function shuffleArray(arr) {
   return a
 }
 
+// ── Player Profile Modal ──────────────────────────────────────────────────────
+function PlayerProfileModal({ player, onClose }) {
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!player?.user_id) return
+    getDoc(doc(db, 'profiles', player.user_id))
+      .then(snap => { setProfile(snap.exists() ? snap.data() : null) })
+      .finally(() => setLoading(false))
+  }, [player?.user_id])
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="relative w-full max-w-sm bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl p-6 space-y-4">
+
+        <button onClick={onClose} className="absolute top-4 left-4 text-gray-500 hover:text-white transition-colors">
+          <X size={18} />
+        </button>
+
+        {/* Avatar + name */}
+        <div className="flex items-center gap-4">
+          {player.avatar_url ? (
+            <img src={player.avatar_url} alt="" className="w-16 h-16 rounded-full border-2 border-primary object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-16 h-16 rounded-full border-2 border-gray-700 bg-gray-800 flex items-center justify-center flex-shrink-0">
+              <User size={28} className="text-gray-500" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <h3 className="text-white font-bold text-lg truncate">{player.nickname}</h3>
+            <p className="text-primary font-mono font-bold">{player.score} pts</p>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-800 pt-4 space-y-3">
+          {loading ? (
+            <div className="flex items-center gap-2 text-gray-500 text-sm">
+              <Loader2 size={14} className="animate-spin" /> جاري التحميل...
+            </div>
+          ) : profile ? (
+            <>
+              <div className="flex items-center gap-3 text-sm">
+                <Mail size={14} className="text-gray-500 flex-shrink-0" />
+                <span className="text-gray-300 font-mono truncate">{profile.email || '—'}</span>
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <Phone size={14} className="text-gray-500 flex-shrink-0" />
+                <span className={`font-mono ${profile.phone ? 'text-gray-300' : 'text-gray-600 italic'}`}>
+                  {profile.phone || 'لم يُضف رقم هاتف'}
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="text-gray-600 text-sm italic">لا توجد بيانات إضافية</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function HostGameRoom() {
   const { roomId }  = useParams()
@@ -280,6 +345,7 @@ export default function HostGameRoom() {
   const [gameResults, setGameResults] = useState(null)  // collected results for HostGameReport
   const [resultTab, setResultTab]     = useState('leaderboard') // 'leaderboard' | 'security'
   const [selectedPlayer, setSelectedPlayer] = useState(null) // for ActivityLogViewer
+  const [profileModal, setProfileModal]   = useState(null)   // { player_id, nickname, avatar_url, score }
   const notifiedAnswersRef = useRef(new Set())   // user_ids already toasted this question
   const roomStatusRef      = useRef(null)         // mirror of room.status for callbacks
 
@@ -855,8 +921,15 @@ export default function HostGameRoom() {
   const answeredCount = answers.length
   const config        = room.config || { scoring_mode: 'classic' }
 
+  const openPlayerProfile = (p) => setProfileModal(p)
+
   return (
     <div className="min-h-screen bg-background text-white p-6">
+
+      {/* ── Player Profile Modal ────────────────────────────────────────────── */}
+      {profileModal && (
+        <PlayerProfileModal player={profileModal} onClose={() => setProfileModal(null)} />
+      )}
 
       {/* ── Correct-answer toast notifications ─────────────────────────────── */}
       {toasts.length > 0 && (
@@ -965,7 +1038,7 @@ export default function HostGameRoom() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-32 overflow-y-auto">
                   {totalPlayers === 0 && <p className="text-gray-500 italic text-sm col-span-full">Waiting...</p>}
                   {players.map(p => (
-                    <div key={p.user_id} className="flex items-center gap-2 p-2 bg-gray-800 rounded-lg border border-gray-700">
+                    <div key={p.user_id} onClick={() => openPlayerProfile(p)} className="flex items-center gap-2 p-2 bg-gray-800 rounded-lg border border-gray-700 cursor-pointer hover:border-primary/40 transition-colors">
                       {p.avatar_url ? <img src={p.avatar_url} alt="" className="w-6 h-6 rounded-full" /> : <UserCheck size={14} className="text-gray-500" />}
                       <span className="font-bold text-sm truncate flex-1">{p.nickname}</span>
                       <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${presence[p.user_id]?.online ? 'bg-green-400' : 'bg-gray-600'}`} />
@@ -1128,7 +1201,7 @@ export default function HostGameRoom() {
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {players.slice(0, 8).map((p, idx) => (
-                  <div key={p.user_id} className="bg-gray-800 p-3 rounded-xl border border-gray-700 flex justify-between items-center">
+                  <div key={p.user_id} onClick={() => openPlayerProfile(p)} className="bg-gray-800 p-3 rounded-xl border border-gray-700 flex justify-between items-center cursor-pointer hover:border-primary/40 transition-colors">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-sm font-bold text-gray-500 flex-shrink-0">#{idx + 1}</span>
                       <span className="font-bold text-sm truncate">{p.nickname}</span>
@@ -1265,7 +1338,7 @@ export default function HostGameRoom() {
                     </thead>
                     <tbody className="divide-y divide-gray-800">
                       {players.map((p, idx) => (
-                        <tr key={p.user_id} className={`hover:bg-white/5 transition-colors ${idx < 3 ? 'bg-primary/5' : ''}`}>
+                        <tr key={p.user_id} onClick={() => openPlayerProfile(p)} className={`hover:bg-white/5 transition-colors cursor-pointer ${idx < 3 ? 'bg-primary/5' : ''}`}>
                           <td className="px-6 py-4 bg-transparent">
                             <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg font-mono font-bold ${
                               idx < 3 ? 'text-primary' : 'text-gray-500'
