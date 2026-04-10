@@ -2,7 +2,6 @@ import React, { useState, useRef, useCallback } from 'react'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { generateCorrectAnswerHash } from '../../utils/crypto'
 
 const CLOUD_RUN_URL  = import.meta.env.VITE_CLOUD_RUN_URL
 const API_SECRET     = import.meta.env.VITE_CLOUD_RUN_SECRET || ''
@@ -131,7 +130,7 @@ function FileUploadTab({ session, onSuccess, onClose }) {
   const [saving, setSaving]       = useState(false)
   const fileInputRef              = useRef(null)
 
-  const ACCEPTED = '.pdf,.pptx,.ppt,.docx,.doc,image/*'
+  const ACCEPTED = '.pdf,.pptx,.ppt,.docx,.doc,.txt,image/*'
 
   const processFile = async (file) => {
     if (!file) return
@@ -166,7 +165,6 @@ function FileUploadTab({ session, onSuccess, onClose }) {
             detail = errJson.detail?.message || errJson.detail || detail 
         } catch (_) {}
         
-        // If it's a structural error with attempts log, we could show more info
         throw new Error(detail)
       }
 
@@ -174,16 +172,7 @@ function FileUploadTab({ session, onSuccess, onClose }) {
       if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0)
         throw new Error('الـ AI مرجعش أسئلة صالحة — تأكد إن الملف فيه MCQs')
 
-      // Normalize results to ensure types are consistent (integer for correct index)
-      const normalizedData = {
-        ...data,
-        questions: data.questions.map(q => ({
-          ...q,
-          correct: parseInt(q.correct, 10) || 0
-        }))
-      }
-
-      setParsed(normalizedData)
+      setParsed(data)
       setStatus('done')
       setStatusMsg('')
 
@@ -203,17 +192,15 @@ function FileUploadTab({ session, onSuccess, onClose }) {
     if (!parsed) return
     setSaving(true)
     try {
-      // Store questions without exposing correct answers
-      const savedData = {
+      await addDoc(collection(db, 'question_sets'), {
         host_id:         session.uid,
         title:           parsed.title,
-        questions:       parsed,  // keep original for preview/editing
+        questions:       parsed,
         question_count:  parsed.questions.length,
         source_type:     'ai',
         source_filename: null,
         created_at:      serverTimestamp(),
-      }
-      await addDoc(collection(db, 'question_sets'), savedData)
+      })
       onSuccess()
       onClose()
     } catch (e) {
@@ -251,7 +238,7 @@ function FileUploadTab({ session, onSuccess, onClose }) {
           />
           <div className="text-5xl mb-3">📂</div>
           <p className="ar text-gray-200 font-bold text-lg">اسحب الملف هنا أو انقر للاختيار</p>
-          <p className="text-gray-500 text-sm mt-2 font-mono">PDF · PPTX · DOCX · صورة</p>
+          <p className="text-gray-500 text-sm mt-2 font-mono">PDF · PPTX · DOCX · TXT · صورة</p>
           <p className="ar text-gray-600 text-[10px] mt-3 bg-gray-900/50 py-1 px-2 rounded border border-gray-800/50">
             نظام المعالجة الذكي: Gemini 3.1 & 2.5 & 2 + Gemma 4 <br/> 
             (يتم التبديل تلقائياً في حال فشل النموذج الأساسي لضمان الدقة)
@@ -312,67 +299,123 @@ function FileUploadTab({ session, onSuccess, onClose }) {
 
 // ── JSON Upload Tab ────────────────────────────────────────────────────────────
 function JsonUploadTab({ session, onSuccess, onClose }) {
+  const [text, setText]     = useState('')
+  const [parsed, setParsed] = useState(null)
+  const [errors, setErrors] = useState([])
+  const [saving, setSaving] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const [parsed, setParsed]     = useState(null)
-  const [errors, setErrors]     = useState([])
-  const [saving, setSaving]     = useState(false)
-  const fileInputRef            = useRef(null)
+  const fileInputRef        = useRef(null)
 
-  const processFile = async (file) => {
-    if (!file || !file.name.endsWith('.json')) { setErrors(['يُسمح فقط بملفات .json']); return }
+  const parseText = useCallback((raw) => {
     setErrors([]); setParsed(null)
+    if (!raw.trim()) return
     try {
-      const text = await readFileAsText(file)
-      const json = JSON.parse(text)
-      const validationErrors = validateSchema(json)
-      if (validationErrors.length > 0) { setErrors(validationErrors); return }
+      const json = JSON.parse(raw)
+      const errs = validateSchema(json)
+      if (errs.length > 0) { setErrors(errs); return }
       setParsed({ ...json, questions: json.questions.map((q, i) => ({ ...q, id: i + 1 })) })
     } catch (e) {
-      setErrors([e.message.includes('JSON') ? 'الملف لا يحتوي على JSON صالح' : e.message])
+      setErrors(['JSON غير صالح — تأكد من الصياغة'])
+    }
+  }, [])
+
+  const loadFile = async (file) => {
+    if (!file || !file.name.endsWith('.json')) { setErrors(['يُسمح فقط بملفات .json']); return }
+    try {
+      const raw = await readFileAsText(file)
+      setText(raw)
+      parseText(raw)
+    } catch (e) {
+      setErrors([e.message])
     }
   }
 
-  const handleDrop = useCallback((e) => { e.preventDefault(); setDragOver(false); processFile(e.dataTransfer.files[0]) }, [])
+  const handleTextChange = (e) => {
+    const val = e.target.value
+    setText(val)
+    parseText(val)
+  }
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault(); setDragOver(false)
+    loadFile(e.dataTransfer.files[0])
+  }, [])
 
   const handleSave = async () => {
     if (!parsed) return
     setSaving(true)
     try {
-      // Store questions without exposing correct answers
-      const savedData = {
+      await addDoc(collection(db, 'question_sets'), {
         host_id: session.uid, title: parsed.title, questions: parsed,
         question_count: parsed.questions.length, source_type: 'json',
         source_filename: null, created_at: serverTimestamp()
-      }
-      await addDoc(collection(db, 'question_sets'), savedData)
+      })
       onSuccess(); onClose()
     } catch (e) {
       setErrors(['خطأ في الحفظ: ' + e.message])
     } finally { setSaving(false) }
   }
 
+  const reset = () => { setText(''); setParsed(null); setErrors([]) }
+
   return (
-    <div className="space-y-5">
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all
-          ${dragOver ? 'border-primary bg-primary/10 scale-[1.01]' : 'border-gray-600 hover:border-primary/60 hover:bg-gray-800/40'}`}
-      >
-        <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={(e) => processFile(e.target.files[0])} />
-        <div className="text-5xl mb-3">📄</div>
-        <p className="ar text-gray-300 font-bold text-lg">اسحب ملف JSON هنا أو انقر للاختيار</p>
-        <p className="text-gray-500 text-sm mt-1 font-mono">.json only</p>
+    <div className="space-y-4">
+
+      {/* Textarea — paste or type directly */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs text-gray-500 font-bold tracking-widest uppercase">
+            الصق JSON هنا أو اكتبه مباشرة
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-600 font-mono">أو</span>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
+            >
+              📄 رفع ملف .json
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={(e) => loadFile(e.target.files[0])}
+            />
+          </div>
+        </div>
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          className={`rounded-xl border-2 transition-colors ${
+            dragOver ? 'border-primary bg-primary/5' : parsed ? 'border-green-500/40' : errors.length ? 'border-red-500/40' : 'border-gray-700 focus-within:border-primary/60'
+          }`}
+        >
+          <textarea
+            value={text}
+            onChange={handleTextChange}
+            placeholder={'{\n  "title": "اسم البنك",\n  "questions": [...]\n}'}
+            rows={10}
+            spellCheck={false}
+            className="w-full bg-transparent rounded-xl px-4 py-3 text-gray-300 font-mono text-xs focus:outline-none resize-none placeholder-gray-700"
+          />
+        </div>
+        {text && (
+          <button onClick={reset} className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-1 font-mono">
+            ✕ مسح
+          </button>
+        )}
       </div>
 
+      {/* Errors */}
       {errors.length > 0 && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 space-y-1">
           {errors.map((e, i) => <p key={i} className="text-red-400 text-sm font-mono">❌ {e}</p>)}
         </div>
       )}
 
+      {/* Preview + save */}
       {parsed && (
         <>
           <QuestionsPreview data={parsed} />
