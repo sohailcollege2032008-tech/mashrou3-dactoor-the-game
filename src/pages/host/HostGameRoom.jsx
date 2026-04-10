@@ -280,7 +280,9 @@ function PlayerProfileModal({ player, onClose }) {
           )}
           <div className="min-w-0">
             <h3 className="text-white font-bold text-lg truncate">{player.nickname}</h3>
-            <p className="text-primary font-mono font-bold">{player.score} pts</p>
+            {player.score > 0 && (
+              <p className="text-primary font-mono font-bold">{player.score} pts</p>
+            )}
           </div>
         </div>
 
