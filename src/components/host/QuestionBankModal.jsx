@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, memo } from 'react'
 import { doc, updateDoc } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '../../lib/firebase'
+import { compressImage, formatBytes } from '../../utils/imageCompressor'
 import {
   X, Edit2, Save, XCircle, Image,
   ChevronDown, ChevronUp, Camera, Trash2, AlertTriangle, Clipboard
@@ -9,30 +10,51 @@ import {
 
 // ── Upload helper (shared between file input & paste) ─────────────────────────
 function useImageUpload(bankId, index, onUploaded) {
-  const [uploadProgress, setUploadProgress] = useState(null)
+  const [uploadProgress, setUploadProgress] = useState(null)   // null | 'compressing' | 0–100
+  const [uploadInfo, setUploadInfo]         = useState(null)   // { original, compressed }
 
-  const uploadFile = useCallback((file) => {
+  const uploadFile = useCallback(async (file) => {
     if (!file || !file.type.startsWith('image/')) {
       alert('يُسمح بالصور فقط')
       return
     }
-    const path = `question_images/${bankId}/q${index}_${Date.now()}`
-    const ref  = storageRef(storage, path)
-    const task = uploadBytesResumable(ref, file)
 
-    task.on(
-      'state_changed',
-      snap => setUploadProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100)),
-      err  => { alert('فشل الرفع: ' + err.message); setUploadProgress(null) },
-      async () => {
-        const url = await getDownloadURL(task.snapshot.ref)
-        onUploaded(url)
-        setUploadProgress(null)
-      }
-    )
+    try {
+      setUploadProgress('compressing')
+      setUploadInfo(null)
+
+      const compressed = await compressImage(file)
+      setUploadInfo({ original: file.size, compressed: compressed.size })
+      setUploadProgress(0)
+
+      const path = `question_images/${bankId}/q${index}_${Date.now()}`
+      const ref  = storageRef(storage, path)
+      const task = uploadBytesResumable(ref, compressed)
+
+      task.on(
+        'state_changed',
+        snap => setUploadProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100)),
+        err  => { alert('فشل الرفع: ' + err.message); setUploadProgress(null); setUploadInfo(null) },
+        async () => {
+          try {
+            const url = await getDownloadURL(task.snapshot.ref)
+            onUploaded(url)
+          } catch (e) {
+            alert('فشل في الحصول على رابط الصورة: ' + e.message)
+          } finally {
+            setUploadProgress(null)
+          }
+        }
+      )
+    } catch (err) {
+      console.error('uploadFile error:', err)
+      alert('خطأ أثناء رفع الصورة: ' + err.message)
+      setUploadProgress(null)
+      setUploadInfo(null)
+    }
   }, [bankId, index, onUploaded])
 
-  return { uploadProgress, uploadFile }
+  return { uploadProgress, uploadInfo, uploadFile }
 }
 
 // ── Single Question Editor ────────────────────────────────────────────────────
@@ -45,7 +67,7 @@ function QuestionEditor({ question, index, bankId, onSave, onClose }) {
     setQ(prev => ({ ...prev, image_url: url, needs_image: false }))
   }, [])
 
-  const { uploadProgress, uploadFile } = useImageUpload(bankId, index, handleUploaded)
+  const { uploadProgress, uploadInfo, uploadFile } = useImageUpload(bankId, index, handleUploaded)
 
   // ── Ctrl+V / paste support ──────────────────────────────────────────────────
   useEffect(() => {
