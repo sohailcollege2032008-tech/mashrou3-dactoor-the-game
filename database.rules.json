@@ -18,6 +18,16 @@
         ".read":  "auth != null && auth.uid == $hostId",
         ".write": "auth != null && auth.uid == $hostId"
       }
+    },
+    "duels": {
+      "$duelId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "duel_queue": {
+      ".read":  "auth != null",
+      ".write": "auth != null"
     }
   }
 }

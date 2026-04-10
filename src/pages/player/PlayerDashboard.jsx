@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { Gamepad2, User, LogOut } from 'lucide-react'
+import { Gamepad2, User, LogOut, Swords } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useAuthStore } from '../../stores/authStore'
 
@@ -52,6 +52,20 @@ export default function PlayerDashboard() {
           <div className="text-center">
             <p className="text-white font-bold text-lg">Join a Game</p>
             <p className="text-gray-500 text-sm">أدخل كود الجيم وانضم</p>
+          </div>
+        </Link>
+
+        {/* Duel Mode — secondary action */}
+        <Link
+          to="/player/decks"
+          className="w-full max-w-xs flex flex-col items-center gap-3 bg-gray-900/60 border-2 border-gray-800 hover:border-gray-600 hover:bg-gray-800/60 rounded-2xl p-6 transition-all active:scale-95 group"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-gray-800 flex items-center justify-center group-hover:bg-gray-700 transition-colors">
+            <Swords size={28} className="text-gray-300" />
+          </div>
+          <div className="text-center">
+            <p className="text-white font-bold text-base">تصفح الـ Decks</p>
+            <p className="text-gray-500 text-sm">العب دويل مع زميلك</p>
           </div>
         </Link>
 
