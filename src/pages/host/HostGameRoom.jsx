@@ -8,6 +8,7 @@ import {
   Eye, Timer, Loader2, WifiOff, StopCircle, Shuffle, Star, Zap, Settings, Layers, Shield
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
+import QuestionImage from '../../components/QuestionImage'
 import { generateCorrectAnswerHash, verifyAnswerHash } from '../../utils/crypto'
 import HostGameReport from '../../components/HostGameReport'
 import ActivityLogViewer from '../../components/ActivityLogViewer'
@@ -843,6 +844,14 @@ export default function HostGameRoom() {
   const currentQ    = room.questions?.questions?.[room.current_question_index]
   const isRevealPhase = room.status === 'revealing'
   const totalPlayers  = players.length
+
+  // Preload next question's image while players are answering current one
+  const nextQImg = room.questions?.questions?.[room.current_question_index + 1]?.image_url
+  useEffect(() => {
+    if (!nextQImg) return
+    const img = new Image()
+    img.src = nextQImg
+  }, [nextQImg])
   const answeredCount = answers.length
   const config        = room.config || { scoring_mode: 'classic' }
 
@@ -1011,8 +1020,8 @@ export default function HostGameRoom() {
               <h2 className="text-2xl font-bold mb-6">{currentQ.question}</h2>
 
               {currentQ.image_url && (
-                <div className="mb-5 rounded-xl overflow-hidden border border-gray-700 bg-gray-900">
-                  <img src={currentQ.image_url} alt="question" className="w-full max-h-56 object-contain" />
+                <div className="mb-5">
+                  <QuestionImage src={currentQ.image_url} className="w-full max-h-56 object-contain rounded-xl border border-gray-700 bg-gray-900" />
                 </div>
               )}
 
