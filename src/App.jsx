@@ -10,6 +10,7 @@ import HostDashboard from './pages/host/HostDashboard'
 import HostGameRoom from './pages/host/HostGameRoom'
 import JoinGame from './pages/player/JoinGame'
 import PlayerDashboard from './pages/player/PlayerDashboard'
+import PlayerProfile from './pages/player/PlayerProfile'
 import WaitingRoom from './pages/player/WaitingRoom'
 import PlayerGameView from './pages/player/PlayerGameView'
 
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/host/dashboard" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostDashboard /></ProtectedRoute>} />
         <Route path="/host/game/:roomId" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostGameRoom /></ProtectedRoute>} />
         <Route path="/player/dashboard" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerDashboard /></ProtectedRoute>} />
+        <Route path="/player/profile" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerProfile /></ProtectedRoute>} />
         <Route path="/player/join" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><JoinGame /></ProtectedRoute>} />
         <Route path="/player/waiting/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><WaitingRoom /></ProtectedRoute>} />
         <Route path="/player/game/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerGameView /></ProtectedRoute>} />
