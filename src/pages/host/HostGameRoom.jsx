@@ -682,6 +682,14 @@ export default function HostGameRoom() {
     }
   }
 
+  // Preload next question's image while players are answering current one
+  const nextQImg = room?.questions?.questions?.[room?.current_question_index + 1]?.image_url
+  useEffect(() => {
+    if (!nextQImg) return
+    const img = new Image()
+    img.src = nextQImg
+  }, [nextQImg])
+
   // ─────────────────────────────────────────────────────────────────────────
   if (!room) return (
     <div className="text-white p-6 flex items-center gap-3">
@@ -692,14 +700,6 @@ export default function HostGameRoom() {
 
   const currentQ    = room.questions?.questions?.[room.current_question_index]
   const isRevealPhase = room.status === 'revealing'
-
-  // Preload next question's image while players are answering current one
-  const nextQImg = room.questions?.questions?.[room.current_question_index + 1]?.image_url
-  useEffect(() => {
-    if (!nextQImg) return
-    const img = new Image()
-    img.src = nextQImg
-  }, [nextQImg])
   const totalPlayers  = players.length
   const answeredCount = answers.length
   const config        = room.config || { scoring_mode: 'classic' }
