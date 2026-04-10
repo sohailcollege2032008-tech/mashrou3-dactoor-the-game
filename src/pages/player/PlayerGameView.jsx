@@ -448,6 +448,14 @@ export default function PlayerGameView() {
     }
   }
 
+  // Preload next question's image while answering current one (must be before early return)
+  const nextQImg = room?.questions?.questions?.[room?.current_question_index + 1]?.image_url
+  useEffect(() => {
+    if (!nextQImg) return
+    const img = new Image()
+    img.src = nextQImg
+  }, [nextQImg])
+
   // ─────────────────────────────────────────────────────────────────────────
   if (!room || !player) return (
     <div className="flex h-screen items-center justify-center bg-background">
@@ -457,14 +465,6 @@ export default function PlayerGameView() {
       </div>
     </div>
   )
-
-  // Preload next question's image while answering current one
-  const nextQImg = room?.questions?.questions?.[room?.current_question_index + 1]?.image_url
-  useEffect(() => {
-    if (!nextQImg) return
-    const img = new Image()
-    img.src = nextQImg
-  }, [nextQImg])
 
   const currentQ = room.questions?.questions?.[room.current_question_index]
   const myId     = session?.uid
