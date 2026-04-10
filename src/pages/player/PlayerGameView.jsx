@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
 import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Download, Loader2, Edit2, Check, X, Star, Timer } from 'lucide-react'
 import confetti from 'canvas-confetti'
+import QuestionImage from '../../components/QuestionImage'
 
 // ── Mini leaderboard strip ────────────────────────────────────────────────────
 // top5: [{rank, user_id, nickname, score}] — from rooms/${roomId}/leaderboard/top5
@@ -375,6 +376,14 @@ export default function PlayerGameView() {
   const currentQ = room.questions?.questions?.[room.current_question_index]
   const myId     = session?.uid
 
+  // Preload next question's image while answering current one
+  const nextQImg = room.questions?.questions?.[room.current_question_index + 1]?.image_url
+  useEffect(() => {
+    if (!nextQImg) return
+    const img = new Image()
+    img.src = nextQImg
+  }, [nextQImg])
+
   return (
     <div className="flex flex-col h-screen bg-background text-white overflow-hidden">
 
@@ -473,7 +482,7 @@ export default function PlayerGameView() {
                 {currentQ.question}
               </p>
               {currentQ.image_url && (
-                <img src={currentQ.image_url} alt="q" className="w-full max-h-36 object-contain rounded-xl border border-gray-700 bg-gray-950" />
+                <QuestionImage src={currentQ.image_url} className="w-full max-h-36 object-contain rounded-xl border border-gray-700 bg-gray-950" />
               )}
               {/* Countdown bar — appears when host starts it */}
               {room.countdown_started_at && (
@@ -542,7 +551,7 @@ export default function PlayerGameView() {
                 {currentQ.question}
               </p>
               {currentQ.image_url && (
-                <img src={currentQ.image_url} alt="q" className="w-full max-h-28 object-contain rounded-xl border border-gray-700 bg-gray-950" />
+                <QuestionImage src={currentQ.image_url} className="w-full max-h-28 object-contain rounded-xl border border-gray-700 bg-gray-950" />
               )}
             </div>
 

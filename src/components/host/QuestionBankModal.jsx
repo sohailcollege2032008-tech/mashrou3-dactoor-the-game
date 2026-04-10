@@ -156,11 +156,28 @@ function QuestionEditor({ question, index, bankId, onSave, onClose }) {
             )}
 
             {uploadProgress !== null && (
-              <div className="mt-2">
+              <div className="mt-2 space-y-1">
                 <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary transition-all duration-200" style={{ width: `${uploadProgress}%` }} />
+                  <div
+                    className="h-full bg-primary transition-all duration-200"
+                    style={{ width: uploadProgress === 'compressing' ? '0%' : `${uploadProgress}%` }}
+                  />
                 </div>
-                <p className="text-xs text-gray-400 mt-1 font-mono">جاري الرفع... {uploadProgress}%</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-400 font-mono">
+                    {uploadProgress === 'compressing' ? '🗜️ جاري الضغط...' : `⬆️ جاري الرفع... ${uploadProgress}%`}
+                  </p>
+                  {uploadInfo && (
+                    <p className="text-xs font-mono text-green-400">
+                      {formatBytes(uploadInfo.original)} → {formatBytes(uploadInfo.compressed)}
+                      {uploadInfo.compressed < uploadInfo.original && (
+                        <span className="text-green-300 mr-1">
+                          ({Math.round((1 - uploadInfo.compressed / uploadInfo.original) * 100)}%↓)
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
