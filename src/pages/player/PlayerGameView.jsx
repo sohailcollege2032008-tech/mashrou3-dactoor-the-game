@@ -671,7 +671,11 @@ export default function PlayerGameView() {
                     <div className="ar text-center">
                       <CheckCircle2 size={40} className="mx-auto mb-2 text-primary" />
                       <h3 className="text-2xl font-bold text-primary">صح! 🎉</h3>
-                      <p className="text-primary/70 text-sm mt-1">عاش يا بطل، أخدت {revealedResult.points_earned || 0} نقطة</p>
+                      {revealedResult.points_earned > 0 ? (
+                        <p className="text-primary/70 text-sm mt-1">عاش يا بطل، أخدت {revealedResult.points_earned} نقطة</p>
+                      ) : (
+                        <p className="text-primary/70 text-sm mt-1 italic opacity-80">إجابة صحيحة! لكن لم يحالفك الحظ في النقاط هذه المرة.</p>
+                      )}
                     </div>
                   ) : (
                     <div className="ar text-center">

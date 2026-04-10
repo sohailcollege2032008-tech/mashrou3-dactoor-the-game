@@ -5,7 +5,7 @@ import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import {
   Play, UserCheck, XCircle, CheckCircle, SkipForward, Trophy,
-  Eye, Timer, Loader2, WifiOff, StopCircle, Shuffle, Star, Zap, Settings, Layers
+  Eye, Timer, Loader2, WifiOff, StopCircle, Shuffle, Star, Zap, Settings, Layers, Shield
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import { generateCorrectAnswerHash, verifyAnswerHash } from '../../utils/crypto'
@@ -277,6 +277,7 @@ export default function HostGameRoom() {
   const [toasts, setToasts]               = useState([])         // correct-answer notifications
   const [downloadingLogs, setDownloadingLogs] = useState(false)
   const [gameResults, setGameResults] = useState(null)  // collected results for HostGameReport
+  const [resultTab, setResultTab]     = useState('leaderboard') // 'leaderboard' | 'security'
   const [selectedPlayer, setSelectedPlayer] = useState(null) // for ActivityLogViewer
   const notifiedAnswersRef = useRef(new Set())   // user_ids already toasted this question
   const roomStatusRef      = useRef(null)         // mirror of room.status for callbacks
@@ -577,10 +578,11 @@ export default function HostGameRoom() {
         newScoreById[a.user_id] = newScore
       })
 
-      // Rank + is_first_correct for all correct answers
+      // Rank + is_first_correct + is_correct for all correct answers
       correct.forEach((a, i) => {
         answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/rank`]             = i + 1
         answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/is_first_correct`] = i === 0
+        answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/is_correct`]       = true
       })
 
       // ── Build leaderboard summary (top 5 + each player's rank) ───────────
@@ -1169,14 +1171,42 @@ export default function HostGameRoom() {
         {/* ── FINISHED ──────────────────────────────────────────────────── */}
         {room.status === 'finished' && (
           <div className="space-y-6">
-            {/* Show ActivityLogViewer if player is selected */}
+            {/* Header Tabs */}
+            <div className="flex justify-center mb-8">
+              <div className="inline-flex p-1.5 bg-gray-900/80 backdrop-blur-md rounded-2xl border border-gray-800 shadow-2xl">
+                <button
+                  onClick={() => setResultTab('leaderboard')}
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    resultTab === 'leaderboard'
+                      ? 'bg-primary text-background shadow-lg shadow-primary/20'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
+                >
+                  <Trophy size={16} />
+                  <span className="ar">ترتيب الأبطال</span>
+                </button>
+                <button
+                  onClick={() => setResultTab('security')}
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    resultTab === 'security'
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/20'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
+                >
+                  <Shield size={16} />
+                  <span className="ar">التحقيق الأمني</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Tab Content */}
             {selectedPlayer ? (
-              <div className="bg-gray-900/50 p-8 rounded-2xl border border-gray-800">
+              <div className="bg-gray-900/50 p-8 rounded-2xl border border-gray-800 animate-in fade-in zoom-in-95 duration-300">
                 <button
                   onClick={() => setSelectedPlayer(null)}
-                  className="mb-6 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors text-sm font-semibold"
+                  className="mb-6 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors text-sm font-semibold flex items-center gap-2"
                 >
-                  ← Back to Report
+                  <SkipForward size={14} className="rotate-180" /> <span className="ar">العودة للتقرير</span>
                 </button>
                 <ActivityLogViewer
                   username={selectedPlayer.username}
@@ -1184,9 +1214,79 @@ export default function HostGameRoom() {
                   suspicionIndicators={selectedPlayer.indicators || []}
                 />
               </div>
+            ) : resultTab === 'leaderboard' ? (
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Podium / Top 3 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {players.slice(0, 3).map((p, idx) => {
+                    const colors = [
+                      'from-yellow-400 to-amber-600', // Gold
+                      'from-slate-300 to-slate-500', // Silver
+                      'from-orange-400 to-amber-800', // Bronze
+                    ]
+                    const medals = ['🥇', '🥈', '🥉']
+                    return (
+                      <div key={p.user_id} className={`relative p-6 rounded-3xl border border-white/10 bg-gradient-to-br ${colors[idx]} shadow-2xl overflow-hidden`}>
+                        <div className="absolute top-[-20px] right-[-20px] opacity-10">
+                          <Trophy size={120} />
+                        </div>
+                        <div className="relative z-10 flex flex-col items-center text-center">
+                          <span className="text-4xl mb-2">{medals[idx]}</span>
+                          <h3 className="text-xl font-bold text-white mb-1 truncate w-full">{p.nickname}</h3>
+                          <div className="bg-black/20 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10">
+                            <span className="font-mono text-2xl font-black text-white">{p.score}</span>
+                            <span className="text-xs text-white/70 ml-1 ml-1 ar">نقطة</span>
+                          </div>
+                          <p className="text-xs text-white/50 mt-3 ar font-medium">المركز {idx === 0 ? 'الأول' : idx === 1 ? 'الثاني' : 'الثالث'}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Rest of Players */}
+                <div className="bg-gray-900/50 rounded-3xl border border-gray-800 overflow-hidden">
+                  <table className="w-full ar">
+                    <thead className="bg-gray-800/50">
+                      <tr>
+                        <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">التصنيف</th>
+                        <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">اللاعب</th>
+                        <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-widest">النقاط</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {players.map((p, idx) => (
+                        <tr key={p.user_id} className={`hover:bg-white/5 transition-colors ${idx < 3 ? 'bg-primary/5' : ''}`}>
+                          <td className="px-6 py-4 bg-transparent">
+                            <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg font-mono font-bold ${
+                              idx < 3 ? 'text-primary' : 'text-gray-500'
+                            }`}>
+                              #{idx + 1}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              {p.avatar_url ? (
+                                <img src={p.avatar_url} className="w-8 h-8 rounded-full border border-gray-700" alt="" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-500">
+                                  {p.nickname?.[0]}
+                                </div>
+                              )}
+                              <span className="font-bold text-white">{p.nickname}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="font-mono font-bold text-primary">{p.score}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             ) : (
-              <>
-                {/* Show report or final leaderboard while loading */}
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                 {gameResults ? (
                   <HostGameReport
                     gameResults={gameResults}
@@ -1195,28 +1295,28 @@ export default function HostGameRoom() {
                 ) : (
                   <div className="bg-gray-900/50 p-12 rounded-2xl border border-gray-800 text-center">
                     <Loader2 size={48} className="mx-auto text-primary animate-spin mb-4" />
-                    <p className="text-gray-400">جاري تحضير التقرير...</p>
+                    <p className="text-gray-400 ar">جاري تحضير تقرير التحقيق...</p>
                   </div>
                 )}
-
-                {/* Download and navigation buttons */}
-                <div className="flex items-center justify-center gap-4 flex-wrap">
-                  <button
-                    onClick={downloadLogs}
-                    disabled={downloadingLogs}
-                    className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold px-6 py-3 rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    {downloadingLogs
-                      ? <><Loader2 size={16} className="animate-spin" /> جاري التحميل...</>
-                      : <><Trophy size={16} className="text-[#FFD700]" /> تحميل اللوجز (.txt)</>}
-                  </button>
-                  <button onClick={() => navigate('/host/dashboard')}
-                    className="bg-primary text-background font-bold px-8 py-3 rounded-xl hover:bg-[#00D4FF] transition-colors">
-                    Back to Dashboard
-                  </button>
-                </div>
-              </>
+              </div>
             )}
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-center gap-4 flex-wrap pt-8 border-t border-gray-800">
+              <button
+                onClick={downloadLogs}
+                disabled={downloadingLogs}
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold px-6 py-3 rounded-xl transition-colors disabled:opacity-50"
+              >
+                {downloadingLogs
+                  ? <><Loader2 size={16} className="animate-spin" /> <span className="ar">جاري التحميل...</span></>
+                  : <><Trophy size={16} className="text-[#FFD700]" /> <span className="ar">تحميل اللوجز (.txt)</span></>}
+              </button>
+              <button onClick={() => navigate('/host/dashboard')}
+                className="bg-primary text-background font-bold px-8 py-3 rounded-xl hover:bg-[#00D4FF] transition-all shadow-lg shadow-primary/20">
+                <span className="ar text-base">العودة للرئيسية</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
