@@ -56,7 +56,7 @@ function CountdownBar({ startedAt, duration }) {
 
 // ── Config panel ──────────────────────────────────────────────────────────────
 function GameConfigPanel({ config, onChange }) {
-  const set = (key, val) => onChange({ ...config, [key]: val })
+  const apply = (key, val) => onChange({ ...config, [key]: val })
 
   return (
     <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 space-y-5">
@@ -74,7 +74,7 @@ function GameConfigPanel({ config, onChange }) {
           <input
             type="number" min={5} max={300}
             value={config.timer_seconds}
-            onChange={e => set('timer_seconds', Math.max(5, Number(e.target.value)))}
+            onChange={e => apply('timer_seconds', Math.max(5, Number(e.target.value)))}
             className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary text-center"
           />
           <span className="text-xs text-gray-500">ث</span>
@@ -89,7 +89,7 @@ function GameConfigPanel({ config, onChange }) {
             <span className="ar text-sm text-gray-200 font-medium">وضع تلقائي (Auto Mode)</span>
           </div>
           <button
-            onClick={() => set('auto_mode', !config.auto_mode)}
+            onClick={() => apply('auto_mode', !config.auto_mode)}
             className={`relative w-11 h-6 rounded-full transition-colors ${config.auto_mode ? 'bg-yellow-500' : 'bg-gray-700'}`}
           >
             <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.auto_mode ? 'translate-x-5' : ''}`} />
@@ -105,7 +105,7 @@ function GameConfigPanel({ config, onChange }) {
             <input
               type="number" min={5} max={600}
               value={config.auto_timer}
-              onChange={e => set('auto_timer', Math.max(5, Number(e.target.value)))}
+              onChange={e => apply('auto_timer', Math.max(5, Number(e.target.value)))}
               className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-500/50 text-center"
             />
           </div>
@@ -119,7 +119,7 @@ function GameConfigPanel({ config, onChange }) {
           <span className="ar text-sm text-gray-200 font-medium">ترتيب الاختيارات عشوائي</span>
         </div>
         <button
-          onClick={() => set('shuffle_choices', !config.shuffle_choices)}
+          onClick={() => apply('shuffle_choices', !config.shuffle_choices)}
           className={`relative w-11 h-6 rounded-full transition-colors ${config.shuffle_choices ? 'bg-primary' : 'bg-gray-700'}`}
         >
           <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.shuffle_choices ? 'translate-x-5' : ''}`} />
@@ -133,7 +133,7 @@ function GameConfigPanel({ config, onChange }) {
           <span className="ar text-sm text-gray-200 font-medium">ترتيب الأسئلة عشوائي</span>
         </div>
         <button
-          onClick={() => set('shuffle_questions', !config.shuffle_questions)}
+          onClick={() => apply('shuffle_questions', !config.shuffle_questions)}
           className={`relative w-11 h-6 rounded-full transition-colors ${config.shuffle_questions ? 'bg-secondary' : 'bg-gray-700'}`}
         >
           <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.shuffle_questions ? 'translate-x-5' : ''}`} />
@@ -151,7 +151,7 @@ function GameConfigPanel({ config, onChange }) {
           ].map(opt => (
             <button
               key={opt.val}
-              onClick={() => set('repeat_entry', opt.val)}
+              onClick={() => apply('repeat_entry', opt.val)}
               className={`py-2 rounded-xl text-xs font-bold border transition-all ${
                 config.repeat_entry === opt.val
                   ? opt.val === 'allow' ? 'bg-primary/20 border-primary text-primary'
@@ -178,7 +178,7 @@ function GameConfigPanel({ config, onChange }) {
 
           {/* Classic */}
           <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${config.scoring_mode === 'classic' ? 'border-primary bg-primary/10' : 'border-gray-700 hover:border-gray-600'}`}>
-            <input type="radio" name="mode" className="hidden" checked={config.scoring_mode === 'classic'} onChange={() => set('scoring_mode', 'classic')} />
+            <input type="radio" name="mode" className="hidden" checked={config.scoring_mode === 'classic'} onChange={() => apply('scoring_mode', 'classic')} />
             <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${config.scoring_mode === 'classic' ? 'border-primary' : 'border-gray-600'}`}>
               {config.scoring_mode === 'classic' && <div className="w-2 h-2 bg-primary rounded-full" />}
             </div>
@@ -190,7 +190,7 @@ function GameConfigPanel({ config, onChange }) {
 
           {/* Custom */}
           <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${config.scoring_mode === 'custom' ? 'border-primary bg-primary/10' : 'border-gray-700 hover:border-gray-600'}`}>
-            <input type="radio" name="mode" className="hidden" checked={config.scoring_mode === 'custom'} onChange={() => set('scoring_mode', 'custom')} />
+            <input type="radio" name="mode" className="hidden" checked={config.scoring_mode === 'custom'} onChange={() => apply('scoring_mode', 'custom')} />
             <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${config.scoring_mode === 'custom' ? 'border-primary' : 'border-gray-600'}`}>
               {config.scoring_mode === 'custom' && <div className="w-2 h-2 bg-primary rounded-full" />}
             </div>
@@ -206,7 +206,7 @@ function GameConfigPanel({ config, onChange }) {
                 <label className="text-xs text-gray-500 block mb-1">أول واحد صح</label>
                 <div className="flex items-center gap-1">
                   <input type="number" min={1} max={100} value={config.first_correct_points}
-                    onChange={e => set('first_correct_points', Math.max(1, Number(e.target.value)))}
+                    onChange={e => apply('first_correct_points', Math.max(1, Number(e.target.value)))}
                     className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary" />
                   <span className="text-xs text-gray-500">نقطة</span>
                 </div>
@@ -215,7 +215,7 @@ function GameConfigPanel({ config, onChange }) {
                 <label className="text-xs text-gray-500 block mb-1">باقي الصح</label>
                 <div className="flex items-center gap-1">
                   <input type="number" min={0} max={100} value={config.other_correct_points}
-                    onChange={e => set('other_correct_points', Math.max(0, Number(e.target.value)))}
+                    onChange={e => apply('other_correct_points', Math.max(0, Number(e.target.value)))}
                     className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary" />
                   <span className="text-xs text-gray-500">نقطة</span>
                 </div>
@@ -225,7 +225,7 @@ function GameConfigPanel({ config, onChange }) {
 
           {/* Ranked */}
           <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${config.scoring_mode === 'ranked' ? 'border-primary bg-primary/10' : 'border-gray-700 hover:border-gray-600'}`}>
-            <input type="radio" name="mode" className="hidden" checked={config.scoring_mode === 'ranked'} onChange={() => set('scoring_mode', 'ranked')} />
+            <input type="radio" name="mode" className="hidden" checked={config.scoring_mode === 'ranked'} onChange={() => apply('scoring_mode', 'ranked')} />
             <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${config.scoring_mode === 'ranked' ? 'border-primary' : 'border-gray-600'}`}>
               {config.scoring_mode === 'ranked' && <div className="w-2 h-2 bg-primary rounded-full" />}
             </div>
@@ -241,7 +241,7 @@ function GameConfigPanel({ config, onChange }) {
                 <label className="text-xs text-gray-500 block mb-1">N (نقاط الأول)</label>
                 <div className="flex items-center gap-1">
                   <input type="number" min={1} max={100} value={config.first_correct_points}
-                    onChange={e => set('first_correct_points', Math.max(1, Number(e.target.value)))}
+                    onChange={e => apply('first_correct_points', Math.max(1, Number(e.target.value)))}
                     className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary" />
                   <span className="text-xs text-gray-500">نقطة</span>
                 </div>
@@ -250,7 +250,7 @@ function GameConfigPanel({ config, onChange }) {
                 <label className="text-xs text-gray-500 block mb-1">X (الفرق)</label>
                 <div className="flex items-center gap-1">
                   <input type="number" min={1} max={50} value={config.points_decrement}
-                    onChange={e => set('points_decrement', Math.max(1, Number(e.target.value)))}
+                    onChange={e => apply('points_decrement', Math.max(1, Number(e.target.value)))}
                     className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary" />
                   <span className="text-xs text-gray-500">نقطة</span>
                 </div>
