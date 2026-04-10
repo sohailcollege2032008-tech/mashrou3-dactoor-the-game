@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, update, get, set, onDisconnect } from 'firebase/database'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, increment } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import {
@@ -139,6 +139,37 @@ function GameConfigPanel({ config, onChange }) {
           <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.shuffle_questions ? 'translate-x-5' : ''}`} />
         </button>
       </label>
+
+      {/* Repeat entry */}
+      <div className="pt-1 border-t border-gray-800 space-y-2">
+        <p className="ar text-xs text-gray-500 font-bold">الدخول المتكرر للـ Deck</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {[
+            { val: 'allow', label: 'مسموح', color: 'primary' },
+            { val: 'badge', label: 'تحذير', color: 'yellow-400' },
+            { val: 'block', label: 'ممنوع', color: 'red-400' },
+          ].map(opt => (
+            <button
+              key={opt.val}
+              onClick={() => set('repeat_entry', opt.val)}
+              className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                config.repeat_entry === opt.val
+                  ? opt.val === 'allow' ? 'bg-primary/20 border-primary text-primary'
+                    : opt.val === 'badge' ? 'bg-yellow-400/20 border-yellow-400 text-yellow-400'
+                    : 'bg-red-400/20 border-red-400 text-red-400'
+                  : 'bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-600'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-gray-600 font-mono ar">
+          {config.repeat_entry === 'allow' && 'الجميع يقدر يدخل بغض النظر عن التاريخ'}
+          {config.repeat_entry === 'badge' && 'يُسمح بالدخول وتظهر إشارة "دخل قبل كده"'}
+          {config.repeat_entry === 'block' && 'زر الموافقة معطّل للي دخل قبل كده'}
+        </p>
+      </div>
 
       {/* Scoring mode */}
       <div>
@@ -340,7 +371,9 @@ export default function HostGameRoom() {
     auto_mode: false,
     auto_timer: 45,
     shuffle_questions: false,
+    repeat_entry: 'allow',   // 'allow' | 'badge' | 'block'
   })
+  const [playHistory, setPlayHistory] = useState({})  // { [uid]: count }
 
   const [toasts, setToasts]               = useState([])         // correct-answer notifications
   const [downloadingLogs, setDownloadingLogs] = useState(false)
@@ -386,13 +419,43 @@ export default function HostGameRoom() {
         if (prev && data.current_question_index !== prev.current_question_index) {
           setAnswers([]); setRevealResult(null)
         }
-        if (data.status === 'finished' && prev?.status !== 'finished')
+        if (data.status === 'finished' && prev?.status !== 'finished') {
           confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } })
+          // Record play history for all players in Firestore
+          const qSetId = data.question_set_id
+          if (qSetId && data.players) {
+            Object.keys(data.players).forEach(uid => {
+              updateDoc(doc(db, 'profiles', uid), {
+                [`played_decks.${qSetId}`]: increment(1)
+              }).catch(() => {})
+            })
+          }
+        }
         return data
       })
     })
     return () => unsubRoom()
   }, [roomId, session])
+
+  // ── Fetch play history for pending requesters ──────────────────────────────
+  useEffect(() => {
+    if (!requests.length || !room?.question_set_id) return
+    const qSetId = room.question_set_id
+    const uids = requests.map(r => r.key).filter(uid => !(uid in playHistory))
+    if (!uids.length) return
+    Promise.all(uids.map(uid =>
+      getDoc(doc(db, 'profiles', uid)).then(snap => ({
+        uid,
+        count: snap.exists() ? (snap.data().played_decks?.[qSetId] || 0) : 0
+      }))
+    )).then(results => {
+      setPlayHistory(prev => {
+        const next = { ...prev }
+        results.forEach(({ uid, count }) => { next[uid] = count })
+        return next
+      })
+    })
+  }, [requests, room?.question_set_id])
 
   // ── Requests, players, presence, answers ──────────────────────────────────
   useEffect(() => {
@@ -1005,27 +1068,43 @@ export default function HostGameRoom() {
               </h2>
               <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                 {requests.length === 0 && <p className="text-gray-500 italic text-sm">No pending requests...</p>}
-                {requests.map(req => (
-                  <div key={req.key} className="flex items-center justify-between p-3 bg-gray-800 rounded-xl border border-gray-700">
-                    <div>
-                      <div className="font-bold text-sm flex items-center gap-2">
-                        {req.player_avatar && <img src={req.player_avatar} alt="" className="w-5 h-5 rounded-full" />}
-                        {req.player_name}
+                {requests.map(req => {
+                  const playCount  = playHistory[req.key] || 0
+                  const isRepeater = playCount > 0
+                  const isBlocked  = isRepeater && gameConfig.repeat_entry === 'block'
+                  return (
+                    <div key={req.key} className={`flex items-center justify-between p-3 bg-gray-800 rounded-xl border transition-colors ${isBlocked ? 'border-red-500/40' : 'border-gray-700'}`}>
+                      <div>
+                        <div className="font-bold text-sm flex items-center gap-2">
+                          {req.player_avatar && <img src={req.player_avatar} alt="" className="w-5 h-5 rounded-full" />}
+                          {req.player_name}
+                          {isRepeater && gameConfig.repeat_entry !== 'allow' && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full font-mono ${
+                              isBlocked ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {isBlocked ? '🚫' : '⚠️'} دخل {playCount}x
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400">{req.player_email}</div>
                       </div>
-                      <div className="text-xs text-gray-400">{req.player_email}</div>
+                      <div className="flex gap-1">
+                        {processingRequests.has(req.key) ? (
+                          <Loader2 size={18} className="text-primary animate-spin" />
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleRequest(req.key, 'approved')}
+                              disabled={isBlocked}
+                              className="bg-green-500/20 text-green-500 hover:bg-green-500/30 p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            ><CheckCircle size={16} /></button>
+                            <button onClick={() => handleRequest(req.key, 'rejected')} className="bg-red-500/20 text-red-500 hover:bg-red-500/30 p-1.5 rounded-lg transition-colors"><XCircle size={16} /></button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      {processingRequests.has(req.key) ? (
-                        <Loader2 size={18} className="text-primary animate-spin" />
-                      ) : (
-                        <>
-                          <button onClick={() => handleRequest(req.key, 'approved')} className="bg-green-500/20 text-green-500 hover:bg-green-500/30 p-1.5 rounded-lg transition-colors"><CheckCircle size={16} /></button>
-                          <button onClick={() => handleRequest(req.key, 'rejected')} className="bg-red-500/20 text-red-500 hover:bg-red-500/30 p-1.5 rounded-lg transition-colors"><XCircle size={16} /></button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 
