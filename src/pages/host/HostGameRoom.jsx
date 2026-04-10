@@ -37,7 +37,7 @@ function CountdownBar({ startedAt, duration }) {
       : 'border-primary/50 bg-primary/10'
     }`}>
       <Timer size={16} className={expired ? 'text-gray-500' : urgent ? 'text-red-400 animate-pulse' : 'text-primary'} />
-      <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+      <div className=\"flex-1 h-2 bg-gray-700 rounded-full overflow-hidden\">
         <div className={`h-full rounded-full transition-none ${expired ? 'bg-gray-600' : urgent ? 'bg-red-400' : 'bg-primary'}`}
           style={{ width: `${pct}%` }} />
       </div>
@@ -55,34 +55,34 @@ function GameConfigPanel({ config, onChange }) {
   const apply = (key, val) => onChange({ ...config, [key]: val })
 
   return (
-    <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 space-y-5">
-      <h3 className="text-base font-bold text-white flex items-center gap-2">
-        <Settings size={16} className="text-primary" /> إعدادات الجيم
+    <div className=\"bg-gray-900/60 border border-gray-800 rounded-2xl p-5 space-y-5\">
+      <h3 className=\"text-base font-bold text-white flex items-center gap-2\">
+        <Settings size={16} className=\"text-primary\" /> إعدادات الجيم
       </h3>
 
       {/* Timer duration */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Timer size={15} className="text-gray-400" />
-          <span className="ar text-sm text-gray-200 font-medium">وقت العد التنازلي</span>
+      <div className=\"flex items-center justify-between\">
+        <div className=\"flex items-center gap-2\">
+          <Timer size={15} className=\"text-gray-400\" />
+          <span className=\"ar text-sm text-gray-200 font-medium\">وقت العد التنازلي</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className=\"flex items-center gap-1.5\">
           <input
-            type="number" min={5} max={300}
+            type=\"number\" min={5} max={300}
             value={config.timer_seconds}
             onChange={e => apply('timer_seconds', Math.max(5, Number(e.target.value)))}
-            className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary text-center"
+            className=\"w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary text-center\"
           />
-          <span className="text-xs text-gray-500">ث</span>
+          <span className=\"text-xs text-gray-500\">ث</span>
         </div>
       </div>
 
       {/* Auto Mode toggle */}
-      <div className="space-y-3 pt-1 border-t border-gray-800">
-        <label className="flex items-center justify-between cursor-pointer select-none">
-          <div className="flex items-center gap-2">
-            <Zap size={15} className="text-yellow-400" />
-            <span className="ar text-sm text-gray-200 font-medium">وضع تلقائي (Auto Mode)</span>
+      <div className=\"space-y-3 pt-1 border-t border-gray-800\">
+        <label className=\"flex items-center justify-between cursor-pointer select-none\">
+          <div className=\"flex items-center gap-2\">
+            <Zap size={15} className=\"text-yellow-400\" />
+            <span className=\"ar text-sm text-gray-200 font-medium\">وضع تلقائي (Auto Mode)</span>
           </div>
           <button
             onClick={() => apply('auto_mode', !config.auto_mode)}
@@ -93,26 +93,26 @@ function GameConfigPanel({ config, onChange }) {
         </label>
 
         {config.auto_mode && (
-          <div className="flex items-center justify-between pl-7 animate-in fade-in slide-in-from-top-1 duration-200">
-            <div className="flex items-center gap-2">
-              <Timer size={14} className="text-gray-500" />
-              <span className="ar text-xs text-gray-400">تايمر إجباري (ثانية)</span>
+          <div className=\"flex items-center justify-between pl-7 animate-in fade-in slide-in-from-top-1 duration-200\">
+            <div className=\"flex items-center gap-2\">
+              <Timer size={14} className=\"text-gray-500\" />
+              <span className=\"ar text-xs text-gray-400\">تايمر إجباري (ثانية)</span>
             </div>
             <input
-              type="number" min={5} max={600}
+              type=\"number\" min={5} max={600}
               value={config.auto_timer}
               onChange={e => apply('auto_timer', Math.max(5, Number(e.target.value)))}
-              className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-500/50 text-center"
+              className=\"w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-500/50 text-center\"
             />
           </div>
         )}
       </div>
 
       {/* Shuffle Choices toggle */}
-      <label className="flex items-center justify-between cursor-pointer select-none">
-        <div className="flex items-center gap-2">
-          <Shuffle size={15} className="text-gray-400" />
-          <span className="ar text-sm text-gray-200 font-medium">ترتيب الاختيارات عشوائي</span>
+      <label className=\"flex items-center justify-between cursor-pointer select-none\">
+        <div className=\"flex items-center gap-2\">
+          <Shuffle size={15} className=\"text-gray-400\" />
+          <span className=\"ar text-sm text-gray-200 font-medium\">ترتيب الاختيارات عشوائي</span>
         </div>
         <button
           onClick={() => apply('shuffle_choices', !config.shuffle_choices)}
@@ -123,10 +123,10 @@ function GameConfigPanel({ config, onChange }) {
       </label>
 
       {/* Shuffle Questions toggle */}
-      <label className="flex items-center justify-between cursor-pointer select-none">
-        <div className="flex items-center gap-2">
-          <Layers size={15} className="text-gray-400" />
-          <span className="ar text-sm text-gray-200 font-medium">ترتيب الأسئلة عشوائي</span>
+      <label className=\"flex items-center justify-between cursor-pointer select-none\">
+        <div className=\"flex items-center gap-2\">
+          <Layers size={15} className=\"text-gray-400\" />
+          <span className=\"ar text-sm text-gray-200 font-medium\">ترتيب الأسئلة عشوائي</span>
         </div>
         <button
           onClick={() => apply('shuffle_questions', !config.shuffle_questions)}
@@ -137,9 +137,9 @@ function GameConfigPanel({ config, onChange }) {
       </label>
 
       {/* Repeat entry */}
-      <div className="pt-1 border-t border-gray-800 space-y-2">
-        <p className="ar text-xs text-gray-500 font-bold">الدخول المتكرر للـ Deck</p>
-        <div className="grid grid-cols-3 gap-1.5">
+      <div className=\"pt-1 border-t border-gray-800 space-y-2\">
+        <p className=\"ar text-xs text-gray-500 font-bold\">الدخول المتكرر للـ Deck</p>
+        <div className=\"grid grid-cols-3 gap-1.5\">
           {[
             { val: 'allow', label: 'مسموح', color: 'primary' },
             { val: 'badge', label: 'تحذير', color: 'yellow-400' },
@@ -160,60 +160,60 @@ function GameConfigPanel({ config, onChange }) {
             </button>
           ))}
         </div>
-        <p className="text-xs text-gray-600 font-mono ar">
+        <p className=\"text-xs text-gray-600 font-mono ar\">
           {config.repeat_entry === 'allow' && 'الجميع يقدر يدخل بغض النظر عن التاريخ'}
-          {config.repeat_entry === 'badge' && 'يُسمح بالدخول وتظهر إشارة "دخل قبل كده"'}
+          {config.repeat_entry === 'badge' && 'يُسمح بالدخول وتظهر إشارة \"دخل قبل كده\"'}
           {config.repeat_entry === 'block' && 'زر الموافقة معطّل للي دخل قبل كده'}
         </p>
       </div>
 
       {/* Scoring mode */}
       <div>
-        <p className="ar text-xs text-gray-500 font-bold mb-3">نظام التقييم</p>
-        <div className="space-y-2">
+        <p className=\"ar text-xs text-gray-500 font-bold mb-3\">نظام التقييم</p>
+        <div className=\"space-y-2\">
 
           {/* Classic */}
           <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${config.scoring_mode === 'classic' ? 'border-primary bg-primary/10' : 'border-gray-700 hover:border-gray-600'}`}>
-            <input type="radio" name="mode" className="hidden" checked={config.scoring_mode === 'classic'} onChange={() => apply('scoring_mode', 'classic')} />
+            <input type=\"radio\" name=\"mode\" className=\"hidden\" checked={config.scoring_mode === 'classic'} onChange={() => apply('scoring_mode', 'classic')} />
             <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${config.scoring_mode === 'classic' ? 'border-primary' : 'border-gray-600'}`}>
-              {config.scoring_mode === 'classic' && <div className="w-2 h-2 bg-primary rounded-full" />}
+              {config.scoring_mode === 'classic' && <div className=\"w-2 h-2 bg-primary rounded-full\" />}
             </div>
-            <div className="ar">
-              <p className="text-sm font-bold text-white">كلاسيك</p>
-              <p className="text-xs text-gray-500">أول واحد صح ياخد نقطة، الباقي صفر</p>
+            <div className=\"ar\">
+              <p className=\"text-sm font-bold text-white\">كلاسيك</p>
+              <p className=\"text-xs text-gray-500\">أول واحد صح ياخد نقطة، الباقي صفر</p>
             </div>
           </label>
 
           {/* Custom */}
           <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${config.scoring_mode === 'custom' ? 'border-primary bg-primary/10' : 'border-gray-700 hover:border-gray-600'}`}>
-            <input type="radio" name="mode" className="hidden" checked={config.scoring_mode === 'custom'} onChange={() => apply('scoring_mode', 'custom')} />
+            <input type=\"radio\" name=\"mode\" className=\"hidden\" checked={config.scoring_mode === 'custom'} onChange={() => apply('scoring_mode', 'custom')} />
             <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${config.scoring_mode === 'custom' ? 'border-primary' : 'border-gray-600'}`}>
-              {config.scoring_mode === 'custom' && <div className="w-2 h-2 bg-primary rounded-full" />}
+              {config.scoring_mode === 'custom' && <div className=\"w-2 h-2 bg-primary rounded-full\" />}
             </div>
-            <div className="ar">
-              <p className="text-sm font-bold text-white">كاستوم</p>
-              <p className="text-xs text-gray-500">أول واحد صح N نقطة، الباقي الصح M نقطة</p>
+            <div className=\"ar\">
+              <p className=\"text-sm font-bold text-white\">كاستوم</p>
+              <p className=\"text-xs text-gray-500\">أول واحد صح N نقطة، الباقي الصح M نقطة</p>
             </div>
           </label>
 
           {config.scoring_mode === 'custom' && (
-            <div className="flex gap-4 px-3 pb-1">
+            <div className=\"flex gap-4 px-3 pb-1\">
               <div>
-                <label className="text-xs text-gray-500 block mb-1">أول واحد صح</label>
-                <div className="flex items-center gap-1">
-                  <input type="number" min={1} max={100} value={config.first_correct_points}
+                <label className=\"text-xs text-gray-500 block mb-1\">أول واحد صح</label>
+                <div className=\"flex items-center gap-1\">
+                  <input type=\"number\" min={1} max={100} value={config.first_correct_points}
                     onChange={e => apply('first_correct_points', Math.max(1, Number(e.target.value)))}
-                    className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary" />
-                  <span className="text-xs text-gray-500">نقطة</span>
+                    className=\"w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary\" />
+                  <span className=\"text-xs text-gray-500\">نقطة</span>
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">باقي الصح</label>
-                <div className="flex items-center gap-1">
-                  <input type="number" min={0} max={100} value={config.other_correct_points}
+                <label className=\"text-xs text-gray-500 block mb-1\">باقي الصح</label>
+                <div className=\"flex items-center gap-1\">
+                  <input type=\"number\" min={0} max={100} value={config.other_correct_points}
                     onChange={e => apply('other_correct_points', Math.max(0, Number(e.target.value)))}
-                    className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary" />
-                  <span className="text-xs text-gray-500">نقطة</span>
+                    className=\"w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary\" />
+                  <span className=\"text-xs text-gray-500\">نقطة</span>
                 </div>
               </div>
             </div>
@@ -221,38 +221,38 @@ function GameConfigPanel({ config, onChange }) {
 
           {/* Ranked */}
           <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${config.scoring_mode === 'ranked' ? 'border-primary bg-primary/10' : 'border-gray-700 hover:border-gray-600'}`}>
-            <input type="radio" name="mode" className="hidden" checked={config.scoring_mode === 'ranked'} onChange={() => apply('scoring_mode', 'ranked')} />
+            <input type=\"radio\" name=\"mode\" className=\"hidden\" checked={config.scoring_mode === 'ranked'} onChange={() => apply('scoring_mode', 'ranked')} />
             <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${config.scoring_mode === 'ranked' ? 'border-primary' : 'border-gray-600'}`}>
-              {config.scoring_mode === 'ranked' && <div className="w-2 h-2 bg-primary rounded-full" />}
+              {config.scoring_mode === 'ranked' && <div className=\"w-2 h-2 bg-primary rounded-full\" />}
             </div>
-            <div className="ar">
-              <p className="text-sm font-bold text-white">ترتيبي</p>
-              <p className="text-xs text-gray-500">الأول N، الثاني N−X، الثالث N−2X…</p>
+            <div className=\"ar\">
+              <p className=\"text-sm font-bold text-white\">ترتيبي</p>
+              <p className=\"text-xs text-gray-500\">الأول N، الثاني N−X، الثالث N−2X…</p>
             </div>
           </label>
 
           {config.scoring_mode === 'ranked' && (
-            <div className="flex gap-4 px-3 pb-1">
+            <div className=\"flex gap-4 px-3 pb-1\">
               <div>
-                <label className="text-xs text-gray-500 block mb-1">N (نقاط الأول)</label>
-                <div className="flex items-center gap-1">
-                  <input type="number" min={1} max={100} value={config.first_correct_points}
+                <label className=\"text-xs text-gray-500 block mb-1\">N (نقاط الأول)</label>
+                <div className=\"flex items-center gap-1\">
+                  <input type=\"number\" min={1} max={100} value={config.first_correct_points}
                     onChange={e => apply('first_correct_points', Math.max(1, Number(e.target.value)))}
-                    className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary" />
-                  <span className="text-xs text-gray-500">نقطة</span>
+                    className=\"w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary\" />
+                  <span className=\"text-xs text-gray-500\">نقطة</span>
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">X (الفرق)</label>
-                <div className="flex items-center gap-1">
-                  <input type="number" min={1} max={50} value={config.points_decrement}
+                <label className=\"text-xs text-gray-500 block mb-1\">X (الفرق)</label>
+                <div className=\"flex items-center gap-1\">
+                  <input type=\"number\" min={1} max={50} value={config.points_decrement}
                     onChange={e => apply('points_decrement', Math.max(1, Number(e.target.value)))}
-                    className="w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary" />
-                  <span className="text-xs text-gray-500">نقطة</span>
+                    className=\"w-16 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary\" />
+                  <span className=\"text-xs text-gray-500\">نقطة</span>
                 </div>
               </div>
-              <div className="self-end pb-1.5">
-                <p className="text-xs text-gray-600 font-mono">
+              <div className=\"self-end pb-1.5\">
+                <p className=\"text-xs text-gray-600 font-mono\">
                   {config.first_correct_points}، {Math.max(0, config.first_correct_points - config.points_decrement)}، {Math.max(0, config.first_correct_points - 2 * config.points_decrement)}…
                 </p>
               </div>
@@ -310,6 +310,13 @@ export default function HostGameRoom() {
   const [downloadingLogs, setDownloadingLogs] = useState(false)
   const notifiedAnswersRef = useRef(new Set())   // user_ids already toasted this question
   const roomStatusRef      = useRef(null)         // mirror of room.status for callbacks
+
+  // ── Derived State ──────────────────────────────────────────────────────────
+  const totalPlayers  = players.length
+  const answeredCount = answers.length
+  const config        = room?.config || { scoring_mode: 'classic' }
+  const isRevealPhase = room?.status === 'revealing'
+  const currentQ      = room?.questions?.questions?.[room?.current_question_index]
 
   // ── Host presence ─────────────────────────────────────────────────────────
   // Uses .info/connected so we register onDisconnect BEFORE writing online:true.
@@ -429,7 +436,7 @@ export default function HostGameRoom() {
 
     // Trigger 1: All Answered
     if (totalPlayers > 0 && answers.length >= totalPlayers) {
-      console.log("Auto-Mode: All players answered. Revealing...")
+      console.log(\"Auto-Mode: All players answered. Revealing...\")
       revealAnswer()
       return
     }
@@ -439,7 +446,7 @@ export default function HostGameRoom() {
       if (!room.question_started_at) return
       const elapsed = (Date.now() - room.question_started_at) / 1000
       if (elapsed >= gameConfig.auto_timer) {
-        console.log("Auto-Mode: Mandatory Timer expired. Revealing...")
+        console.log(\"Auto-Mode: Mandatory Timer expired. Revealing...\")
         revealAnswer()
         clearInterval(checkTimer)
       }
@@ -453,7 +460,7 @@ export default function HostGameRoom() {
     if (!room || room.status !== 'revealing' || !gameConfig.auto_mode) return
 
     const timer = setTimeout(() => {
-      console.log("Auto-Mode: 8s delay finished. Moving to next question...")
+      console.log(\"Auto-Mode: 8s delay finished. Moving to next question...\")
       nextQuestion()
     }, 8000)
 
@@ -723,7 +730,7 @@ export default function HostGameRoom() {
         lines.push(`  #${pad(i + 1, 4)}${pad(p.nickname, 32)}${p.score} pts`)
       })
 
-      const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+      const blob = new Blob(['\\uFEFF' + lines.join('\\n')], { type: 'text/plain;charset=utf-8' })
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
@@ -747,54 +754,48 @@ export default function HostGameRoom() {
 
   // ─────────────────────────────────────────────────────────────────────────
   if (!room) return (
-    <div className="text-white p-6 flex items-center gap-3">
-      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    <div className=\"text-white p-6 flex items-center gap-3\">
+      <div className=\"w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin\" />
       Loading Room...
     </div>
   )
 
-  const currentQ    = room.questions?.questions?.[room.current_question_index]
-  const isRevealPhase = room.status === 'revealing'
-  const totalPlayers  = players.length
-  const answeredCount = answers.length
-  const config        = room.config || { scoring_mode: 'classic' }
-
   return (
-    <div className="min-h-screen bg-background text-white p-6">
+    <div className=\"min-h-screen bg-background text-white p-6\">
 
       {/* ── Correct-answer toast notifications ─────────────────────────────── */}
       {toasts.length > 0 && (
-        <div className="fixed right-5 top-20 z-[200] space-y-2 pointer-events-none max-w-[220px]">
+        <div className=\"fixed right-5 top-20 z-[200] space-y-2 pointer-events-none max-w-[220px]\">
           {toasts.map(t => (
             <div key={t.id}
-              className="flex items-center gap-2 bg-green-900/95 border border-green-500/60 text-green-100 px-3 py-2 rounded-xl shadow-2xl shadow-black/40"
+              className=\"flex items-center gap-2 bg-green-900/95 border border-green-500/60 text-green-100 px-3 py-2 rounded-xl shadow-2xl shadow-black/40\"
               style={{ animation: 'slideInRight .25s ease-out' }}
             >
-              <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
-              <span className="font-bold text-sm flex-1 truncate">{t.nickname}</span>
-              <span className="text-green-400 font-mono text-xs flex-shrink-0">{t.time_ms}ms</span>
+              <CheckCircle size={14} className=\"text-green-400 flex-shrink-0\" />
+              <span className=\"font-bold text-sm flex-1 truncate\">{t.nickname}</span>
+              <span className=\"text-green-400 font-mono text-xs flex-shrink-0\">{t.time_ms}ms</span>
             </div>
           ))}
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className=\"max-w-6xl mx-auto space-y-6\">
 
         {/* Header */}
-        <div className="flex items-center justify-between bg-gray-900/50 p-5 rounded-2xl border border-gray-800">
+        <div className=\"flex items-center justify-between bg-gray-900/50 p-5 rounded-2xl border border-gray-800\">
           <div>
-            <h1 className="text-3xl font-display font-bold text-white">{room.title}</h1>
-            <p className="text-lg text-primary font-mono tracking-widest mt-1">JOIN: {roomId}</p>
+            <h1 className=\"text-3xl font-display font-bold text-white\">{room.title}</h1>
+            <p className=\"text-lg text-primary font-mono tracking-widest mt-1\">JOIN: {roomId}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className=\"flex items-center gap-3\">
             {room.status !== 'finished' && (
               <button onClick={endCompetition} disabled={endingGame}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors font-bold text-sm disabled:opacity-50">
+                className=\"flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors font-bold text-sm disabled:opacity-50\">
                 <StopCircle size={15} /> {endingGame ? 'Ending...' : 'End'}
               </button>
             )}
-            <div className="flex flex-col items-end gap-2">
-              <div className="flex items-center gap-3">
+            <div className=\"flex flex-col items-end gap-2\">
+              <div className=\"flex items-center gap-3\">
                 <button
                   onClick={() => setGameConfig(prev => ({ ...prev, auto_mode: !prev.auto_mode }))}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
@@ -802,13 +803,13 @@ export default function HostGameRoom() {
                       ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400 shadow-[0_0_15px_-5px_rgba(234,179,8,0.4)]' 
                       : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-gray-400'
                   }`}
-                  title="Toggle Auto-Progression"
+                  title=\"Toggle Auto-Progression\"
                 >
                   <Zap size={14} className={gameConfig.auto_mode ? 'animate-pulse' : ''} />
-                  <span className="text-xs font-bold ar">تلقائي</span>
+                  <span className=\"text-xs font-bold ar\">تلقائي</span>
                 </button>
-                <div className="text-right">
-                  <div className="text-xl font-bold">{totalPlayers} Players</div>
+                <div className=\"text-right\">
+                  <div className=\"text-xl font-bold\">{totalPlayers} Players</div>
                 </div>
               </div>
               <div className={`capitalize px-3 py-0.5 rounded-full inline-block text-xs font-bold ${
@@ -824,16 +825,16 @@ export default function HostGameRoom() {
 
         {/* ── LOBBY ──────────────────────────────────────────────────────── */}
         {room.status === 'lobby' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className=\"grid grid-cols-1 lg:grid-cols-3 gap-6\">
 
             {/* Join Requests */}
-            <div className="bg-gray-900/50 p-5 rounded-2xl border border-gray-800">
-              <h2 className="text-lg font-display font-bold mb-4 flex items-center gap-2">
+            <div className=\"bg-gray-900/50 p-5 rounded-2xl border border-gray-800\">
+              <h2 className=\"text-lg font-display font-bold mb-4 flex items-center gap-2\">
                 Join Requests
-                <span className="text-primary bg-primary/20 px-2 py-0.5 rounded-full text-xs">{requests.length}</span>
+                <span className=\"text-primary bg-primary/20 px-2 py-0.5 rounded-full text-xs\">{requests.length}</span>
               </h2>
-              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                {requests.length === 0 && <p className="text-gray-500 italic text-sm">No pending requests...</p>}
+              <div className=\"space-y-3 max-h-64 overflow-y-auto pr-1\">
+                {requests.length === 0 && <p className=\"text-gray-500 italic text-sm\">No pending requests...</p>}
                 {requests.map(req => {
                   const playCount  = playHistory[req.key] || 0
                   const isRepeater = playCount > 0
@@ -841,8 +842,8 @@ export default function HostGameRoom() {
                   return (
                     <div key={req.key} className={`flex items-center justify-between p-3 bg-gray-800 rounded-xl border transition-colors ${isBlocked ? 'border-red-500/40' : 'border-gray-700'}`}>
                       <div>
-                        <div className="font-bold text-sm flex items-center gap-2">
-                          {req.player_avatar && <img src={req.player_avatar} alt="" className="w-5 h-5 rounded-full" />}
+                        <div className=\"font-bold text-sm flex items-center gap-2\">
+                          {req.player_avatar && <img src={req.player_avatar} alt=\"\" className=\"w-5 h-5 rounded-full\" />}
                           {req.player_name}
                           {isRepeater && gameConfig.repeat_entry !== 'allow' && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full font-mono ${
@@ -852,19 +853,19 @@ export default function HostGameRoom() {
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-400">{req.player_email}</div>
+                        <div className=\"text-xs text-gray-400\">{req.player_email}</div>
                       </div>
-                      <div className="flex gap-1">
+                      <div className=\"flex gap-1\">
                         {processingRequests.has(req.key) ? (
-                          <Loader2 size={18} className="text-primary animate-spin" />
+                          <Loader2 size={18} className=\"text-primary animate-spin\" />
                         ) : (
                           <>
                             <button
                               onClick={() => handleRequest(req.key, 'approved')}
                               disabled={isBlocked}
-                              className="bg-green-500/20 text-green-500 hover:bg-green-500/30 p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              className=\"bg-green-500/20 text-green-500 hover:bg-green-500/30 p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed\"
                             ><CheckCircle size={16} /></button>
-                            <button onClick={() => handleRequest(req.key, 'rejected')} className="bg-red-500/20 text-red-500 hover:bg-red-500/30 p-1.5 rounded-lg transition-colors"><XCircle size={16} /></button>
+                            <button onClick={() => handleRequest(req.key, 'rejected')} className=\"bg-red-500/20 text-red-500 hover:bg-red-500/30 p-1.5 rounded-lg transition-colors\"><XCircle size={16} /></button>
                           </>
                         )}
                       </div>
@@ -875,19 +876,19 @@ export default function HostGameRoom() {
             </div>
 
             {/* Players + Config + Start */}
-            <div className="lg:col-span-2 space-y-4">
+            <div className=\"lg:col-span-2 space-y-4\">
               {/* Players */}
-              <div className="bg-gray-900/50 p-5 rounded-2xl border border-gray-800">
-                <h2 className="text-lg font-display font-bold mb-3 flex items-center gap-2">
+              <div className=\"bg-gray-900/50 p-5 rounded-2xl border border-gray-800\">
+                <h2 className=\"text-lg font-display font-bold mb-3 flex items-center gap-2\">
                   Ready
-                  <span className="text-secondary bg-secondary/20 px-2 py-0.5 rounded-full text-xs">{totalPlayers}</span>
+                  <span className=\"text-secondary bg-secondary/20 px-2 py-0.5 rounded-full text-xs\">{totalPlayers}</span>
                 </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-32 overflow-y-auto">
-                  {totalPlayers === 0 && <p className="text-gray-500 italic text-sm col-span-full">Waiting...</p>}
+                <div className=\"grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-32 overflow-y-auto\">
+                  {totalPlayers === 0 && <p className=\"text-gray-500 italic text-sm col-span-full\">Waiting...</p>}
                   {players.map(p => (
-                    <div key={p.user_id} className="flex items-center gap-2 p-2 bg-gray-800 rounded-lg border border-gray-700">
-                      {p.avatar_url ? <img src={p.avatar_url} alt="" className="w-6 h-6 rounded-full" /> : <UserCheck size={14} className="text-gray-500" />}
-                      <span className="font-bold text-sm truncate flex-1">{p.nickname}</span>
+                    <div key={p.user_id} className=\"flex items-center gap-2 p-2 bg-gray-800 rounded-lg border border-gray-700\">
+                      {p.avatar_url ? <img src={p.avatar_url} alt=\"\" className=\"w-6 h-6 rounded-full\" /> : <UserCheck size={14} className=\"text-gray-500\" />}
+                      <span className=\"font-bold text-sm truncate flex-1\">{p.nickname}</span>
                       <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${presence[p.user_id]?.online ? 'bg-green-400' : 'bg-gray-600'}`} />
                     </div>
                   ))}
@@ -899,8 +900,8 @@ export default function HostGameRoom() {
 
               {/* Start button */}
               <button onClick={startGame} disabled={totalPlayers === 0}
-                className="w-full bg-primary text-background font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-[#00D4FF] disabled:opacity-50 transition-colors active:scale-95 text-lg">
-                <Play size={22} fill="currentColor" /> Start Game
+                className=\"w-full bg-primary text-background font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-[#00D4FF] disabled:opacity-50 transition-colors active:scale-95 text-lg\">
+                <Play size={22} fill=\"currentColor\" /> Start Game
               </button>
             </div>
           </div>
@@ -908,18 +909,18 @@ export default function HostGameRoom() {
 
         {/* ── PLAYING & REVEALING ─────────────────────────────────────────── */}
         {(room.status === 'playing' || room.status === 'revealing') && currentQ && (
-          <div className="space-y-5">
-            <div className="bg-gray-900/50 p-6 rounded-2xl border border-primary relative overflow-hidden">
+          <div className=\"space-y-5\">
+            <div className=\"bg-gray-900/50 p-6 rounded-2xl border border-primary relative overflow-hidden\">
               {/* Progress strip */}
-              <div className="absolute top-0 left-0 w-full h-1 bg-gray-800">
-                <div className="h-full bg-primary" style={{ width: `${((room.current_question_index + 1) / room.questions.questions.length) * 100}%` }} />
+              <div className=\"absolute top-0 left-0 w-full h-1 bg-gray-800\">
+                <div className=\"h-full bg-primary\" style={{ width: `${((room.current_question_index + 1) / room.questions.questions.length) * 100}%` }} />
               </div>
 
-              <div className="flex justify-between items-center mb-4 text-sm text-gray-400">
-                <span className="font-bold text-primary">Q {room.current_question_index + 1} / {room.questions.questions.length}</span>
-                <div className="flex items-center gap-3">
+              <div className=\"flex justify-between items-center mb-4 text-sm text-gray-400\">
+                <span className=\"font-bold text-primary\">Q {room.current_question_index + 1} / {room.questions.questions.length}</span>
+                <div className=\"flex items-center gap-3\">
                   {/* Scoring badge */}
-                  <span className="text-xs font-mono bg-gray-800 px-2 py-0.5 rounded">
+                  <span className=\"text-xs font-mono bg-gray-800 px-2 py-0.5 rounded\">
                     {config.scoring_mode === 'classic' ? '🏆 كلاسيك' :
                      config.scoring_mode === 'custom'  ? `✨ ${config.first_correct_points}/${config.other_correct_points} نقاط` :
                      `📊 ${config.first_correct_points}−${config.points_decrement} ترتيبي`}
@@ -932,20 +933,20 @@ export default function HostGameRoom() {
 
               {/* Countdown bar — shown when active (both playing & revealing) */}
               {room.countdown_started_at && (
-                <div className="mb-4">
+                <div className=\"mb-4\">
                   <CountdownBar startedAt={room.countdown_started_at} duration={room.countdown_duration} />
                 </div>
               )}
 
-              <h2 className="text-2xl font-bold mb-6">{currentQ.question}</h2>
+              <h2 className=\"text-2xl font-bold mb-6\">{currentQ.question}</h2>
 
               {currentQ.image_url && (
-                <div className="mb-5">
-                  <QuestionImage src={currentQ.image_url} className="w-full max-h-56 object-contain rounded-xl border border-gray-700 bg-gray-900" />
+                <div className=\"mb-5\">
+                  <QuestionImage src={currentQ.image_url} className=\"w-full max-h-56 object-contain rounded-xl border border-gray-700 bg-gray-900\" />
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className=\"grid grid-cols-1 md:grid-cols-2 gap-3\">
                 {currentQ.choices.map((choice, i) => {
                   const isCorrect = i === currentQ.correct
                   const count     = answers.filter(a => a.selected_choice === i).length
@@ -956,7 +957,7 @@ export default function HostGameRoom() {
                         : 'border-gray-700 bg-gray-800'
                     }`}>
                       <span className={isRevealPhase && isCorrect ? 'font-bold text-primary' : ''}>{choice}</span>
-                      <span className="font-mono text-lg font-bold ml-3 flex-shrink-0">{count}</span>
+                      <span className=\"font-mono text-lg font-bold ml-3 flex-shrink-0\">{count}</span>
                     </div>
                   )
                 })}
@@ -964,16 +965,16 @@ export default function HostGameRoom() {
 
               {/* Reveal result - Question Honor Roll */}
               {isRevealPhase && revealResult && (
-                <div className="mt-6 space-y-4">
-                  <div className="flex items-center justify-between border-b border-gray-800 pb-2">
-                    <h3 className="text-sm font-bold text-gray-400 flex items-center gap-2">
-                      <Star size={14} className="text-yellow-500" /> لوحة شرف السؤال
+                <div className=\"mt-6 space-y-4\">
+                  <div className=\"flex items-center justify-between border-b border-gray-800 pb-2\">
+                    <h3 className=\"text-sm font-bold text-gray-400 flex items-center gap-2\">
+                      <Star size={14} className=\"text-yellow-500\" /> لوحة شرف السؤال
                     </h3>
-                    <span className="text-xs text-gray-500 font-mono">{revealResult.correct_count} طالب أجابوا صح</span>
+                    <span className=\"text-xs text-gray-500 font-mono\">{revealResult.correct_count} طالب أجابوا صح</span>
                   </div>
 
                   {revealResult.winners && revealResult.winners.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar\">
                       {revealResult.winners.map((w, idx) => (
                         <div key={w.user_id} 
                           className={`relative flex items-center gap-3 p-3 rounded-xl border transition-all animate-in fade-in slide-in-from-bottom-2 duration-300`}
@@ -989,20 +990,20 @@ export default function HostGameRoom() {
                             {w.rank}
                           </div>
 
-                          <div className="min-w-0 flex-1">
-                            <div className="font-bold text-sm truncate">{w.nickname}</div>
-                            <div className="flex items-center gap-2 text-[10px] text-gray-500 font-mono">
+                          <div className=\"min-w-0 flex-1\">
+                            <div className=\"font-bold text-sm truncate\">{w.nickname}</div>
+                            <div className=\"flex items-center gap-2 text-[10px] text-gray-500 font-mono\">
                               <Timer size={10} /> {w.time_ms}ms
                             </div>
                           </div>
 
-                          <div className="text-primary font-bold text-sm px-2 py-0.5 bg-primary/10 rounded-lg">
+                          <div className=\"text-primary font-bold text-sm px-2 py-0.5 bg-primary/10 rounded-lg\">
                             +{w.points}
                           </div>
                           
                           {w.rank === 1 && (
-                            <div className="absolute -top-1 -right-1">
-                              <Trophy size={14} className="text-yellow-500" fill="currentColor" />
+                            <div className=\"absolute -top-1 -right-1\">
+                              <Trophy size={14} className=\"text-yellow-500\" fill=\"currentColor\" />
                             </div>
                           )}
                         </div>
@@ -1010,29 +1011,29 @@ export default function HostGameRoom() {
                     </div>
                   ) : revealResult.correct_count > 0 ? (
                     /* Fallback for old reveal data or cases where no points were earned but some were correct */
-                    <div className="flex items-center gap-3 bg-gray-800/50 border border-gray-700 text-gray-300 px-5 py-3 rounded-xl">
-                      <CheckCircle size={18} className="text-green-500" />
-                      <span className="font-bold">أول من أجاب: <span className="text-white">{revealResult.winner_nickname}</span></span>
-                      <span className="text-sm ml-auto opacity-70 font-mono">{revealResult.winner_time_ms}ms</span>
+                    <div className=\"flex items-center gap-3 bg-gray-800/50 border border-gray-700 text-gray-300 px-5 py-3 rounded-xl\">
+                      <CheckCircle size={18} className=\"text-green-500\" />
+                      <span className=\"font-bold\">أول من أجاب: <span className=\"text-white\">{revealResult.winner_nickname}</span></span>
+                      <span className=\"text-sm ml-auto opacity-70 font-mono\">{revealResult.winner_time_ms}ms</span>
                     </div>
                   ) : (
-                    <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 text-center">
-                      <XCircle size={32} className="mx-auto text-gray-700 mb-2" />
-                      <div className="text-gray-500 text-sm">للأسف، ولا حد جابها صح!</div>
+                    <div className=\"bg-gray-900/50 border border-gray-800 rounded-xl p-6 text-center\">
+                      <XCircle size={32} className=\"mx-auto text-gray-700 mb-2\" />
+                      <div className=\"text-gray-500 text-sm\">للأسف، ولا حد جابها صح!</div>
                     </div>
                   )}
                 </div>
               )}
 
               {/* Controls */}
-              <div className="mt-6 flex items-center justify-between gap-4 flex-wrap">
+              <div className=\"mt-6 flex items-center justify-between gap-4 flex-wrap\">
                 {/* Countdown button — only during playing phase */}
                 {room.status === 'playing' && (
                   <button
                     onClick={startCountdown}
                     disabled={!!room.countdown_started_at || startingCountdown}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-default
-                      border-primary/60 text-primary bg-primary/5 hover:bg-primary/15 active:scale-95"
+                    className=\"flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-default
+                      border-primary/60 text-primary bg-primary/5 hover:bg-primary/15 active:scale-95\"
                   >
                     <Timer size={15} />
                     {room.countdown_started_at
@@ -1042,16 +1043,16 @@ export default function HostGameRoom() {
                 )}
                 {room.status === 'revealing' && <div />}
 
-                <div className="flex gap-3 ml-auto">
+                <div className=\"flex gap-3 ml-auto\">
                   {room.status === 'playing' && (
                     <button onClick={revealAnswer} disabled={isRevealing}
-                      className="bg-yellow-500 text-black font-bold px-6 py-2.5 rounded-xl flex items-center gap-2 hover:bg-yellow-400 disabled:opacity-50 transition-colors active:scale-95">
+                      className=\"bg-yellow-500 text-black font-bold px-6 py-2.5 rounded-xl flex items-center gap-2 hover:bg-yellow-400 disabled:opacity-50 transition-colors active:scale-95\">
                       <Eye size={18} /> {isRevealing ? '...' : 'Reveal Answer'}
                     </button>
                   )}
                   {room.status === 'revealing' && (
                     <button onClick={nextQuestion}
-                      className="bg-white text-black font-bold px-6 py-2.5 rounded-xl flex items-center gap-2 hover:bg-gray-200 transition-colors active:scale-95">
+                      className=\"bg-white text-black font-bold px-6 py-2.5 rounded-xl flex items-center gap-2 hover:bg-gray-200 transition-colors active:scale-95\">
                       Next <SkipForward size={18} />
                     </button>
                   )}
@@ -1060,19 +1061,19 @@ export default function HostGameRoom() {
             </div>
 
             {/* Live Leaderboard */}
-            <div className="bg-gray-900/50 p-5 rounded-2xl border border-gray-800">
-              <h3 className="text-base font-bold mb-3 flex items-center gap-2">
-                <Trophy className="text-[#FFD700]" size={16} /> Live Leaderboard
+            <div className=\"bg-gray-900/50 p-5 rounded-2xl border border-gray-800\">
+              <h3 className=\"text-base font-bold mb-3 flex items-center gap-2\">
+                <Trophy className=\"text-[#FFD700]\" size={16} /> Live Leaderboard
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className=\"grid grid-cols-2 md:grid-cols-4 gap-3\">
                 {players.slice(0, 8).map((p, idx) => (
-                  <div key={p.user_id} className="bg-gray-800 p-3 rounded-xl border border-gray-700 flex justify-between items-center">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-bold text-gray-500 flex-shrink-0">#{idx + 1}</span>
-                      <span className="font-bold text-sm truncate">{p.nickname}</span>
-                      {!presence[p.user_id]?.online && <WifiOff size={11} className="text-red-400 flex-shrink-0" />}
+                  <div key={p.user_id} className=\"bg-gray-800 p-3 rounded-xl border border-gray-700 flex justify-between items-center\">
+                    <div className=\"flex items-center gap-2 min-w-0\">
+                      <span className=\"text-sm font-bold text-gray-500 flex-shrink-0\">#{idx + 1}</span>
+                      <span className=\"font-bold text-sm truncate\">{p.nickname}</span>
+                      {!presence[p.user_id]?.online && <WifiOff size={11} className=\"text-red-400 flex-shrink-0\" />}
                     </div>
-                    <span className="font-mono text-primary font-bold text-sm flex-shrink-0 ml-1">{p.score}</span>
+                    <span className=\"font-mono text-primary font-bold text-sm flex-shrink-0 ml-1\">{p.score}</span>
                   </div>
                 ))}
               </div>
@@ -1080,30 +1081,30 @@ export default function HostGameRoom() {
 
             {/* ── Late-join requests (mid-game) ───────────────────────────── */}
             {requests.length > 0 && (
-              <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4">
-                <h3 className="text-sm font-bold text-orange-300 mb-3 flex items-center gap-2">
+              <div className=\"bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4\">
+                <h3 className=\"text-sm font-bold text-orange-300 mb-3 flex items-center gap-2\">
                   <UserCheck size={15} />
                   طلبات دخول متأخر
-                  <span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full text-xs">{requests.length}</span>
-                  <span className="text-orange-400/60 text-xs font-normal mr-1">— فاتهم {room.current_question_index} سؤال</span>
+                  <span className=\"bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full text-xs\">{requests.length}</span>
+                  <span className=\"text-orange-400/60 text-xs font-normal mr-1\">— فاتهم {room.current_question_index} سؤال</span>
                 </h3>
-                <div className="space-y-2">
+                <div className=\"space-y-2\">
                   {requests.map(req => (
-                    <div key={req.key} className="flex items-center justify-between p-2.5 bg-gray-900/60 rounded-xl border border-gray-700/50">
-                      <div className="flex items-center gap-2 min-w-0">
-                        {req.player_avatar && <img src={req.player_avatar} alt="" className="w-6 h-6 rounded-full flex-shrink-0" />}
-                        <div className="min-w-0">
-                          <div className="font-bold text-sm text-white truncate">{req.player_name}</div>
-                          <div className="text-xs text-gray-500 truncate">{req.player_email}</div>
+                    <div key={req.key} className=\"flex items-center justify-between p-2.5 bg-gray-900/60 rounded-xl border border-gray-700/50\">
+                      <div className=\"flex items-center gap-2 min-w-0\">
+                        {req.player_avatar && <img src={req.player_avatar} alt=\"\" className=\"w-6 h-6 rounded-full flex-shrink-0\" />}
+                        <div className=\"min-w-0\">
+                          <div className=\"font-bold text-sm text-white truncate\">{req.player_name}</div>
+                          <div className=\"text-xs text-gray-500 truncate\">{req.player_email}</div>
                         </div>
                       </div>
-                      <div className="flex gap-1 flex-shrink-0 ml-2">
+                      <div className=\"flex gap-1 flex-shrink-0 ml-2\">
                         {processingRequests.has(req.key) ? (
-                          <Loader2 size={16} className="text-primary animate-spin" />
+                          <Loader2 size={16} className=\"text-primary animate-spin\" />
                         ) : (
                           <>
-                            <button onClick={() => handleRequest(req.key, 'approved')} className="bg-green-500/20 text-green-500 hover:bg-green-500/30 p-1.5 rounded-lg transition-colors" title="قبول"><CheckCircle size={14} /></button>
-                            <button onClick={() => handleRequest(req.key, 'rejected')} className="bg-red-500/20 text-red-500 hover:bg-red-500/30 p-1.5 rounded-lg transition-colors" title="رفض"><XCircle size={14} /></button>
+                            <button onClick={() => handleRequest(req.key, 'approved')} className=\"bg-green-500/20 text-green-500 hover:bg-green-500/30 p-1.5 rounded-lg transition-colors\" title=\"قبول\"><CheckCircle size={14} /></button>
+                            <button onClick={() => handleRequest(req.key, 'rejected')} className=\"bg-red-500/20 text-red-500 hover:bg-red-500/30 p-1.5 rounded-lg transition-colors\" title=\"رفض\"><XCircle size={14} /></button>
                           </>
                         )}
                       </div>
@@ -1113,38 +1114,36 @@ export default function HostGameRoom() {
               </div>
             )}
           </div>
-        )}
-
+        )}\n
         {/* ── FINISHED ──────────────────────────────────────────────────── */}
         {room.status === 'finished' && (
-          <div className="bg-gray-900/50 p-12 rounded-2xl border border-gray-800 text-center">
-            <Trophy size={64} className="mx-auto text-[#FFD700] mb-6" />
-            <h2 className="text-5xl font-display font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Game Over!</h2>
-            <p className="text-xl text-gray-400 mb-10">Final Leaderboard</p>
-            <div className="max-w-2xl mx-auto space-y-3">
+          <div className=\"bg-gray-900/50 p-12 rounded-2xl border border-gray-800 text-center\">
+            <Trophy size={64} className=\"mx-auto text-[#FFD700] mb-6\" />
+            <h2 className=\"text-5xl font-display font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary\">Game Over!</h2>
+            <p className=\"text-xl text-gray-400 mb-10\">Final Leaderboard</p>
+            <div className=\"max-w-2xl mx-auto space-y-3\">
               {players.map((p, idx) => (
                 <div key={p.user_id} className={`flex items-center justify-between p-4 rounded-xl border ${idx === 0 ? 'bg-primary/20 border-primary' : 'bg-gray-800 border-gray-700'}`}>
-                  <div className="flex items-center gap-4">
+                  <div className=\"flex items-center gap-4\">
                     <span className={`text-2xl font-bold ${idx === 0 ? 'text-primary' : 'text-gray-500'}`}>#{idx + 1}</span>
-                    {p.avatar_url ? <img src={p.avatar_url} alt="" className="w-9 h-9 rounded-full" /> : <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center"><UserCheck size={18} /></div>}
-                    <span className="font-bold text-lg">{p.nickname}</span>
+                    {p.avatar_url ? <img src={p.avatar_url} alt=\"\" className=\"w-9 h-9 rounded-full\" /> : <div className=\"w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center\"><UserCheck size={18} /></div>}
+                    <span className=\"font-bold text-lg\">{p.nickname}</span>
                   </div>
-                  <div className="text-2xl font-mono font-bold text-white">{p.score} PTS</div>
+                  <div className=\"text-2xl font-mono font-bold text-white\">{p.score} PTS</div>
                 </div>
               ))}
             </div>
-            <div className="mt-10 flex items-center justify-center gap-4 flex-wrap">
-              <button
+            <div className=\"mt-10 flex items-center justify-center gap-4 flex-wrap\">\n              <button
                 onClick={downloadLogs}
                 disabled={downloadingLogs}
-                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold px-6 py-3 rounded-xl transition-colors disabled:opacity-50"
+                className=\"flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold px-6 py-3 rounded-xl transition-colors disabled:opacity-50\"
               >
                 {downloadingLogs
-                  ? <><Loader2 size={16} className="animate-spin" /> جاري التحميل...</>
-                  : <><Trophy size={16} className="text-[#FFD700]" /> تحميل اللوجز (.txt)</>}
+                  ? <><Loader2 size={16} className=\"animate-spin\" /> جاري التحميل...</>
+                  : <><Trophy size={16} className=\"text-[#FFD700]\" /> تحميل اللوجز (.txt)</>}
               </button>
               <button onClick={() => navigate('/host/dashboard')}
-                className="bg-primary text-background font-bold px-8 py-3 rounded-xl hover:bg-[#00D4FF] transition-colors">
+                className=\"bg-primary text-background font-bold px-8 py-3 rounded-xl hover:bg-[#00D4FF] transition-colors\">
                 Back to Dashboard
               </button>
             </div>
