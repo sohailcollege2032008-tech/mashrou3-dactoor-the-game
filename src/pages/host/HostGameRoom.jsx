@@ -525,10 +525,11 @@ export default function HostGameRoom() {
         newScoreById[a.user_id] = newScore
       })
 
-      // Rank + is_first_correct for all correct answers
+      // Rank + is_first_correct + is_correct for all correct answers
       correct.forEach((a, i) => {
         answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/rank`]             = i + 1
         answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/is_first_correct`] = i === 0
+        answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/is_correct`]       = true
       })
 
       // ── Build leaderboard summary (top 5 + each player's rank) ───────────
