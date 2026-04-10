@@ -19,27 +19,39 @@ function useImageUpload(bankId, index, onUploaded) {
       return
     }
 
-    setUploadProgress('compressing')
-    setUploadInfo(null)
+    try {
+      setUploadProgress('compressing')
+      setUploadInfo(null)
 
-    const compressed = await compressImage(file)
-    setUploadInfo({ original: file.size, compressed: compressed.size })
-    setUploadProgress(0)
+      const compressed = await compressImage(file)
+      setUploadInfo({ original: file.size, compressed: compressed.size })
+      setUploadProgress(0)
 
-    const path = `question_images/${bankId}/q${index}_${Date.now()}`
-    const ref  = storageRef(storage, path)
-    const task = uploadBytesResumable(ref, compressed)
+      const path = `question_images/${bankId}/q${index}_${Date.now()}`
+      const ref  = storageRef(storage, path)
+      const task = uploadBytesResumable(ref, compressed)
 
-    task.on(
-      'state_changed',
-      snap => setUploadProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100)),
-      err  => { alert('فشل الرفع: ' + err.message); setUploadProgress(null); setUploadInfo(null) },
-      async () => {
-        const url = await getDownloadURL(task.snapshot.ref)
-        onUploaded(url)
-        setUploadProgress(null)
-      }
-    )
+      task.on(
+        'state_changed',
+        snap => setUploadProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100)),
+        err  => { alert('فشل الرفع: ' + err.message); setUploadProgress(null); setUploadInfo(null) },
+        async () => {
+          try {
+            const url = await getDownloadURL(task.snapshot.ref)
+            onUploaded(url)
+          } catch (e) {
+            alert('فشل في الحصول على رابط الصورة: ' + e.message)
+          } finally {
+            setUploadProgress(null)
+          }
+        }
+      )
+    } catch (err) {
+      console.error('uploadFile error:', err)
+      alert('خطأ أثناء رفع الصورة: ' + err.message)
+      setUploadProgress(null)
+      setUploadInfo(null)
+    }
   }, [bankId, index, onUploaded])
 
   return { uploadProgress, uploadInfo, uploadFile }

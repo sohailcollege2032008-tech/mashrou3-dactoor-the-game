@@ -10,26 +10,36 @@ export async function compressImage(file, { maxWidth = 1200, quality = 0.82 } = 
 
   return new Promise((resolve) => {
     const reader = new FileReader()
+    reader.onerror = () => resolve(file)   // fallback: return original if reading fails
     reader.onload = (e) => {
       const img = new Image()
+      img.onerror = () => resolve(file)    // fallback: return original if decode fails
       img.onload = () => {
-        const scale  = Math.min(1, maxWidth / img.width)
-        const width  = Math.round(img.width  * scale)
-        const height = Math.round(img.height * scale)
+        try {
+          // Guard against 0-dimension images
+          if (!img.width || !img.height) { resolve(file); return }
 
-        const canvas = document.createElement('canvas')
-        canvas.width  = width
-        canvas.height = height
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+          const scale  = Math.min(1, maxWidth / img.width)
+          const width  = Math.round(img.width  * scale)
+          const height = Math.round(img.height * scale)
 
-        canvas.toBlob(
-          (blob) => {
-            if (!blob || blob.size >= file.size) { resolve(file); return }
-            resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }))
-          },
-          'image/jpeg',
-          quality
-        )
+          const canvas = document.createElement('canvas')
+          canvas.width  = width
+          canvas.height = height
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+
+          canvas.toBlob(
+            (blob) => {
+              if (!blob || blob.size >= file.size) { resolve(file); return }
+              const safeName = (file.name || 'image').replace(/\.[^.]+$/, '') + '.jpg'
+              resolve(new File([blob], safeName, { type: 'image/jpeg' }))
+            },
+            'image/jpeg',
+            quality
+          )
+        } catch (_) {
+          resolve(file)  // fallback on any canvas error
+        }
       }
       img.src = e.target.result
     }
