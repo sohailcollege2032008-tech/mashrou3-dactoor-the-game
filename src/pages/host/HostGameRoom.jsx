@@ -348,15 +348,6 @@ export default function HostGameRoom() {
         }
         if (data.status === 'finished' && prev?.status !== 'finished') {
           confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } })
-          // Record play history for all players in Firestore
-          const qSetId = data.question_set_id
-          if (qSetId && data.players) {
-            Object.keys(data.players).forEach(uid => {
-              updateDoc(doc(db, 'profiles', uid), {
-                [`played_decks.${qSetId}`]: increment(1)
-              }).catch(() => {})
-            })
-          }
         }
         return data
       })

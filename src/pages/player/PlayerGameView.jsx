@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, get, set, runTransaction, onDisconnect } from 'firebase/database'
-import { rtdb } from '../../lib/firebase'
+import { rtdb, db } from '../../lib/firebase'
+import { doc, updateDoc, increment } from 'firebase/firestore'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
 import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Download, Loader2, Edit2, Check, X, Star, Timer } from 'lucide-react'
@@ -162,8 +163,15 @@ export default function PlayerGameView() {
       if (data.status === 'revealing' && prevStatusRef.current !== 'revealing') {
         fetchMyAnswerResult(data.current_question_index, uid)
       }
-      if (data.status === 'finished') {
+      if (data.status === 'finished' && prevStatusRef.current !== 'finished') {
         confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 } })
+        // Each player records their own play in Firestore (respects write rules)
+        const qSetId = data.question_set_id
+        if (qSetId && uid) {
+          updateDoc(doc(db, 'profiles', uid), {
+            [`played_decks.${qSetId}`]: increment(1)
+          }).catch(() => {})
+        }
       }
 
       prevQuestionIndexRef.current = data.current_question_index
