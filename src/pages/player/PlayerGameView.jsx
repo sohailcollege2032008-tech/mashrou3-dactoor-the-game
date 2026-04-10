@@ -451,16 +451,16 @@ export default function PlayerGameView() {
     </div>
   )
 
-  const currentQ = room.questions?.questions?.[room.current_question_index]
-  const myId     = session?.uid
-
   // Preload next question's image while answering current one
-  const nextQImg = room.questions?.questions?.[room.current_question_index + 1]?.image_url
+  const nextQImg = room?.questions?.questions?.[room?.current_question_index + 1]?.image_url
   useEffect(() => {
     if (!nextQImg) return
     const img = new Image()
     img.src = nextQImg
   }, [nextQImg])
+
+  const currentQ = room.questions?.questions?.[room.current_question_index]
+  const myId     = session?.uid
 
   return (
     <div className="flex flex-col h-screen bg-background text-white overflow-hidden">
