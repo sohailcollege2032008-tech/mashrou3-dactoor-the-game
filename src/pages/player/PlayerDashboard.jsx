@@ -118,7 +118,7 @@ export default function PlayerDashboard() {
           <div className="w-14 h-14 rounded-2xl bg-gray-800 flex items-center justify-center group-hover:bg-gray-700 transition-colors">
             <Swords size={28} className="text-gray-300" />
           </div>
-          <div className="text-center">
+          <div className="text-center" dir="rtl">
             <p className="text-white font-bold text-base">تصفح الـ Decks</p>
             <p className="text-gray-500 text-sm">العب دويل مع زميلك</p>
           </div>
