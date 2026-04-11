@@ -12,7 +12,7 @@ import {
 } from 'firebase/database'
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { Loader2, Timer, WifiOff, LogOut, Flag } from 'lucide-react'
+import { Loader2, Timer, WifiOff, LogOut, Flag, Maximize2, Minimize2 } from 'lucide-react'
 
 const QUESTION_DURATION_MS = 30_000
 const REVEAL_DURATION_MS   = 3_000
@@ -71,6 +71,36 @@ export default function DuelGame() {
   // Exit / surrender
   const [confirmAction, setConfirmAction] = useState(null) // 'forfeit' | 'surrender'
   const [actionLoading, setActionLoading] = useState(false)
+
+  // ── Fullscreen ────────────────────────────────────────────────────────────
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const lastTapRef = useRef(0)
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {})
+    } else {
+      document.exitFullscreen?.().catch(() => {})
+    }
+  }, [])
+
+  // Double-tap on empty space → fullscreen
+  const handleDoubleTap = useCallback((e) => {
+    if (e.target.closest('button, input, select, textarea, a')) return
+    const now = Date.now()
+    if (now - lastTapRef.current < 350) {
+      toggleFullscreen()
+      lastTapRef.current = 0
+    } else {
+      lastTapRef.current = now
+    }
+  }, [toggleFullscreen])
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const duelRef             = useRef(null)
@@ -408,7 +438,7 @@ export default function DuelGame() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl">
+    <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl" onClick={handleDoubleTap}>
 
       {/* Disconnect banner */}
       {!opponentConnected && disconnectCountdown !== null && (
@@ -440,6 +470,13 @@ export default function DuelGame() {
               {duel.status === 'revealing' ? '✓' : timeLeftSec}
             </span>
           </div>
+          <button
+            onClick={toggleFullscreen}
+            className="text-gray-700 hover:text-gray-400 transition-colors mt-0.5"
+            title={isFullscreen ? 'تصغير' : 'تكبير'}
+          >
+            {isFullscreen ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
+          </button>
         </div>
 
         <PlayerPill player={opponentPlayer} score={opponentPlayer?.score} align="left" />
