@@ -15,8 +15,8 @@ import { useAuth } from '../../hooks/useAuth'
 import { Loader2, Timer, WifiOff, LogOut, Flag } from 'lucide-react'
 
 const QUESTION_DURATION_MS = 30_000
-const REVEAL_DURATION_MS = 3_000
-const FORFEIT_TIMEOUT_S = 120
+const REVEAL_DURATION_MS   = 3_000
+const FORFEIT_TIMEOUT_S    = 120
 
 // ── Avatar pill ───────────────────────────────────────────────────────────────
 function PlayerPill({ player, score, align = 'right' }) {
@@ -53,19 +53,18 @@ function TimerBar({ pct }) {
 
 export default function DuelGame() {
   const { duelId } = useParams()
-  const navigate = useNavigate()
+  const navigate   = useNavigate()
   const { session } = useAuth()
   const uid = session?.uid
 
-  const [duel, setDuel] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [timerPct, setTimerPct] = useState(1)
+  const [duel, setDuel]               = useState(null)
+  const [loading, setLoading]         = useState(true)
+  const [timerPct, setTimerPct]       = useState(1)
   const [selectedChoice, setSelectedChoice] = useState(null)
   const [hasAnswered, setHasAnswered] = useState(false)
-  const [answerTime, setAnswerTime] = useState(null)
 
   // Presence
-  const [watchOpponentUid, setWatchOpponentUid] = useState(null)
+  const [watchOpponentUid, setWatchOpponentUid]   = useState(null)
   const [opponentConnected, setOpponentConnected] = useState(true)
   const [disconnectCountdown, setDisconnectCountdown] = useState(null)
 
@@ -73,19 +72,30 @@ export default function DuelGame() {
   const [confirmAction, setConfirmAction] = useState(null) // 'forfeit' | 'surrender'
   const [actionLoading, setActionLoading] = useState(false)
 
-  // Refs to avoid stale closures
-  const duelRef = useRef(null)
-  const transitionInProgressRef = useRef(false)
-  const timerIntervalRef = useRef(null)
-  const revealTimerRef = useRef(null)
+  // ── Refs ─────────────────────────────────────────────────────────────────
+  const duelRef             = useRef(null)
+  const serverOffsetRef     = useRef(0)          // Firebase server clock offset (ms)
+  const revealInProgressRef = useRef(false)      // guard for triggerReveal
+  const nextInProgressRef   = useRef(false)      // guard for triggerNextOrFinish
+  const timerIntervalRef    = useRef(null)
+  const revealTimerRef      = useRef(null)
   const countdownIntervalRef = useRef(null)
 
-  // Keep duelRef in sync
-  useEffect(() => {
-    duelRef.current = duel
-  }, [duel])
+  // server-adjusted "now"
+  const serverNow = useCallback(() => Date.now() + serverOffsetRef.current, [])
 
-  // ── Own presence + activeDuelId in localStorage ───────────────────────────
+  // ── Server clock offset ───────────────────────────────────────────────────
+  useEffect(() => {
+    const unsub = onValue(rtdbRef(rtdb, '.info/serverTimeOffset'), snap => {
+      serverOffsetRef.current = snap.val() ?? 0
+    })
+    return () => unsub()
+  }, [])
+
+  // Keep duelRef current
+  useEffect(() => { duelRef.current = duel }, [duel])
+
+  // ── Own presence + activeDuelId ───────────────────────────────────────────
   useEffect(() => {
     if (!duelId || !uid) return
     const presRef = rtdbRef(rtdb, `duel_presence/${duelId}/${uid}`)
@@ -98,19 +108,16 @@ export default function DuelGame() {
   // ── Watch opponent presence ───────────────────────────────────────────────
   useEffect(() => {
     if (!duelId || !watchOpponentUid) return
-    const presRef = rtdbRef(rtdb, `duel_presence/${duelId}/${watchOpponentUid}`)
-    const unsub = onValue(presRef, snap => {
+    const unsub = onValue(rtdbRef(rtdb, `duel_presence/${duelId}/${watchOpponentUid}`), snap => {
       const data = snap.val()
-      // null means presence not written yet → assume connected
       setOpponentConnected(!data || data.connected !== false)
     })
     return () => unsub()
   }, [duelId, watchOpponentUid])
 
-  // ── Disconnect countdown → forfeit after FORFEIT_TIMEOUT_S seconds ────────
+  // ── Disconnect countdown → auto-forfeit ──────────────────────────────────
   useEffect(() => {
     if (opponentConnected) {
-      // Opponent reconnected — clear countdown
       if (countdownIntervalRef.current) {
         clearInterval(countdownIntervalRef.current)
         countdownIntervalRef.current = null
@@ -118,7 +125,7 @@ export default function DuelGame() {
       setDisconnectCountdown(null)
       return
     }
-    if (countdownIntervalRef.current) return // already running
+    if (countdownIntervalRef.current) return
 
     let secs = FORFEIT_TIMEOUT_S
     setDisconnectCountdown(secs)
@@ -147,7 +154,7 @@ export default function DuelGame() {
     }
   }, [opponentConnected, duelId, uid])
 
-  // Reset per-question state when question index changes
+  // ── Reset per-question state ──────────────────────────────────────────────
   const lastQiRef = useRef(null)
   useEffect(() => {
     if (!duel) return
@@ -156,20 +163,18 @@ export default function DuelGame() {
       lastQiRef.current = qi
       setSelectedChoice(null)
       setHasAnswered(false)
-      setAnswerTime(null)
-      transitionInProgressRef.current = false
+      revealInProgressRef.current = false
+      nextInProgressRef.current   = false
     }
   }, [duel?.current_question_index])
 
-  // Subscribe to duel
+  // ── Subscribe to duel ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!duelId) return
-    const ref = rtdbRef(rtdb, `duels/${duelId}`)
-    const unsub = onValue(ref, snap => {
+    const unsub = onValue(rtdbRef(rtdb, `duels/${duelId}`), snap => {
       const data = snap.val()
       setDuel(data)
       setLoading(false)
-      // Extract opponent UID once duel has 2 players (for presence watch)
       if (data?.players && uid) {
         const oppUid = Object.keys(data.players).find(p => p !== uid)
         if (oppUid) setWatchOpponentUid(prev => prev ?? oppUid)
@@ -182,13 +187,12 @@ export default function DuelGame() {
     return () => unsub()
   }, [duelId, navigate, uid])
 
-  // ── Transition helpers ────────────────────────────────────────────────────
-
+  // ── triggerReveal: playing → revealing + compute scores ──────────────────
   const triggerReveal = useCallback(async () => {
-    if (transitionInProgressRef.current) return
+    if (revealInProgressRef.current) return
     const currentDuel = duelRef.current
     if (!currentDuel || currentDuel.status !== 'playing') return
-    transitionInProgressRef.current = true
+    revealInProgressRef.current = true
 
     try {
       const statusRef = rtdbRef(rtdb, `duels/${duelId}/status`)
@@ -198,56 +202,51 @@ export default function DuelGame() {
         return current
       })
 
-      if (!iWon) {
-        transitionInProgressRef.current = false
-        return
-      }
+      if (!iWon) { revealInProgressRef.current = false; return }
 
-      // I won the transaction — compute scores
+      // Only the winner of the transaction computes scores
       const qi = currentDuel.current_question_index
-      const question = currentDuel.questions[qi]
+      const question = currentDuel.questions?.[qi]
       const answersSnap = await rtdbGet(rtdbRef(rtdb, `duels/${duelId}/answers/${qi}`))
       const answers = answersSnap.val() || {}
       const scoreUpdates = {}
 
       for (const [aUid, answer] of Object.entries(answers)) {
-        const isCorrect = answer.selected_choice === question.correct
-        // Full 2pts — reduced to 1pt if this player has played this question before
-        const repeated = isCorrect && question.played_by_uids?.includes(aUid)
+        const isCorrect  = answer.selected_choice === question?.correct
+        // 2pts normally, 1pt if this player has played this question before
+        const repeated   = isCorrect && question?.played_by_uids?.includes(aUid)
         const pointsEarned = isCorrect ? (repeated ? 1 : 2) : 0
-        scoreUpdates[`answers/${qi}/${aUid}/is_correct`] = isCorrect
+
+        scoreUpdates[`answers/${qi}/${aUid}/is_correct`]    = isCorrect
         scoreUpdates[`answers/${qi}/${aUid}/points_earned`] = pointsEarned
         if (isCorrect) {
           scoreUpdates[`players/${aUid}/score`] = increment(pointsEarned)
         }
       }
-      scoreUpdates['reveal_started_at'] = Date.now()
+      scoreUpdates['reveal_started_at'] = serverNow()
 
       await update(rtdbRef(rtdb, `duels/${duelId}`), scoreUpdates)
     } catch (e) {
       console.error('triggerReveal error:', e)
     } finally {
-      transitionInProgressRef.current = false
+      revealInProgressRef.current = false
     }
-  }, [duelId])
+  }, [duelId, serverNow])
 
+  // ── triggerNextOrFinish: revealing → playing (next Q) or finished ─────────
   const triggerNextOrFinish = useCallback(async () => {
-    if (transitionInProgressRef.current) return
+    if (nextInProgressRef.current) return
     const currentDuel = duelRef.current
     if (!currentDuel || currentDuel.status !== 'revealing') return
-    transitionInProgressRef.current = true
+    nextInProgressRef.current = true
 
     try {
-      // ── One atomic transaction that updates ALL fields together ──
-      // This prevents the race where status='playing' arrives BEFORE
-      // question_started_at is updated, causing the timer to think 30s
-      // already elapsed on the new question and auto-skip it.
       const result = await runTransaction(
         rtdbRef(rtdb, `duels/${duelId}`),
         current => {
-          if (!current || current.status !== 'revealing') return // abort (undefined = no change)
+          if (!current || current.status !== 'revealing') return // abort
 
-          const nextQi = (current.current_question_index ?? 0) + 1
+          const nextQi    = (current.current_question_index ?? 0) + 1
           const isFinished = nextQi >= current.total_questions
 
           if (isFinished) {
@@ -257,25 +256,20 @@ export default function DuelGame() {
             ...current,
             status: 'playing',
             current_question_index: nextQi,
-            question_started_at: Date.now(),
+            question_started_at: serverNow(),  // server-calibrated timestamp
             reveal_started_at: null,
           }
         }
       )
 
-      // If transaction was aborted (another client already handled it), do nothing
-      if (!result.committed) {
-        transitionInProgressRef.current = false
-      }
-      // Navigation to results is handled by the onValue listener when status='finished'
+      if (!result.committed) nextInProgressRef.current = false
     } catch (e) {
       console.error('triggerNextOrFinish error:', e)
-    } finally {
-      transitionInProgressRef.current = false
+      nextInProgressRef.current = false
     }
-  }, [duelId])
+  }, [duelId, serverNow])
 
-  // ── Timer: question countdown (30s) ──────────────────────────────────────
+  // ── Timer: question countdown ─────────────────────────────────────────────
   useEffect(() => {
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
     if (!duel || duel.status !== 'playing' || !duel.question_started_at) {
@@ -284,8 +278,8 @@ export default function DuelGame() {
     }
 
     const tick = () => {
-      const elapsed = Date.now() - duel.question_started_at
-      const pct = Math.max(0, 1 - elapsed / QUESTION_DURATION_MS)
+      const elapsed = serverNow() - duel.question_started_at
+      const pct     = Math.max(0, 1 - elapsed / QUESTION_DURATION_MS)
       setTimerPct(pct)
       if (pct <= 0) {
         clearInterval(timerIntervalRef.current)
@@ -295,12 +289,12 @@ export default function DuelGame() {
     tick()
     timerIntervalRef.current = setInterval(tick, 200)
     return () => clearInterval(timerIntervalRef.current)
-  }, [duel?.status, duel?.question_started_at, triggerReveal])
+  }, [duel?.status, duel?.question_started_at, triggerReveal, serverNow])
 
-  // ── Watch answers: if both answered, trigger reveal early ─────────────────
+  // ── Watch answers: both answered → reveal early ───────────────────────────
   useEffect(() => {
     if (!duel || duel.status !== 'playing') return
-    const qi = duel.current_question_index
+    const qi      = duel.current_question_index
     const answers = duel.answers?.[qi] || {}
     const playerUids = Object.keys(duel.players || {})
     if (playerUids.length >= 2 && Object.keys(answers).length >= playerUids.length) {
@@ -313,75 +307,61 @@ export default function DuelGame() {
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current)
     if (!duel || duel.status !== 'revealing' || !duel.reveal_started_at) return
 
-    const elapsed = Date.now() - duel.reveal_started_at
+    const elapsed   = serverNow() - duel.reveal_started_at
     const remaining = REVEAL_DURATION_MS - elapsed
 
-    if (remaining <= 0) {
-      triggerNextOrFinish()
-      return
-    }
-    revealTimerRef.current = setTimeout(() => {
-      triggerNextOrFinish()
-    }, remaining)
+    if (remaining <= 0) { triggerNextOrFinish(); return }
+
+    revealTimerRef.current = setTimeout(triggerNextOrFinish, remaining)
     return () => clearTimeout(revealTimerRef.current)
-  }, [duel?.status, duel?.reveal_started_at, triggerNextOrFinish])
+  }, [duel?.status, duel?.reveal_started_at, triggerNextOrFinish, serverNow])
 
   // ── Answer submission ─────────────────────────────────────────────────────
   const submitAnswer = useCallback(async (choiceIndex) => {
     if (hasAnswered || !duel || duel.status !== 'playing' || !uid) return
     if (!duel.question_started_at) return
 
-    const reactionTimeMs = Date.now() - duel.question_started_at
+    const reactionTimeMs = serverNow() - duel.question_started_at
     setSelectedChoice(choiceIndex)
     setHasAnswered(true)
-    setAnswerTime(reactionTimeMs)
 
     const qi = duel.current_question_index
     try {
       await update(rtdbRef(rtdb, `duels/${duelId}/answers/${qi}`), {
-        [uid]: {
-          uid,
-          selected_choice: choiceIndex,
-          reaction_time_ms: reactionTimeMs,
-        }
+        [uid]: { uid, selected_choice: choiceIndex, reaction_time_ms: reactionTimeMs }
       })
     } catch (e) {
       console.error('submitAnswer error:', e)
     }
-  }, [hasAnswered, duel, uid, duelId])
+  }, [hasAnswered, duel, uid, duelId, serverNow])
 
-  // ── Forfeit (loss) ───────────────────────────────────────────────────────
+  // ── Forfeit (loss) ────────────────────────────────────────────────────────
   const handleForfeit = useCallback(async () => {
     if (actionLoading) return
     setActionLoading(true)
     setConfirmAction(null)
     try {
-      await update(rtdbRef(rtdb, `duels/${duelId}`), {
-        status: 'finished',
-        forfeit_by: uid,
-      })
+      await update(rtdbRef(rtdb, `duels/${duelId}`), { status: 'finished', forfeit_by: uid })
     } catch (e) {
       console.error(e)
       setActionLoading(false)
     }
   }, [duelId, uid, actionLoading])
 
-  // ── Surrender (draw) ─────────────────────────────────────────────────────
+  // ── Surrender (draw) ──────────────────────────────────────────────────────
   const handleSurrender = useCallback(async () => {
     if (actionLoading) return
     setActionLoading(true)
     setConfirmAction(null)
     try {
-      await update(rtdbRef(rtdb, `duels/${duelId}`), {
-        status: 'finished',
-        surrender_by: uid,
-      })
+      await update(rtdbRef(rtdb, `duels/${duelId}`), { status: 'finished', surrender_by: uid })
     } catch (e) {
       console.error(e)
       setActionLoading(false)
     }
   }, [duelId, uid, actionLoading])
 
+  // ── Render guards ─────────────────────────────────────────────────────────
   if (loading || !duel) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -390,17 +370,17 @@ export default function DuelGame() {
     )
   }
 
-  const qi = duel.current_question_index ?? 0
-  const question = duel.questions?.[qi]
-  const players = duel.players || {}
-  const playerUids = Object.keys(players)
-  const myPlayer = players[uid]
+  const qi          = duel.current_question_index ?? 0
+  const question    = duel.questions?.[qi]
+  const players     = duel.players || {}
+  const playerUids  = Object.keys(players)
+  const myPlayer    = players[uid]
   const opponentUid = playerUids.find(p => p !== uid)
   const opponentPlayer = opponentUid ? players[opponentUid] : null
 
-  const isRevealing = duel.status === 'revealing'
+  const isRevealing    = duel.status === 'revealing'
   const currentAnswers = duel.answers?.[qi] || {}
-  const myAnswer = currentAnswers[uid]
+  const myAnswer       = currentAnswers[uid]
   const opponentAnswer = opponentUid ? currentAnswers[opponentUid] : null
 
   const timeLeftSec = Math.ceil(timerPct * (QUESTION_DURATION_MS / 1000))
@@ -410,14 +390,10 @@ export default function DuelGame() {
       return 'bg-gray-900 border border-gray-700 hover:border-primary/60 hover:bg-gray-800 text-white active:scale-95'
     }
     if (!isRevealing && hasAnswered) {
-      // Waiting for reveal — show selection
-      if (i === selectedChoice) {
-        return 'bg-primary/15 border border-primary/50 text-primary'
-      }
+      if (i === selectedChoice) return 'bg-primary/15 border border-primary/50 text-primary'
       return 'bg-gray-900 border border-gray-800 text-gray-600'
     }
-    // Revealing
-    const isCorrect = i === question?.correct
+    const isCorrect  = i === question?.correct
     const wasMyChoice = i === myAnswer?.selected_choice
     if (isCorrect) return 'bg-green-500/15 border border-green-500/60 text-green-300 font-bold'
     if (wasMyChoice && !isCorrect) return 'bg-red-500/15 border border-red-500/60 text-red-400'
@@ -449,7 +425,6 @@ export default function DuelGame() {
       <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">
         <PlayerPill player={myPlayer} score={myPlayer?.score} align="right" />
 
-        {/* Center: counter + timer */}
         <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
           <p className="text-xs text-gray-500 font-mono">{qi + 1}/{duel.total_questions}</p>
           <div className="flex items-center gap-1">
@@ -547,7 +522,7 @@ export default function DuelGame() {
         )}
       </div>
 
-      {/* ── Exit / Surrender bar ──────────────────────────────────────────── */}
+      {/* Exit / Surrender bar */}
       <div className="flex items-center justify-center gap-4 px-4 pb-4 pt-1">
         <button
           onClick={() => setConfirmAction('surrender')}
@@ -580,10 +555,7 @@ export default function DuelGame() {
                   <p className="text-white font-bold text-lg">الخروج من اللعبة؟</p>
                   <p className="text-gray-400 text-sm">ستُحسب خسارة حتى لو كنت متقدم بالنقاط</p>
                 </div>
-                <button
-                  onClick={handleForfeit}
-                  className="w-full py-3 bg-red-500/20 border border-red-500/40 hover:bg-red-500/30 text-red-400 font-bold rounded-2xl text-sm transition-colors"
-                >
+                <button onClick={handleForfeit} className="w-full py-3 bg-red-500/20 border border-red-500/40 hover:bg-red-500/30 text-red-400 font-bold rounded-2xl text-sm transition-colors">
                   تأكيد الخروج
                 </button>
               </>
@@ -593,18 +565,12 @@ export default function DuelGame() {
                   <p className="text-white font-bold text-lg">الاستسلام؟</p>
                   <p className="text-gray-400 text-sm">ستنتهي اللعبة بتعادل لكلا اللاعبَين</p>
                 </div>
-                <button
-                  onClick={handleSurrender}
-                  className="w-full py-3 bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20 text-yellow-400 font-bold rounded-2xl text-sm transition-colors"
-                >
+                <button onClick={handleSurrender} className="w-full py-3 bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20 text-yellow-400 font-bold rounded-2xl text-sm transition-colors">
                   تأكيد التعادل
                 </button>
               </>
             )}
-            <button
-              onClick={() => setConfirmAction(null)}
-              className="w-full py-2 text-gray-500 hover:text-gray-300 text-sm font-bold transition-colors"
-            >
+            <button onClick={() => setConfirmAction(null)} className="w-full py-2 text-gray-500 hover:text-gray-300 text-sm font-bold transition-colors">
               إلغاء
             </button>
           </div>

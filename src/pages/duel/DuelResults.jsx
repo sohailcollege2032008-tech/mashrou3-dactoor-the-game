@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref as rtdbRef, get as rtdbGet } from 'firebase/database'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { recordPlayedQuestions } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
@@ -103,9 +103,10 @@ export default function DuelResults() {
   const { session } = useAuth()
   const uid = session?.uid
 
-  const [duel, setDuel] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [showReview, setShowReview] = useState(false)
+  const [duel, setDuel]               = useState(null)
+  const [loading, setLoading]         = useState(true)
+  const [showReview, setShowReview]   = useState(false)
+  const [playerProfiles, setPlayerProfiles] = useState({}) // uid → Firestore profile
 
   useEffect(() => {
     if (!duelId) return
@@ -113,6 +114,23 @@ export default function DuelResults() {
       const data = snap.val()
       setDuel(data)
       setLoading(false)
+
+      // ── Fetch Firestore profiles for any player with missing/empty nickname ──
+      if (data?.players) {
+        const missingUids = Object.entries(data.players)
+          .filter(([, p]) => !p?.nickname)
+          .map(([u]) => u)
+        if (missingUids.length > 0) {
+          const fetched = {}
+          await Promise.all(missingUids.map(async u => {
+            try {
+              const snap = await getDoc(doc(db, 'profiles', u))
+              if (snap.exists()) fetched[u] = snap.data()
+            } catch { /* ignore */ }
+          }))
+          setPlayerProfiles(fetched)
+        }
+      }
 
       // ── Record played questions in Firestore (cross-device) ─────────────────
       if (data && uid && data.deck_id && Array.isArray(data.questions)) {
@@ -208,18 +226,22 @@ export default function DuelResults() {
     draw_surrender:{ label: 'تعادل بالاستسلام',  color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
   }[outcome] ?? { label: 'انتهت اللعبة', color: 'text-gray-400', bg: 'bg-gray-800 border-gray-700' }
 
-  function PlayerCard({ player, score, isMe }) {
-    if (!player) return null
+  function PlayerCard({ player, playerUid, score, isMe }) {
+    if (!player && !playerUid) return null
+    // Merge RTDB data with Firestore fallback for missing fields
+    const profile  = playerProfiles[playerUid] || {}
+    const nickname = player?.nickname || profile.display_name || 'لاعب'
+    const avatarUrl = player?.avatar_url || profile.avatar_url || ''
     return (
       <div className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border ${isMe ? 'bg-primary/5 border-primary/20' : 'bg-gray-900/60 border-gray-800'}`}>
-        {player.avatar_url ? (
-          <img src={player.avatar_url} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-gray-700" />
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-gray-700" />
         ) : (
           <div className="w-14 h-14 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-xl font-bold text-gray-400">
-            {(player.nickname || '?')[0]}
+            {nickname[0]}
           </div>
         )}
-        <p className="text-white text-sm font-bold text-center max-w-full truncate px-1">{player.nickname}</p>
+        <p className="text-white text-sm font-bold text-center max-w-full truncate px-1">{nickname}</p>
         <p className={`text-2xl font-bold font-mono ${isMe ? 'text-primary' : 'text-white'}`}>{score}</p>
         {isMe && <p className="text-xs text-gray-500">أنت</p>}
       </div>
@@ -241,9 +263,9 @@ export default function DuelResults() {
 
         {/* Players side by side */}
         <div className="flex gap-3">
-          <PlayerCard player={me} score={myScore} isMe={true} />
+          <PlayerCard player={me} playerUid={uid} score={myScore} isMe={true} />
           <div className="flex items-center text-gray-600 font-bold text-lg">vs</div>
-          <PlayerCard player={opponent} score={opponentScore} isMe={false} />
+          <PlayerCard player={opponent} playerUid={opponentUid} score={opponentScore} isMe={false} />
         </div>
 
         {/* Deck info */}
