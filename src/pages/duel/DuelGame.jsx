@@ -155,34 +155,36 @@ export default function DuelGame() {
     transitionInProgressRef.current = true
 
     try {
-      const statusRef = rtdbRef(rtdb, `duels/${duelId}/status`)
-      let iWon = false
-      await runTransaction(statusRef, current => {
-        if (current === 'revealing') {
-          iWon = true
-          const nextQi = (currentDuel.current_question_index ?? 0) + 1
-          if (nextQi >= currentDuel.total_questions) return 'finished'
-          return 'playing'
+      // ── One atomic transaction that updates ALL fields together ──
+      // This prevents the race where status='playing' arrives BEFORE
+      // question_started_at is updated, causing the timer to think 30s
+      // already elapsed on the new question and auto-skip it.
+      const result = await runTransaction(
+        rtdbRef(rtdb, `duels/${duelId}`),
+        current => {
+          if (!current || current.status !== 'revealing') return // abort (undefined = no change)
+
+          const nextQi = (current.current_question_index ?? 0) + 1
+          const isFinished = nextQi >= current.total_questions
+
+          if (isFinished) {
+            return { ...current, status: 'finished', reveal_started_at: null }
+          }
+          return {
+            ...current,
+            status: 'playing',
+            current_question_index: nextQi,
+            question_started_at: Date.now(),
+            reveal_started_at: null,
+          }
         }
-        return current
-      })
+      )
 
-      if (!iWon) {
+      // If transaction was aborted (another client already handled it), do nothing
+      if (!result.committed) {
         transitionInProgressRef.current = false
-        return
       }
-
-      const nextQi = (currentDuel.current_question_index ?? 0) + 1
-      if (nextQi >= currentDuel.total_questions) {
-        // finished — navigation handled by onValue listener
-        return
-      }
-
-      await update(rtdbRef(rtdb, `duels/${duelId}`), {
-        current_question_index: nextQi,
-        question_started_at: Date.now(),
-        reveal_started_at: null,
-      })
+      // Navigation to results is handled by the onValue listener when status='finished'
     } catch (e) {
       console.error('triggerNextOrFinish error:', e)
     } finally {
