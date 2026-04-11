@@ -64,8 +64,9 @@ export default function DuelGame() {
   const [hasAnswered, setHasAnswered] = useState(false)
   const [answerTime, setAnswerTime] = useState(null)
 
-  // Presence
-  const [opponentUid, setOpponentUid] = useState(null)
+  // Presence — watchOpponentUid tracks opponent for presence subscription
+  // (separate from the render-time derived opponentUid computed from duel.players)
+  const [watchOpponentUid, setWatchOpponentUid] = useState(null)
   const [opponentConnected, setOpponentConnected] = useState(true)
   const [disconnectCountdown, setDisconnectCountdown] = useState(null)
 
@@ -93,15 +94,15 @@ export default function DuelGame() {
 
   // ── Watch opponent presence ───────────────────────────────────────────────
   useEffect(() => {
-    if (!duelId || !opponentUid) return
-    const presRef = rtdbRef(rtdb, `duel_presence/${duelId}/${opponentUid}`)
+    if (!duelId || !watchOpponentUid) return
+    const presRef = rtdbRef(rtdb, `duel_presence/${duelId}/${watchOpponentUid}`)
     const unsub = onValue(presRef, snap => {
       const data = snap.val()
       // null means presence not written yet → assume connected
       setOpponentConnected(!data || data.connected !== false)
     })
     return () => unsub()
-  }, [duelId, opponentUid])
+  }, [duelId, watchOpponentUid])
 
   // ── Disconnect countdown → forfeit after FORFEIT_TIMEOUT_S seconds ────────
   useEffect(() => {
@@ -165,10 +166,10 @@ export default function DuelGame() {
       const data = snap.val()
       setDuel(data)
       setLoading(false)
-      // Extract opponent UID once duel has 2 players
+      // Extract opponent UID once duel has 2 players (for presence watch)
       if (data?.players && uid) {
         const oppUid = Object.keys(data.players).find(p => p !== uid)
-        if (oppUid) setOpponentUid(prev => prev ?? oppUid)
+        if (oppUid) setWatchOpponentUid(prev => prev ?? oppUid)
       }
       if (data?.status === 'finished') {
         localStorage.removeItem('activeDuelId')

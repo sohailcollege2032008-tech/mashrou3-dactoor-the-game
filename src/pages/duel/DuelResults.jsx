@@ -108,7 +108,7 @@ export default function DuelResults() {
 
   useEffect(() => {
     if (!duelId) return
-    rtdbGet(rtdbRef(rtdb, `duels/${duelId}`)).then(snap => {
+    rtdbGet(rtdbRef(rtdb, `duels/${duelId}`)).then(async snap => {
       const data = snap.val()
       setDuel(data)
       setLoading(false)
