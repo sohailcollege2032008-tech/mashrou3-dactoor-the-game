@@ -28,10 +28,12 @@ export default function DuelLobby() {
       const data = snap.val()
       setDuel(data)
       setLoading(false)
-      if (data?.status === 'playing' || data?.status === 'revealing') {
+      // Only redirect active players — visitors see "game in progress" message
+      const isPlayer = uid && data?.players && uid in (data?.players || {})
+      if (isPlayer && (data?.status === 'playing' || data?.status === 'revealing')) {
         navigate(`/duel/game/${duelId}`, { replace: true })
       }
-      if (data?.status === 'finished') {
+      if (isPlayer && data?.status === 'finished') {
         navigate(`/duel/results/${duelId}`, { replace: true })
       }
     }, err => {
@@ -196,6 +198,14 @@ export default function DuelLobby() {
         {error && (
           <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm text-center">
             {error}
+          </div>
+        )}
+
+        {/* Game already started — visitor arrived too late */}
+        {isVisitor && duel.status !== 'waiting' && (
+          <div className="px-4 py-4 bg-gray-800/60 border border-gray-700 rounded-2xl text-center space-y-1">
+            <p className="text-white font-bold text-sm">اللعبة جارية بالفعل</p>
+            <p className="text-gray-500 text-xs">لا يمكن الانضمام بعد بدء الدويل</p>
           </div>
         )}
 

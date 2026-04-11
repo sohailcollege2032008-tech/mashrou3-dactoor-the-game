@@ -208,7 +208,12 @@ export default function DuelGame() {
       const qi = currentDuel.current_question_index
       const question = currentDuel.questions?.[qi]
       const answersSnap = await rtdbGet(rtdbRef(rtdb, `duels/${duelId}/answers/${qi}`))
-      const answers = answersSnap.val() || {}
+      const allAnswers  = answersSnap.val() || {}
+      const realPlayers = new Set(Object.keys(currentDuel.players || {}))
+      // Only score answers from the two registered players — ignore any visitor answers
+      const answers = Object.fromEntries(
+        Object.entries(allAnswers).filter(([aUid]) => realPlayers.has(aUid))
+      )
       const scoreUpdates = {}
 
       for (const [aUid, answer] of Object.entries(answers)) {
@@ -294,10 +299,12 @@ export default function DuelGame() {
   // ── Watch answers: both answered → reveal early ───────────────────────────
   useEffect(() => {
     if (!duel || duel.status !== 'playing') return
-    const qi      = duel.current_question_index
-    const answers = duel.answers?.[qi] || {}
+    const qi         = duel.current_question_index
+    const answers    = duel.answers?.[qi] || {}
     const playerUids = Object.keys(duel.players || {})
-    if (playerUids.length >= 2 && Object.keys(answers).length >= playerUids.length) {
+    // Only count answers from real players (ignore any visitor who slipped in)
+    const validAnswerCount = playerUids.filter(p => p in answers).length
+    if (playerUids.length >= 2 && validAnswerCount >= playerUids.length) {
       triggerReveal()
     }
   }, [duel?.answers, duel?.status, duel?.current_question_index, triggerReveal])
