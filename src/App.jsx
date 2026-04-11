@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { useEffect, Component } from 'react'
+import FullscreenButton from './components/FullscreenButton'
 import { useAuthStore } from './stores/authStore'
 import Landing from './pages/Landing'
 import AuthCallback from './pages/AuthCallback'
@@ -51,6 +52,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <BrowserRouter>
+      <FullscreenButton />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
