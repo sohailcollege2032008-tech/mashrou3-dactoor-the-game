@@ -5,7 +5,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { fetchPlayedQuestions, applyDuelConfig } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
-import { Loader2, Copy, Check, Swords, Users, LogOut } from 'lucide-react'
+import { Loader2, Copy, Check, Swords, Users, LogOut, Lock } from 'lucide-react'
 
 export default function DuelLobby() {
   const { duelId } = useParams()
@@ -137,11 +137,32 @@ export default function DuelLobby() {
     )
   }
 
-  const players = duel.players || {}
+  const players    = duel.players || {}
   const playerUids = Object.keys(players)
-  const isCreator = duel.creator_uid === uid
-  const isInDuel = uid && playerUids.includes(uid)
-  const isVisitor = uid && !isInDuel
+  const isCreator  = duel.creator_uid === uid
+  const isInDuel   = uid && playerUids.includes(uid)
+  const isVisitor  = uid && !isInDuel
+
+  // Visitor arrived after game already started → full-screen block
+  if (isVisitor && duel.status !== 'waiting') {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center gap-5" dir="rtl">
+        <div className="w-20 h-20 rounded-3xl bg-gray-900 border border-gray-800 flex items-center justify-center">
+          <Lock size={36} className="text-gray-600" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-xl font-bold text-white">انتهت صلاحية رابط الدعوة</h1>
+          <p className="text-gray-500 text-sm">المباراة بدأت بالفعل ولا يمكن الانضمام</p>
+        </div>
+        <button
+          onClick={() => navigate('/player/decks')}
+          className="px-6 py-3 bg-primary/10 border border-primary/30 text-primary font-bold rounded-2xl text-sm hover:bg-primary/20 transition-colors"
+        >
+          ابدأ دويل جديد
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background text-white flex flex-col items-center justify-center p-6" dir="rtl">
@@ -198,14 +219,6 @@ export default function DuelLobby() {
         {error && (
           <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm text-center">
             {error}
-          </div>
-        )}
-
-        {/* Game already started — visitor arrived too late */}
-        {isVisitor && duel.status !== 'waiting' && (
-          <div className="px-4 py-4 bg-gray-800/60 border border-gray-700 rounded-2xl text-center space-y-1">
-            <p className="text-white font-bold text-sm">اللعبة جارية بالفعل</p>
-            <p className="text-gray-500 text-xs">لا يمكن الانضمام بعد بدء الدويل</p>
           </div>
         )}
 
