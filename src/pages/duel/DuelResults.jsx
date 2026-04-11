@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref as rtdbRef, get as rtdbGet } from 'firebase/database'
-import { rtdb } from '../../lib/firebase'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { Home, ClipboardList, X, Trophy, Minus } from 'lucide-react'
 
@@ -123,6 +124,40 @@ export default function DuelResults() {
           ])]
           localStorage.setItem(key, JSON.stringify(newPlayed))
         } catch { /* ignore */ }
+      }
+
+      // ── Write game history entry to Firestore ─────────────────────────────
+      if (data && uid && duelId) {
+        try {
+          const players = data.players || {}
+          const playerUids = Object.keys(players)
+          const myPlayer = players[uid]
+          const oppUid = playerUids.find(p => p !== uid)
+          const opponent = oppUid ? players[oppUid] : null
+          const myScore = myPlayer?.score ?? 0
+          const opponentScore = opponent?.score ?? 0
+          let outcome = 'tie'
+          if (myScore > opponentScore) outcome = 'win'
+          else if (myScore < opponentScore) outcome = 'lose'
+          if (data.forfeit_by === oppUid) outcome = 'win_forfeit'
+          if (data.forfeit_by === uid) outcome = 'lose_forfeit'
+
+          // Use duelId as document ID to prevent duplicate history entries
+          await setDoc(doc(db, 'profiles', uid, 'game_history', duelId), {
+            type: 'duel',
+            deck_id: data.deck_id || null,
+            deck_title: data.deck_title || '',
+            played_at: serverTimestamp(),
+            opponent_uid: oppUid || null,
+            opponent_name: opponent?.nickname || 'لاعب',
+            my_score: myScore,
+            opponent_score: opponentScore,
+            outcome,
+            total_questions: data.total_questions || 0,
+          })
+        } catch (e) {
+          console.error('Failed to write duel history:', e)
+        }
       }
     }).catch(e => {
       console.error(e)

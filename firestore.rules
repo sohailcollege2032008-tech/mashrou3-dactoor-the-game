@@ -3,8 +3,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     match /profiles/{userId} {
-      allow read:  if request.auth != null;
+      // Any logged-in user can read profiles (for public profile pages)
+      allow read: if request.auth != null;
+      // Only the profile owner can write their own profile
       allow write: if request.auth.uid == userId;
+
+      // Game history subcollection — readable by anyone, writable by owner only
+      match /game_history/{entryId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth.uid == userId;
+      }
     }
 
     match /question_sets/{setId} {

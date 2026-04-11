@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, get, set, runTransaction, onDisconnect } from 'firebase/database'
-import { doc, updateDoc, increment } from 'firebase/firestore'
+import { doc, updateDoc, increment, getDoc, setDoc, serverTimestamp, collection } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
@@ -168,10 +168,48 @@ export default function PlayerGameView() {
       if (data.status === 'finished' && prevStatusRef.current !== 'finished') {
         confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 } })
         const qSetId = data.question_set_id
+        const hostUid = data.host_id
+
         if (qSetId && uid) {
+          // Increment played count
           updateDoc(doc(db, 'profiles', uid), {
             [`played_decks.${qSetId}`]: increment(1)
           }).catch(() => {})
+
+          // ── Write game history entry ──────────────────────────────────────
+          ;(async () => {
+            try {
+              const [deckSnap, hostSnap] = await Promise.all([
+                getDoc(doc(db, 'question_sets', qSetId)),
+                hostUid ? getDoc(doc(db, 'profiles', hostUid)) : Promise.resolve(null),
+              ])
+              const deckData = deckSnap.data() || {}
+              const hostName = hostSnap?.data()?.display_name || 'دكتور'
+              const myScore = data.players?.[uid]?.score ?? 0
+
+              await setDoc(doc(db, 'profiles', uid, 'game_history', roomId), {
+                type: 'competition',
+                deck_id: qSetId,
+                deck_title: deckData.title || qSetId,
+                deck_is_global: deckData.is_global || false,
+                played_at: serverTimestamp(),
+                host_uid: hostUid || null,
+                host_name: hostName,
+                score: myScore,
+                total_questions: deckData.questions?.questions?.length || 0,
+                room_code: roomId,
+              })
+
+              // Track that this host has hosted us (for phone visibility)
+              if (hostUid) {
+                updateDoc(doc(db, 'profiles', uid), {
+                  [`hosted_by.${hostUid}`]: hostName,
+                }).catch(() => {})
+              }
+            } catch (e) {
+              console.error('Failed to write competition history:', e)
+            }
+          })()
         }
       }
 

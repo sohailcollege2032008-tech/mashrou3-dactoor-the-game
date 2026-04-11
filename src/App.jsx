@@ -14,6 +14,7 @@ import PlayerProfile from './pages/player/PlayerProfile'
 import WaitingRoom from './pages/player/WaitingRoom'
 import PlayerGameView from './pages/player/PlayerGameView'
 import DeckBrowser from './pages/player/DeckBrowser'
+import PublicProfile from './pages/player/PublicProfile'
 import DuelLobby from './pages/duel/DuelLobby'
 import DuelGame from './pages/duel/DuelGame'
 import DuelResults from './pages/duel/DuelResults'
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="/player/waiting/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><WaitingRoom /></ProtectedRoute>} />
         <Route path="/player/game/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerGameView /></ProtectedRoute>} />
         <Route path="/player/decks" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DeckBrowser /></ProtectedRoute>} />
+        <Route path="/player/profile/:uid" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PublicProfile /></ProtectedRoute>} />
         <Route path="/duel/lobby/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelLobby /></ProtectedRoute>} />
         <Route path="/duel/game/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelGame /></ProtectedRoute>} />
         <Route path="/duel/results/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelResults /></ProtectedRoute>} />
