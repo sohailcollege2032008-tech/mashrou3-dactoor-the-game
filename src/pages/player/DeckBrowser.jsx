@@ -296,13 +296,18 @@ function BottomSheet({ deck, config, onConfigChange, onClose, profile, session, 
             <p className="text-xs text-gray-500 font-bold">منتظرون الآن ({waitingGames.length})</p>
             {waitingGames.map(game => (
               <div key={game.uid} className="flex items-center gap-3 bg-gray-900/60 border border-gray-800 rounded-2xl p-3">
-                {game.avatar_url ? (
-                  <img src={game.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border border-gray-700 flex-shrink-0" />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-gray-500 text-sm font-bold flex-shrink-0">
-                    {(game.nickname || '?')[0]}
-                  </div>
-                )}
+                <button
+                  onClick={() => navigate(`/player/profile/${game.uid}`)}
+                  className="flex-shrink-0 hover:opacity-80 active:scale-95 transition-all"
+                >
+                  {game.avatar_url ? (
+                    <img src={game.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border border-gray-700" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-gray-500 text-sm font-bold">
+                      {(game.nickname || '?')[0]}
+                    </div>
+                  )}
+                </button>
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-bold truncate">{game.nickname || 'لاعب'}</p>
                   <p className="text-gray-500 text-xs font-mono truncate">{configSummary(game.config)}</p>

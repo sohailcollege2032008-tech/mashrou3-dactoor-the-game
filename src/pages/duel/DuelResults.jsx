@@ -5,7 +5,7 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { recordPlayedQuestions } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
-import { Home, ClipboardList, X, Trophy, Minus } from 'lucide-react'
+import { Home, ClipboardList, X } from 'lucide-react'
 
 // ── Log Review Modal ──────────────────────────────────────────────────────────
 function ReviewModal({ duel, uid, onClose }) {
@@ -218,30 +218,34 @@ export default function DuelResults() {
   if (duel.surrender_by) outcome = 'draw_surrender'
 
   const outcomeConfig = {
-    win:           { label: 'فزت! 🏆',          color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
-    lose:          { label: 'خسرت 😔',           color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
-    tie:           { label: 'تعادل!',             color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
-    win_forfeit:   { label: 'فزت بالانسحاب 🏆',  color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
-    lose_forfeit:  { label: 'خسرت بالانسحاب',    color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
-    draw_surrender:{ label: 'تعادل بالاستسلام',  color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
-  }[outcome] ?? { label: 'انتهت اللعبة', color: 'text-gray-400', bg: 'bg-gray-800 border-gray-700' }
+    win:           { label: 'فزت!',             icon: '🏆', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
+    lose:          { label: 'خسرت',             icon: '😔', color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
+    tie:           { label: 'تعادل!',            icon: '🤝', color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
+    win_forfeit:   { label: 'فزت بالانسحاب',    icon: '🏆', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
+    lose_forfeit:  { label: 'خسرت بالانسحاب',   icon: '🚪', color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
+    draw_surrender:{ label: 'تعادل بالاستسلام', icon: '🤝', color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
+  }[outcome] ?? { label: 'انتهت اللعبة', icon: '', color: 'text-gray-400', bg: 'bg-gray-800 border-gray-700' }
 
   function PlayerCard({ player, playerUid, score, isMe }) {
     if (!player && !playerUid) return null
-    // Merge RTDB data with Firestore fallback for missing fields
-    const profile  = playerProfiles[playerUid] || {}
-    const nickname = player?.nickname || profile.display_name || 'لاعب'
-    const avatarUrl = player?.avatar_url || profile.avatar_url || ''
+    const prof     = playerProfiles[playerUid] || {}
+    const nickname = player?.nickname || prof.display_name || 'لاعب'
+    const avatarUrl = player?.avatar_url || prof.avatar_url || ''
     return (
-      <div className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border ${isMe ? 'bg-primary/5 border-primary/20' : 'bg-gray-900/60 border-gray-800'}`}>
-        {avatarUrl ? (
-          <img src={avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-gray-700" />
-        ) : (
-          <div className="w-14 h-14 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-xl font-bold text-gray-400">
-            {nickname[0]}
-          </div>
-        )}
-        <p className="text-white text-sm font-bold text-center max-w-full truncate px-1">{nickname}</p>
+      <div className={`flex-1 min-w-0 flex flex-col items-center gap-2 p-4 rounded-2xl border ${isMe ? 'bg-primary/5 border-primary/20' : 'bg-gray-900/60 border-gray-800'}`}>
+        <button
+          onClick={() => playerUid && !isMe && navigate(`/player/profile/${playerUid}`)}
+          className={`flex-shrink-0 ${!isMe && playerUid ? 'cursor-pointer hover:opacity-80 active:scale-95 transition-all' : 'cursor-default'}`}
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-gray-700" />
+          ) : (
+            <div className="w-14 h-14 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-xl font-bold text-gray-400">
+              {nickname[0]}
+            </div>
+          )}
+        </button>
+        <p className="text-white text-sm font-bold text-center w-full truncate px-1">{nickname}</p>
         <p className={`text-2xl font-bold font-mono ${isMe ? 'text-primary' : 'text-white'}`}>{score}</p>
         {isMe && <p className="text-xs text-gray-500">أنت</p>}
       </div>
@@ -254,10 +258,8 @@ export default function DuelResults() {
 
         {/* Outcome badge */}
         <div className={`flex items-center justify-center gap-2 py-4 rounded-2xl border ${outcomeConfig.bg}`}>
-          {(outcome === 'win' || outcome === 'win_forfeit') && <Trophy size={24} className="text-yellow-400" />}
-          {(outcome === 'tie' || outcome === 'draw_surrender') && <Minus size={24} className="text-primary" />}
           <span className={`text-2xl font-bold font-display ${outcomeConfig.color}`}>
-            {outcomeConfig.label}
+            {outcomeConfig.icon} {outcomeConfig.label}
           </span>
         </div>
 

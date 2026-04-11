@@ -151,8 +151,14 @@ export default function HostDashboard() {
             <h1 className="text-3xl font-display font-bold text-primary">Host Dashboard</h1>
             <p className="text-gray-400 mt-2 font-sans">Manage your Question Banks and Game Rooms</p>
           </div>
-          <div className="flex items-center gap-4">
-            <Link to="/" className="text-gray-400 hover:text-white transition-colors font-sans">Return Home</Link>
+          <div className="flex items-center gap-3">
+            <Link to="/" className="text-gray-400 hover:text-white transition-colors font-sans text-sm">Return Home</Link>
+            <Link
+              to="/player/decks"
+              className="px-4 py-2 rounded-lg bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 font-bold transition-all text-sm"
+            >
+              ⚔️ Decks
+            </Link>
             <button
               onClick={handleSignOut}
               className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 font-bold transition-all text-sm"
