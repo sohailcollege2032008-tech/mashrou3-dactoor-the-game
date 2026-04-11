@@ -135,6 +135,7 @@ export default function DuelResults() {
           else if (myScore < opponentScore) outcome = 'lose'
           if (data.forfeit_by === oppUid) outcome = 'win_forfeit'
           if (data.forfeit_by === uid) outcome = 'lose_forfeit'
+          if (data.surrender_by) outcome = 'draw_surrender'
 
           // Use duelId as document ID to prevent duplicate history entries
           await setDoc(doc(db, 'profiles', uid, 'game_history', duelId), {
@@ -194,12 +195,18 @@ export default function DuelResults() {
     if (myScore > opponentScore) outcome = 'win'
     else if (myScore < opponentScore) outcome = 'lose'
   }
+  if (duel.forfeit_by === opponentUid) outcome = 'win_forfeit'
+  if (duel.forfeit_by === uid) outcome = 'lose_forfeit'
+  if (duel.surrender_by) outcome = 'draw_surrender'
 
   const outcomeConfig = {
-    win:  { label: 'فزت! 🏆', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
-    lose: { label: 'خسرت 😔', color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
-    tie:  { label: 'تعادل!',   color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
-  }[outcome]
+    win:           { label: 'فزت! 🏆',          color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
+    lose:          { label: 'خسرت 😔',           color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
+    tie:           { label: 'تعادل!',             color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
+    win_forfeit:   { label: 'فزت بالانسحاب 🏆',  color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
+    lose_forfeit:  { label: 'خسرت بالانسحاب',    color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
+    draw_surrender:{ label: 'تعادل بالاستسلام',  color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
+  }[outcome] ?? { label: 'انتهت اللعبة', color: 'text-gray-400', bg: 'bg-gray-800 border-gray-700' }
 
   function PlayerCard({ player, score, isMe }) {
     if (!player) return null
@@ -225,8 +232,8 @@ export default function DuelResults() {
 
         {/* Outcome badge */}
         <div className={`flex items-center justify-center gap-2 py-4 rounded-2xl border ${outcomeConfig.bg}`}>
-          {outcome === 'win' && <Trophy size={24} className="text-yellow-400" />}
-          {outcome === 'tie' && <Minus size={24} className="text-primary" />}
+          {(outcome === 'win' || outcome === 'win_forfeit') && <Trophy size={24} className="text-yellow-400" />}
+          {(outcome === 'tie' || outcome === 'draw_surrender') && <Minus size={24} className="text-primary" />}
           <span className={`text-2xl font-bold font-display ${outcomeConfig.color}`}>
             {outcomeConfig.label}
           </span>

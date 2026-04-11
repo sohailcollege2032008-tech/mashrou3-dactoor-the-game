@@ -1,13 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
 import {
-  ref as rtdbRef, get as rtdbGet, push, set, remove, update
+  ref as rtdbRef, get as rtdbGet, push, set, remove, update, onValue
 } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { fetchPlayedQuestions, applyDuelConfig } from '../../utils/duelUtils'
-import { Search, X, Swords, ChevronDown, ArrowRight, Loader2, BookOpen, Settings2 } from 'lucide-react'
+import { Search, X, Swords, ChevronDown, ArrowRight, Loader2, BookOpen, Settings2, Plus, UserCheck, XCircle } from 'lucide-react'
+
+// ── Config summary helper ─────────────────────────────────────────────────────
+function configSummary(config) {
+  if (!config) return 'إعدادات افتراضية'
+  const parts = []
+  if (config.questionCount) parts.push(`${config.questionCount} سؤال`)
+  else parts.push('كل الأسئلة')
+  if (config.shuffleQuestions || config.questionCount) parts.push('عشوائي')
+  if (config.excludePlayed) parts.push('بدون تكرار')
+  if (config.shuffleAnswers) parts.push('خلط إجابات')
+  return parts.join(' · ')
+}
 
 // ── Toggle ────────────────────────────────────────────────────────────────────
 function Toggle({ value, onChange, disabled }) {
@@ -30,18 +42,176 @@ function Toggle({ value, onChange, disabled }) {
 }
 
 // ── Bottom Sheet ──────────────────────────────────────────────────────────────
-function BottomSheet({ deck, config, onConfigChange, onClose, onDuel, matchmaking }) {
+function BottomSheet({ deck, config, onConfigChange, onClose, profile, session, navigate }) {
+  const uid = session?.uid
+  const deckId = deck.id
+
   const maxQ = deck.question_count || 0
   const countOptions = [null, 5, 10, 15, 20, 25, 30].filter(n => n === null || n < maxQ)
-
-  // If selected count is now >= maxQ (e.g. deck is small), reset to null
   const safeCount = config.questionCount && config.questionCount >= maxQ ? null : config.questionCount
+
+  const [waitingGames, setWaitingGames] = useState([])
+  const [myQueueEntry, setMyQueueEntry] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  // Live queue subscription
+  useEffect(() => {
+    if (!deckId || !uid) return
+    const unsub = onValue(rtdbRef(rtdb, `duel_queue/${deckId}`), snap => {
+      const data = snap.val() || {}
+      const others = []
+      let mine = null
+      for (const [oUid, entry] of Object.entries(data)) {
+        if (oUid === uid) mine = entry
+        else others.push({ uid: oUid, ...entry })
+      }
+      setWaitingGames(others)
+      setMyQueueEntry(mine)
+    })
+    return () => unsub()
+  }, [deckId, uid])
+
+  const isInQueue = !!myQueueEntry
+
+  // ── Create new duel + enter queue ────────────────────────────────────────
+  const handleCreate = async () => {
+    if (loading) return
+    setLoading(true)
+    setError(null)
+    try {
+      const deckDoc = await getDoc(doc(db, 'question_sets', deckId))
+      const rawQuestions = deckDoc.data()?.questions?.questions || []
+
+      const creatorPlayed = await fetchPlayedQuestions(uid, deckId)
+      const creatorPlayedSet = new Set(creatorPlayed)
+
+      const questions = applyDuelConfig(rawQuestions, config, creatorPlayed)
+        .map(q => ({ ...q, played_by_uids: creatorPlayedSet.has(q.question) ? [uid] : [] }))
+
+      if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
+
+      const newDuelRef = push(rtdbRef(rtdb, 'duels'))
+      const duelId = newDuelRef.key
+
+      await set(newDuelRef, {
+        creator_uid: uid,
+        deck_id: deckId,
+        deck_title: deck.title,
+        questions,
+        total_questions: questions.length,
+        config,
+        status: 'waiting',
+        current_question_index: 0,
+        question_started_at: null,
+        reveal_started_at: null,
+        players: {
+          [uid]: {
+            uid,
+            nickname: profile?.display_name || 'لاعب',
+            avatar_url: profile?.avatar_url || '',
+            score: 0,
+          }
+        },
+        answers: {},
+      })
+
+      await set(rtdbRef(rtdb, `duel_queue/${deckId}/${uid}`), {
+        duel_id: duelId,
+        nickname: profile?.display_name || 'لاعب',
+        avatar_url: profile?.avatar_url || '',
+        joined_at: Date.now(),
+        config,
+      })
+
+      navigate(`/duel/lobby/${duelId}`)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || 'حصل خطأ. حاول مرة ثانية.')
+      setLoading(false)
+    }
+  }
+
+  // ── Join a specific waiting duel ──────────────────────────────────────────
+  const handleJoin = async (waitingGame) => {
+    if (loading || isInQueue) return
+    setLoading(true)
+    setError(null)
+    try {
+      const { uid: opponentUid, duel_id: duelId } = waitingGame
+
+      const duelSnap = await rtdbGet(rtdbRef(rtdb, `duels/${duelId}`))
+      const duelData = duelSnap.val()
+      if (!duelData) throw new Error('لم يتم العثور على الدويل')
+
+      const deckDoc = await getDoc(doc(db, 'question_sets', duelData.deck_id))
+      const rawQuestions = deckDoc.data()?.questions?.questions || []
+
+      const [creatorPlayed, joinerPlayed] = await Promise.all([
+        fetchPlayedQuestions(opponentUid, duelData.deck_id),
+        fetchPlayedQuestions(uid, duelData.deck_id),
+      ])
+      const allPlayed = [...new Set([...creatorPlayed, ...joinerPlayed])]
+      const creatorPlayedSet = new Set(creatorPlayed)
+      const joinerPlayedSet = new Set(joinerPlayed)
+
+      const questions = applyDuelConfig(rawQuestions, duelData.config || {}, allPlayed)
+        .map(q => ({
+          ...q,
+          played_by_uids: [
+            ...(creatorPlayedSet.has(q.question) ? [opponentUid] : []),
+            ...(joinerPlayedSet.has(q.question) ? [uid] : []),
+          ]
+        }))
+
+      if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
+
+      await update(rtdbRef(rtdb, `duels/${duelId}`), {
+        [`players/${uid}`]: {
+          uid,
+          nickname: profile?.display_name || 'لاعب',
+          avatar_url: profile?.avatar_url || '',
+          score: 0,
+        },
+        questions,
+        total_questions: questions.length,
+        status: 'playing',
+        question_started_at: Date.now(),
+      })
+
+      await remove(rtdbRef(rtdb, `duel_queue/${deckId}/${opponentUid}`))
+
+      navigate(`/duel/lobby/${duelId}`)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || 'فشل الانضمام. حاول مرة أخرى.')
+      setLoading(false)
+    }
+  }
+
+  // ── Cancel queue + delete waiting duel ───────────────────────────────────
+  const handleCancel = async () => {
+    if (!myQueueEntry || loading) return
+    setLoading(true)
+    try {
+      await remove(rtdbRef(rtdb, `duel_queue/${deckId}/${uid}`))
+      if (myQueueEntry.duel_id) {
+        await remove(rtdbRef(rtdb, `duels/${myQueueEntry.duel_id}`))
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" dir="rtl">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/60"
+        onClick={!isInQueue && !loading ? onClose : undefined}
+      />
       <div className="relative bg-[#0D1321] border-t border-gray-700 rounded-t-2xl p-6 space-y-5 animate-slide-up max-h-[90vh] overflow-y-auto">
-        {/* Handle */}
         <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto -mt-2 mb-2" />
 
         {/* Deck info */}
@@ -51,13 +221,10 @@ function BottomSheet({ deck, config, onConfigChange, onClose, onDuel, matchmakin
             {deck.question_count || 0} سؤال
             {deck.hostName ? ` · ${deck.hostName}` : ''}
           </p>
-          {deck.tags && deck.tags.length > 0 && (
+          {deck.tags?.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3">
               {deck.tags.map(tag => (
-                <span
-                  key={tag}
-                  className="text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-mono"
-                >
+                <span key={tag} className="text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-mono">
                   {tag}
                 </span>
               ))}
@@ -65,14 +232,14 @@ function BottomSheet({ deck, config, onConfigChange, onClose, onDuel, matchmakin
           )}
         </div>
 
-        {/* ── Config ── */}
-        <div className="border border-gray-800 rounded-2xl p-4 space-y-4 bg-gray-900/40">
+        {/* Config (locked while in queue) */}
+        <div className={`border border-gray-800 rounded-2xl p-4 space-y-4 bg-gray-900/40 transition-opacity ${isInQueue ? 'opacity-50 pointer-events-none select-none' : ''}`}>
           <div className="flex items-center gap-2 text-gray-400 text-xs font-bold">
             <Settings2 size={13} />
             إعدادات الدويل
+            {isInQueue && <span className="text-yellow-500 font-mono text-xs mr-auto">مقفل</span>}
           </div>
 
-          {/* Question count */}
           {countOptions.length > 1 && (
             <div>
               <p className="text-gray-400 text-xs font-mono mb-2">عدد الأسئلة</p>
@@ -94,14 +261,13 @@ function BottomSheet({ deck, config, onConfigChange, onClose, onDuel, matchmakin
             </div>
           )}
 
-          {/* Toggles */}
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <span className="text-gray-300 text-sm">ترتيب عشوائي للأسئلة</span>
               <Toggle
                 value={config.shuffleQuestions || !!safeCount}
                 onChange={v => onConfigChange({ ...config, shuffleQuestions: v })}
-                disabled={!!safeCount} // force shuffle if subset selected
+                disabled={!!safeCount}
               />
             </div>
             <div className="flex items-center justify-between gap-3">
@@ -124,32 +290,82 @@ function BottomSheet({ deck, config, onConfigChange, onClose, onDuel, matchmakin
           </div>
         </div>
 
-        {/* Duel button */}
-        <button
-          onClick={onDuel}
-          disabled={matchmaking}
-          className="w-full flex items-center justify-center gap-3 bg-primary text-background font-bold py-4 rounded-2xl text-lg hover:bg-[#00D4FF] transition-colors active:scale-95 disabled:opacity-60"
-        >
-          {matchmaking ? (
-            <>
-              <Loader2 size={20} className="animate-spin" />
-              جاري البحث عن خصم...
-            </>
-          ) : (
-            <>
-              <Swords size={20} />
-              دويل 1v1 ⚔️
-            </>
-          )}
-        </button>
+        {/* Waiting games list */}
+        {waitingGames.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500 font-bold">منتظرون الآن ({waitingGames.length})</p>
+            {waitingGames.map(game => (
+              <div key={game.uid} className="flex items-center gap-3 bg-gray-900/60 border border-gray-800 rounded-2xl p-3">
+                {game.avatar_url ? (
+                  <img src={game.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border border-gray-700 flex-shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-gray-500 text-sm font-bold flex-shrink-0">
+                    {(game.nickname || '?')[0]}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-bold truncate">{game.nickname || 'لاعب'}</p>
+                  <p className="text-gray-500 text-xs font-mono truncate">{configSummary(game.config)}</p>
+                </div>
+                <button
+                  onClick={() => handleJoin(game)}
+                  disabled={loading || isInQueue}
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary font-bold rounded-xl text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <UserCheck size={13} />
+                  انضم
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
-        <button
-          onClick={onClose}
-          disabled={matchmaking}
-          className="w-full py-3 text-gray-500 hover:text-gray-300 transition-colors text-sm font-bold disabled:opacity-40"
-        >
-          إلغاء
-        </button>
+        {/* Error */}
+        {error && (
+          <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm text-center">
+            {error}
+          </div>
+        )}
+
+        {/* Actions */}
+        {isInQueue ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-center gap-2 py-3 bg-primary/5 border border-primary/20 rounded-2xl">
+              <Loader2 size={16} className="animate-spin text-primary" />
+              <span className="text-sm text-gray-400">في انتظار خصم...</span>
+            </div>
+            <button
+              onClick={handleCancel}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 text-red-400 font-bold rounded-2xl text-sm transition-colors disabled:opacity-60"
+            >
+              <XCircle size={16} />
+              إلغاء الانتظار
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleCreate}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 bg-primary text-background font-bold py-4 rounded-2xl text-lg hover:bg-[#00D4FF] transition-colors active:scale-95 disabled:opacity-60"
+          >
+            {loading ? (
+              <><Loader2 size={20} className="animate-spin" /> جاري الإنشاء...</>
+            ) : (
+              <><Plus size={20} /> إنشاء دويل جديد</>
+            )}
+          </button>
+        )}
+
+        {!isInQueue && (
+          <button
+            onClick={!loading ? onClose : undefined}
+            disabled={loading}
+            className="w-full py-3 text-gray-500 hover:text-gray-300 transition-colors text-sm font-bold disabled:opacity-40"
+          >
+            إلغاء
+          </button>
+        )}
       </div>
     </div>
   )
@@ -170,13 +386,10 @@ function DeckCard({ deck, onClick }) {
         {deck.question_count || 0} سؤال
         {deck.hostName ? ` · ${deck.hostName}` : ''}
       </p>
-      {deck.tags && deck.tags.length > 0 && (
+      {deck.tags?.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {deck.tags.slice(0, 4).map(tag => (
-            <span
-              key={tag}
-              className="text-xs bg-primary/10 text-primary/80 border border-primary/15 px-2 py-0.5 rounded-full font-mono"
-            >
+            <span key={tag} className="text-xs bg-primary/10 text-primary/80 border border-primary/15 px-2 py-0.5 rounded-full font-mono">
               {tag}
             </span>
           ))}
@@ -189,118 +402,6 @@ function DeckCard({ deck, onClick }) {
   )
 }
 
-// ── Matchmaking logic ─────────────────────────────────────────────────────────
-async function doMatchmaking({ deck, profile, session, navigate, config }) {
-  const uid = session.uid
-  const deckId = deck.id
-
-  // Check queue
-  const queueRef = rtdbRef(rtdb, `duel_queue/${deckId}`)
-  const queueSnap = await rtdbGet(queueRef)
-  const queueData = queueSnap.val() || {}
-
-  // Filter out self
-  const opponents = Object.entries(queueData).filter(([oUid]) => oUid !== uid)
-
-  if (opponents.length > 0) {
-    // Join existing duel
-    const [opponentUid, opponentEntry] = opponents[0]
-    const duelId = opponentEntry.duel_id
-
-    // Fetch the waiting duel
-    const duelRef = rtdbRef(rtdb, `duels/${duelId}`)
-    const duelSnap = await rtdbGet(duelRef)
-    const duelData = duelSnap.val()
-    if (!duelData) throw new Error('لم يتم العثور على الدويل')
-
-    // Fetch raw questions for the deck
-    const deckDoc = await getDoc(doc(db, 'question_sets', duelData.deck_id))
-    const rawQuestions = deckDoc.data()?.questions?.questions || []
-
-    // Fetch both players' played questions (Firestore, cross-device) and union them
-    const [creatorPlayed, joinerPlayed] = await Promise.all([
-      fetchPlayedQuestions(opponentUid, duelData.deck_id),
-      fetchPlayedQuestions(uid, duelData.deck_id),
-    ])
-    const allPlayed = [...new Set([...creatorPlayed, ...joinerPlayed])]
-
-    // Apply creator's saved config with full union exclusion
-    const questions = applyDuelConfig(rawQuestions, duelData.config || {}, allPlayed)
-    if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
-
-    // Add ourselves + update questions (now with both players' history) + start game
-    await update(rtdbRef(rtdb, `duels/${duelId}`), {
-      [`players/${uid}`]: {
-        uid,
-        nickname: profile?.display_name || 'لاعب',
-        avatar_url: profile?.avatar_url || '',
-        score: 0,
-      },
-      questions,
-      total_questions: questions.length,
-      status: 'playing',
-      question_started_at: Date.now(),
-    })
-
-    // Remove opponent from queue
-    await remove(rtdbRef(rtdb, `duel_queue/${deckId}/${opponentUid}`))
-
-    navigate(`/duel/lobby/${duelId}`)
-  } else {
-    // Create new duel
-    const deckDoc = await getDoc(doc(db, 'question_sets', deckId))
-    const deckFull = deckDoc.data()
-    const rawQuestions = deckFull?.questions?.questions || []
-
-    // Fetch creator's played questions from Firestore (cross-device)
-    const creatorPlayed = await fetchPlayedQuestions(uid, deckId)
-
-    // Apply config with creator's history only (joiner's history added when they join)
-    const questions = applyDuelConfig(rawQuestions, config, creatorPlayed)
-
-    if (questions.length === 0) {
-      throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
-    }
-
-    const newDuelRef = push(rtdbRef(rtdb, 'duels'))
-    const duelId = newDuelRef.key
-
-    const duelData = {
-      creator_uid: uid,
-      deck_id: deckId,
-      deck_title: deck.title,
-      questions,
-      total_questions: questions.length,
-      config,   // stored so joiner can reapply with union of both players' history
-      status: 'waiting',
-      current_question_index: 0,
-      question_started_at: null,
-      reveal_started_at: null,
-      players: {
-        [uid]: {
-          uid,
-          nickname: profile?.display_name || 'لاعب',
-          avatar_url: profile?.avatar_url || '',
-          score: 0,
-        }
-      },
-      answers: {},
-    }
-
-    await set(newDuelRef, duelData)
-
-    // Add self to queue
-    await set(rtdbRef(rtdb, `duel_queue/${deckId}/${uid}`), {
-      duel_id: duelId,
-      nickname: profile?.display_name || 'لاعب',
-      avatar_url: profile?.avatar_url || '',
-      joined_at: Date.now(),
-    })
-
-    navigate(`/duel/lobby/${duelId}`)
-  }
-}
-
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function DeckBrowser() {
   const { session, profile } = useAuth()
@@ -311,12 +412,10 @@ export default function DeckBrowser() {
   const [search, setSearch] = useState('')
   const [activeTag, setActiveTag] = useState(null)
   const [selectedDeck, setSelectedDeck] = useState(null)
-  const [matchmaking, setMatchmaking] = useState(false)
   const [error, setError] = useState(null)
 
-  // Duel config state
   const [duelConfig, setDuelConfig] = useState({
-    questionCount: null,    // null = all
+    questionCount: null,
     shuffleQuestions: true,
     shuffleAnswers: false,
     excludePlayed: false,
@@ -330,7 +429,6 @@ export default function DeckBrowser() {
         const snap = await getDocs(q)
         const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }))
 
-        // Fetch host names
         const hostIds = [...new Set(raw.map(d => d.host_id).filter(Boolean))]
         const hostNames = {}
         await Promise.all(
@@ -344,11 +442,10 @@ export default function DeckBrowser() {
           })
         )
 
-        const enriched = raw.map(d => ({
+        setDecks(raw.map(d => ({
           ...d,
           hostName: d.host_id ? (hostNames[d.host_id] || 'دكتور') : null,
-        }))
-        setDecks(enriched)
+        })))
       } catch (e) {
         setError('فشل تحميل الـ Decks')
         console.error(e)
@@ -359,34 +456,13 @@ export default function DeckBrowser() {
     load()
   }, [])
 
-  // Collect all tags
   const allTags = [...new Set(decks.flatMap(d => d.tags || []))]
 
-  // Filter decks
   const filtered = decks.filter(d => {
     const matchSearch = !search || d.title?.toLowerCase().includes(search.toLowerCase())
     const matchTag = !activeTag || (d.tags || []).includes(activeTag)
     return matchSearch && matchTag
   })
-
-  const handleDuel = useCallback(async () => {
-    if (!selectedDeck || matchmaking) return
-    setMatchmaking(true)
-    setError(null)
-    try {
-      await doMatchmaking({
-        deck: selectedDeck,
-        profile,
-        session,
-        navigate,
-        config: duelConfig,
-      })
-    } catch (e) {
-      console.error(e)
-      setError(e.message || 'حصل خطأ أثناء البحث عن خصم. حاول مرة ثانية.')
-      setMatchmaking(false)
-    }
-  }, [selectedDeck, matchmaking, profile, session, navigate, duelConfig])
 
   return (
     <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl">
@@ -453,7 +529,7 @@ export default function DeckBrowser() {
         )}
       </div>
 
-      {/* Error banner */}
+      {/* Error */}
       {error && (
         <div className="mx-5 mb-3 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm text-center">
           {error}
@@ -475,11 +551,7 @@ export default function DeckBrowser() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {filtered.map(deck => (
-              <DeckCard
-                key={deck.id}
-                deck={deck}
-                onClick={setSelectedDeck}
-              />
+              <DeckCard key={deck.id} deck={deck} onClick={setSelectedDeck} />
             ))}
           </div>
         )}
@@ -491,9 +563,10 @@ export default function DeckBrowser() {
           deck={selectedDeck}
           config={duelConfig}
           onConfigChange={setDuelConfig}
-          onClose={() => !matchmaking && setSelectedDeck(null)}
-          onDuel={handleDuel}
-          matchmaking={matchmaking}
+          onClose={() => setSelectedDeck(null)}
+          profile={profile}
+          session={session}
+          navigate={navigate}
         />
       )}
     </div>

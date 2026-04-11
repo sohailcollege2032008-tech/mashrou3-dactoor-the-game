@@ -5,7 +5,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { fetchPlayedQuestions, applyDuelConfig } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
-import { Loader2, Copy, Check, Swords, Users } from 'lucide-react'
+import { Loader2, Copy, Check, Swords, Users, LogOut } from 'lucide-react'
 
 export default function DuelLobby() {
   const { duelId } = useParams()
@@ -15,6 +15,7 @@ export default function DuelLobby() {
   const [duel, setDuel] = useState(null)
   const [loading, setLoading] = useState(true)
   const [joining, setJoining] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState(null)
 
@@ -23,8 +24,7 @@ export default function DuelLobby() {
   // Subscribe to duel
   useEffect(() => {
     if (!duelId) return
-    const duelRef = rtdbRef(rtdb, `duels/${duelId}`)
-    const unsub = onValue(duelRef, snap => {
+    const unsub = onValue(rtdbRef(rtdb, `duels/${duelId}`), snap => {
       const data = snap.val()
       setDuel(data)
       setLoading(false)
@@ -51,24 +51,32 @@ export default function DuelLobby() {
     })
   }, [inviteLink])
 
+  // ── Join via invite link (visitor) ───────────────────────────────────────
   const joinDuel = useCallback(async () => {
     if (!duel || joining || !uid) return
     setJoining(true)
     setError(null)
     try {
-      // Fetch raw questions for the deck
       const deckDoc = await getDoc(doc(db, 'question_sets', duel.deck_id))
       const rawQuestions = deckDoc.data()?.questions?.questions || []
 
-      // Fetch both players' played questions (Firestore, cross-device) and union them
       const [creatorPlayed, joinerPlayed] = await Promise.all([
         fetchPlayedQuestions(duel.creator_uid, duel.deck_id),
         fetchPlayedQuestions(uid, duel.deck_id),
       ])
       const allPlayed = [...new Set([...creatorPlayed, ...joinerPlayed])]
+      const creatorPlayedSet = new Set(creatorPlayed)
+      const joinerPlayedSet = new Set(joinerPlayed)
 
-      // Apply creator's config with full union exclusion
       const questions = applyDuelConfig(rawQuestions, duel.config || {}, allPlayed)
+        .map(q => ({
+          ...q,
+          played_by_uids: [
+            ...(creatorPlayedSet.has(q.question) ? [duel.creator_uid] : []),
+            ...(joinerPlayedSet.has(q.question) ? [uid] : []),
+          ]
+        }))
+
       if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
 
       await update(rtdbRef(rtdb, `duels/${duelId}`), {
@@ -83,15 +91,28 @@ export default function DuelLobby() {
         status: 'playing',
         question_started_at: Date.now(),
       })
-      // Remove creator from queue
       await remove(rtdbRef(rtdb, `duel_queue/${duel.deck_id}/${duel.creator_uid}`))
       // Navigation happens via onValue listener
     } catch (e) {
       console.error(e)
-      setError('فشل الانضمام. حاول مرة أخرى.')
+      setError(e.message || 'فشل الانضمام. حاول مرة أخرى.')
       setJoining(false)
     }
   }, [duel, joining, uid, duelId, profile])
+
+  // ── Cancel waiting duel (creator only) ───────────────────────────────────
+  const cancelDuel = useCallback(async () => {
+    if (!duel || cancelling || !uid) return
+    setCancelling(true)
+    try {
+      await remove(rtdbRef(rtdb, `duel_queue/${duel.deck_id}/${uid}`))
+      await remove(rtdbRef(rtdb, `duels/${duelId}`))
+      navigate('/player/decks', { replace: true })
+    } catch (e) {
+      console.error(e)
+      setCancelling(false)
+    }
+  }, [duel, cancelling, uid, duelId, navigate])
 
   if (loading) {
     return (
@@ -106,10 +127,7 @@ export default function DuelLobby() {
       <div className="min-h-screen bg-background flex items-center justify-center text-gray-400" dir="rtl">
         <div className="text-center space-y-3">
           <p className="text-lg font-bold">الدويل غير موجود</p>
-          <button
-            onClick={() => navigate('/player/decks')}
-            className="text-primary text-sm hover:underline"
-          >
+          <button onClick={() => navigate('/player/decks')} className="text-primary text-sm hover:underline">
             العودة للـ Decks
           </button>
         </div>
@@ -164,7 +182,6 @@ export default function DuelLobby() {
               )
             })
           )}
-          {/* Waiting slot */}
           {playerUids.length < 2 && (
             <div className="flex items-center gap-3 opacity-40">
               <div className="w-9 h-9 rounded-full bg-gray-800 border border-dashed border-gray-600 flex items-center justify-center">
@@ -182,7 +199,7 @@ export default function DuelLobby() {
           </div>
         )}
 
-        {/* Actions */}
+        {/* Visitor join */}
         {isVisitor && duel.status === 'waiting' && (
           <button
             onClick={joinDuel}
@@ -197,6 +214,7 @@ export default function DuelLobby() {
           </button>
         )}
 
+        {/* Creator waiting */}
         {isInDuel && duel.status === 'waiting' && (
           <div className="space-y-3">
             <div className="flex items-center justify-center gap-2 py-3 text-gray-400">
@@ -218,6 +236,22 @@ export default function DuelLobby() {
                 </div>
                 {copied && <p className="text-xs text-green-400 text-center font-mono">تم النسخ!</p>}
               </div>
+            )}
+
+            {/* Cancel / leave lobby */}
+            {isCreator && (
+              <button
+                onClick={cancelDuel}
+                disabled={cancelling}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 text-red-400 font-bold rounded-2xl text-sm transition-colors disabled:opacity-60"
+              >
+                {cancelling ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <LogOut size={16} />
+                )}
+                إلغاء الدويل
+              </button>
             )}
           </div>
         )}

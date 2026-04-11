@@ -12,7 +12,7 @@ import {
 } from 'firebase/database'
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { Loader2, Timer, WifiOff } from 'lucide-react'
+import { Loader2, Timer, WifiOff, LogOut, Flag } from 'lucide-react'
 
 const QUESTION_DURATION_MS = 30_000
 const REVEAL_DURATION_MS = 3_000
@@ -64,11 +64,14 @@ export default function DuelGame() {
   const [hasAnswered, setHasAnswered] = useState(false)
   const [answerTime, setAnswerTime] = useState(null)
 
-  // Presence — watchOpponentUid tracks opponent for presence subscription
-  // (separate from the render-time derived opponentUid computed from duel.players)
+  // Presence
   const [watchOpponentUid, setWatchOpponentUid] = useState(null)
   const [opponentConnected, setOpponentConnected] = useState(true)
   const [disconnectCountdown, setDisconnectCountdown] = useState(null)
+
+  // Exit / surrender
+  const [confirmAction, setConfirmAction] = useState(null) // 'forfeit' | 'surrender'
+  const [actionLoading, setActionLoading] = useState(false)
 
   // Refs to avoid stale closures
   const duelRef = useRef(null)
@@ -209,11 +212,13 @@ export default function DuelGame() {
 
       for (const [aUid, answer] of Object.entries(answers)) {
         const isCorrect = answer.selected_choice === question.correct
-        const pointsEarned = isCorrect ? 1 : 0
+        // Full 2pts — reduced to 1pt if this player has played this question before
+        const repeated = isCorrect && question.played_by_uids?.includes(aUid)
+        const pointsEarned = isCorrect ? (repeated ? 1 : 2) : 0
         scoreUpdates[`answers/${qi}/${aUid}/is_correct`] = isCorrect
         scoreUpdates[`answers/${qi}/${aUid}/points_earned`] = pointsEarned
         if (isCorrect) {
-          scoreUpdates[`players/${aUid}/score`] = increment(1)
+          scoreUpdates[`players/${aUid}/score`] = increment(pointsEarned)
         }
       }
       scoreUpdates['reveal_started_at'] = Date.now()
@@ -345,6 +350,38 @@ export default function DuelGame() {
     }
   }, [hasAnswered, duel, uid, duelId])
 
+  // ── Forfeit (loss) ───────────────────────────────────────────────────────
+  const handleForfeit = useCallback(async () => {
+    if (actionLoading) return
+    setActionLoading(true)
+    setConfirmAction(null)
+    try {
+      await update(rtdbRef(rtdb, `duels/${duelId}`), {
+        status: 'finished',
+        forfeit_by: uid,
+      })
+    } catch (e) {
+      console.error(e)
+      setActionLoading(false)
+    }
+  }, [duelId, uid, actionLoading])
+
+  // ── Surrender (draw) ─────────────────────────────────────────────────────
+  const handleSurrender = useCallback(async () => {
+    if (actionLoading) return
+    setActionLoading(true)
+    setConfirmAction(null)
+    try {
+      await update(rtdbRef(rtdb, `duels/${duelId}`), {
+        status: 'finished',
+        surrender_by: uid,
+      })
+    } catch (e) {
+      console.error(e)
+      setActionLoading(false)
+    }
+  }, [duelId, uid, actionLoading])
+
   if (loading || !duel) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -450,7 +487,12 @@ export default function DuelGame() {
               {myAnswer ? (
                 <div className={`flex items-center gap-1 text-sm font-bold ${myAnswer.is_correct ? 'text-green-400' : 'text-red-400'}`}>
                   <span>{myAnswer.is_correct ? '✓' : '✗'}</span>
-                  <span className="font-mono text-xs text-gray-400">{myAnswer.reaction_time_ms}ms</span>
+                  {myAnswer.is_correct && myAnswer.points_earned != null && (
+                    <span className={`font-mono text-xs font-bold ${myAnswer.points_earned === 1 ? 'text-yellow-400' : 'text-green-400'}`}>
+                      +{myAnswer.points_earned}
+                    </span>
+                  )}
+                  <span className="font-mono text-xs text-gray-500">{myAnswer.reaction_time_ms}ms</span>
                 </div>
               ) : (
                 <span className="text-gray-600 text-xs">لم تجب</span>
@@ -462,7 +504,12 @@ export default function DuelGame() {
               {opponentAnswer ? (
                 <div className={`flex items-center gap-1 text-sm font-bold ${opponentAnswer.is_correct ? 'text-green-400' : 'text-red-400'}`}>
                   <span>{opponentAnswer.is_correct ? '✓' : '✗'}</span>
-                  <span className="font-mono text-xs text-gray-400">{opponentAnswer.reaction_time_ms}ms</span>
+                  {opponentAnswer.is_correct && opponentAnswer.points_earned != null && (
+                    <span className={`font-mono text-xs font-bold ${opponentAnswer.points_earned === 1 ? 'text-yellow-400' : 'text-green-400'}`}>
+                      +{opponentAnswer.points_earned}
+                    </span>
+                  )}
+                  <span className="font-mono text-xs text-gray-500">{opponentAnswer.reaction_time_ms}ms</span>
                 </div>
               ) : (
                 <span className="text-gray-600 text-xs">لم يجب</span>
@@ -499,6 +546,70 @@ export default function DuelGame() {
           </div>
         )}
       </div>
+
+      {/* ── Exit / Surrender bar ──────────────────────────────────────────── */}
+      <div className="flex items-center justify-center gap-4 px-4 pb-4 pt-1">
+        <button
+          onClick={() => setConfirmAction('surrender')}
+          disabled={actionLoading}
+          className="flex items-center gap-1.5 text-gray-600 hover:text-yellow-400 transition-colors text-xs font-bold disabled:opacity-40"
+        >
+          <Flag size={13} />
+          استسلام (تعادل)
+        </button>
+        <span className="w-px h-4 bg-gray-800" />
+        <button
+          onClick={() => setConfirmAction('forfeit')}
+          disabled={actionLoading}
+          className="flex items-center gap-1.5 text-gray-600 hover:text-red-400 transition-colors text-xs font-bold disabled:opacity-40"
+        >
+          <LogOut size={13} />
+          الخروج (خسارة)
+        </button>
+      </div>
+
+      {/* Confirm overlay */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" dir="rtl">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setConfirmAction(null)} />
+          <div className="relative bg-[#0D1321] border-t border-gray-700 rounded-t-2xl p-6 w-full max-w-sm space-y-4">
+            <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto -mt-2 mb-2" />
+            {confirmAction === 'forfeit' ? (
+              <>
+                <div className="text-center space-y-1">
+                  <p className="text-white font-bold text-lg">الخروج من اللعبة؟</p>
+                  <p className="text-gray-400 text-sm">ستُحسب خسارة حتى لو كنت متقدم بالنقاط</p>
+                </div>
+                <button
+                  onClick={handleForfeit}
+                  className="w-full py-3 bg-red-500/20 border border-red-500/40 hover:bg-red-500/30 text-red-400 font-bold rounded-2xl text-sm transition-colors"
+                >
+                  تأكيد الخروج
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="text-center space-y-1">
+                  <p className="text-white font-bold text-lg">الاستسلام؟</p>
+                  <p className="text-gray-400 text-sm">ستنتهي اللعبة بتعادل لكلا اللاعبَين</p>
+                </div>
+                <button
+                  onClick={handleSurrender}
+                  className="w-full py-3 bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20 text-yellow-400 font-bold rounded-2xl text-sm transition-colors"
+                >
+                  تأكيد التعادل
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setConfirmAction(null)}
+              className="w-full py-2 text-gray-500 hover:text-gray-300 text-sm font-bold transition-colors"
+            >
+              إلغاء
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
