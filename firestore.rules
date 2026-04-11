@@ -13,6 +13,14 @@ service cloud.firestore {
         allow read: if request.auth != null;
         allow write: if request.auth.uid == userId;
       }
+
+      // Played questions per deck — readable by ANY authenticated user so that
+      // the opponent can fetch the other player's history for combined exclusion.
+      // Only the owner can write their own played questions.
+      match /played_questions/{deckId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth.uid == userId;
+      }
     }
 
     match /question_sets/{setId} {

@@ -6,6 +6,7 @@ import {
 } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
+import { fetchPlayedQuestions, applyDuelConfig } from '../../utils/duelUtils'
 import { Search, X, Swords, ChevronDown, ArrowRight, Loader2, BookOpen, Settings2 } from 'lucide-react'
 
 // ── Toggle ────────────────────────────────────────────────────────────────────
@@ -113,7 +114,7 @@ function BottomSheet({ deck, config, onConfigChange, onClose, onDuel, matchmakin
             <div className="flex items-center justify-between gap-3">
               <div>
                 <span className="text-gray-300 text-sm">تخطي الأسئلة المحلولة سابقاً</span>
-                <p className="text-gray-600 text-xs font-mono mt-0.5">على هذا الجهاز</p>
+                <p className="text-gray-600 text-xs font-mono mt-0.5">من أي جهاز · للاعبَين معاً</p>
               </div>
               <Toggle
                 value={config.excludePlayed}
@@ -188,46 +189,6 @@ function DeckCard({ deck, onClick }) {
   )
 }
 
-// ── Apply config to questions ─────────────────────────────────────────────────
-function prepareQuestions(rawQuestions, config, deckId, uid) {
-  let questions = [...rawQuestions]
-
-  // Exclude previously played questions (stored in localStorage per device)
-  if (config.excludePlayed && deckId && uid) {
-    try {
-      const played = new Set(
-        JSON.parse(localStorage.getItem(`played_qs_${deckId}_${uid}`) || '[]')
-      )
-      const filtered = questions.filter(q => !played.has(q.question))
-      // Only apply filter if there are enough unplayed questions left
-      if (filtered.length >= 3) questions = filtered
-    } catch { /* ignore */ }
-  }
-
-  // Shuffle questions (always shuffle if selecting a subset)
-  const mustShuffle = config.shuffleQuestions || (config.questionCount && config.questionCount < questions.length)
-  if (mustShuffle) {
-    questions = questions.sort(() => Math.random() - 0.5)
-  }
-
-  // Slice to desired count
-  if (config.questionCount && config.questionCount < questions.length) {
-    questions = questions.slice(0, config.questionCount)
-  }
-
-  // Shuffle answer choices
-  if (config.shuffleAnswers) {
-    questions = questions.map(q => {
-      if (!Array.isArray(q.choices) || q.correct == null) return q
-      const correctAnswer = q.choices[q.correct]
-      const shuffled = [...q.choices].sort(() => Math.random() - 0.5)
-      return { ...q, choices: shuffled, correct: shuffled.indexOf(correctAnswer) }
-    })
-  }
-
-  return questions
-}
-
 // ── Matchmaking logic ─────────────────────────────────────────────────────────
 async function doMatchmaking({ deck, profile, session, navigate, config }) {
   const uid = session.uid
@@ -252,7 +213,22 @@ async function doMatchmaking({ deck, profile, session, navigate, config }) {
     const duelData = duelSnap.val()
     if (!duelData) throw new Error('لم يتم العثور على الدويل')
 
-    // Add ourselves + start game
+    // Fetch raw questions for the deck
+    const deckDoc = await getDoc(doc(db, 'question_sets', duelData.deck_id))
+    const rawQuestions = deckDoc.data()?.questions?.questions || []
+
+    // Fetch both players' played questions (Firestore, cross-device) and union them
+    const [creatorPlayed, joinerPlayed] = await Promise.all([
+      fetchPlayedQuestions(opponentUid, duelData.deck_id),
+      fetchPlayedQuestions(uid, duelData.deck_id),
+    ])
+    const allPlayed = [...new Set([...creatorPlayed, ...joinerPlayed])]
+
+    // Apply creator's saved config with full union exclusion
+    const questions = applyDuelConfig(rawQuestions, duelData.config || {}, allPlayed)
+    if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
+
+    // Add ourselves + update questions (now with both players' history) + start game
     await update(rtdbRef(rtdb, `duels/${duelId}`), {
       [`players/${uid}`]: {
         uid,
@@ -260,6 +236,8 @@ async function doMatchmaking({ deck, profile, session, navigate, config }) {
         avatar_url: profile?.avatar_url || '',
         score: 0,
       },
+      questions,
+      total_questions: questions.length,
       status: 'playing',
       question_started_at: Date.now(),
     })
@@ -274,8 +252,11 @@ async function doMatchmaking({ deck, profile, session, navigate, config }) {
     const deckFull = deckDoc.data()
     const rawQuestions = deckFull?.questions?.questions || []
 
-    // Apply config (shuffle, slice, exclude played)
-    const questions = prepareQuestions(rawQuestions, config, deckId, uid)
+    // Fetch creator's played questions from Firestore (cross-device)
+    const creatorPlayed = await fetchPlayedQuestions(uid, deckId)
+
+    // Apply config with creator's history only (joiner's history added when they join)
+    const questions = applyDuelConfig(rawQuestions, config, creatorPlayed)
 
     if (questions.length === 0) {
       throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
@@ -290,6 +271,7 @@ async function doMatchmaking({ deck, profile, session, navigate, config }) {
       deck_title: deck.title,
       questions,
       total_questions: questions.length,
+      config,   // stored so joiner can reapply with union of both players' history
       status: 'waiting',
       current_question_index: 0,
       question_started_at: null,

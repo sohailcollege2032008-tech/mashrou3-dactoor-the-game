@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ref as rtdbRef, get as rtdbGet } from 'firebase/database'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
+import { recordPlayedQuestions } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
 import { Home, ClipboardList, X, Trophy, Minus } from 'lucide-react'
 
@@ -113,17 +114,10 @@ export default function DuelResults() {
       setDuel(data)
       setLoading(false)
 
-      // ── Track played questions in localStorage for "exclude played" feature ──
+      // ── Record played questions in Firestore (cross-device) ─────────────────
       if (data && uid && data.deck_id && Array.isArray(data.questions)) {
-        const key = `played_qs_${data.deck_id}_${uid}`
-        try {
-          const existing = JSON.parse(localStorage.getItem(key) || '[]')
-          const newPlayed = [...new Set([
-            ...existing,
-            ...data.questions.map(q => q.question).filter(Boolean),
-          ])]
-          localStorage.setItem(key, JSON.stringify(newPlayed))
-        } catch { /* ignore */ }
+        const playedTexts = data.questions.map(q => q.question).filter(Boolean)
+        recordPlayedQuestions(uid, data.deck_id, playedTexts)
       }
 
       // ── Write game history entry to Firestore ─────────────────────────────

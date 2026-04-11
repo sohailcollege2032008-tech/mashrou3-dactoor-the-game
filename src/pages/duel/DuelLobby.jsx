@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref as rtdbRef, onValue, update, remove } from 'firebase/database'
-import { rtdb } from '../../lib/firebase'
+import { doc, getDoc } from 'firebase/firestore'
+import { rtdb, db } from '../../lib/firebase'
+import { fetchPlayedQuestions, applyDuelConfig } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
 import { Loader2, Copy, Check, Swords, Users } from 'lucide-react'
 
@@ -54,6 +56,21 @@ export default function DuelLobby() {
     setJoining(true)
     setError(null)
     try {
+      // Fetch raw questions for the deck
+      const deckDoc = await getDoc(doc(db, 'question_sets', duel.deck_id))
+      const rawQuestions = deckDoc.data()?.questions?.questions || []
+
+      // Fetch both players' played questions (Firestore, cross-device) and union them
+      const [creatorPlayed, joinerPlayed] = await Promise.all([
+        fetchPlayedQuestions(duel.creator_uid, duel.deck_id),
+        fetchPlayedQuestions(uid, duel.deck_id),
+      ])
+      const allPlayed = [...new Set([...creatorPlayed, ...joinerPlayed])]
+
+      // Apply creator's config with full union exclusion
+      const questions = applyDuelConfig(rawQuestions, duel.config || {}, allPlayed)
+      if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
+
       await update(rtdbRef(rtdb, `duels/${duelId}`), {
         [`players/${uid}`]: {
           uid,
@@ -61,6 +78,8 @@ export default function DuelLobby() {
           avatar_url: profile?.avatar_url || '',
           score: 0,
         },
+        questions,
+        total_questions: questions.length,
         status: 'playing',
         question_started_at: Date.now(),
       })
