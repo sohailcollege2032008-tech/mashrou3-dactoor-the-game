@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react'
+import MathText from '../common/MathText'
 import { doc, updateDoc } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '../../lib/firebase'
@@ -282,9 +283,13 @@ const QuestionItem = memo(function QuestionItem({
         </span>
 
         <div className="flex-1 min-w-0">
-          <p className="text-white font-medium text-sm leading-snug line-clamp-2">{q.question}</p>
+          <p className="text-white font-medium text-sm leading-snug line-clamp-2">
+            <MathText text={q.question} />
+          </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <span className="text-xs text-green-400 font-mono truncate max-w-[160px]">{correctLabel}</span>
+            <span className="text-xs text-green-400 font-mono truncate max-w-[160px]">
+              <MathText text={correctLabel} />
+            </span>
             {hasImage && (
               <span className="flex items-center gap-1 text-xs text-blue-400">
                 <Image size={10} /> صورة
@@ -337,7 +342,9 @@ const QuestionItem = memo(function QuestionItem({
                 }`}
               >
                 <span className="font-bold font-mono w-5 flex-shrink-0">{String.fromCharCode(65 + ci)}</span>
-                <span className="flex-1 min-w-0">{choice}</span>
+                <span className="flex-1 min-w-0">
+                  <MathText text={choice} />
+                </span>
                 {ci === q.correct && <span className="text-green-500 text-xs font-bold ml-auto">✓</span>}
               </div>
             ))}

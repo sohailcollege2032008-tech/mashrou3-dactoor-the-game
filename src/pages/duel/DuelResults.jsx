@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import MathText from '../../components/common/MathText'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref as rtdbRef, get as rtdbGet } from 'firebase/database'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
@@ -42,13 +43,17 @@ function ReviewModal({ duel, uid, onClose }) {
                   <span className="w-6 h-6 rounded-full bg-gray-800 text-gray-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
                     {qi + 1}
                   </span>
-                  <p dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-white text-sm font-medium leading-snug">{question.question}</p>
+                  <p dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-white text-sm font-medium leading-snug">
+                    <MathText text={question.question} dir={duel.force_rtl ? 'rtl' : 'auto'} />
+                  </p>
                 </div>
 
                 {/* Correct answer */}
                 <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-xl">
                   <span className="text-green-500 font-bold text-sm">✓</span>
-                  <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-green-300 text-sm font-medium">{correctChoice}</span>
+                  <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-green-300 text-sm font-medium">
+                    <MathText text={correctChoice} dir={duel.force_rtl ? 'rtl' : 'auto'} />
+                  </span>
                   <span className="text-xs text-green-600 font-mono mr-auto">الإجابة الصحيحة</span>
                 </div>
 
@@ -60,7 +65,9 @@ function ReviewModal({ duel, uid, onClose }) {
                       <div className={`px-3 py-2 rounded-xl border text-sm ${myAnswer.is_correct ? 'bg-green-500/10 border-green-500/30 text-green-300' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold">{myAnswer.is_correct ? '✓' : '✗'}</span>
-                          <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="leading-snug truncate">{question.choices?.[myAnswer.selected_choice] ?? '—'}</span>
+                          <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="leading-snug truncate">
+                            <MathText text={question.choices?.[myAnswer.selected_choice] ?? '—'} dir={duel.force_rtl ? 'rtl' : 'auto'} />
+                          </span>
                         </div>
                         <p className="text-xs font-mono mt-0.5 opacity-60">{myAnswer.reaction_time_ms}ms</p>
                       </div>
@@ -76,7 +83,9 @@ function ReviewModal({ duel, uid, onClose }) {
                       <div className={`px-3 py-2 rounded-xl border text-sm ${opponentAnswer.is_correct ? 'bg-green-500/10 border-green-500/30 text-green-300' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold">{opponentAnswer.is_correct ? '✓' : '✗'}</span>
-                          <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="leading-snug truncate">{question.choices?.[opponentAnswer.selected_choice] ?? '—'}</span>
+                          <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="leading-snug truncate">
+                            <MathText text={question.choices?.[opponentAnswer.selected_choice] ?? '—'} dir={duel.force_rtl ? 'rtl' : 'auto'} />
+                          </span>
                         </div>
                         <p className="text-xs font-mono mt-0.5 opacity-60">{opponentAnswer.reaction_time_ms}ms</p>
                       </div>

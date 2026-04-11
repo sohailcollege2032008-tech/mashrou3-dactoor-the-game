@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react'
+import MathText from '../common/MathText'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
@@ -61,7 +62,8 @@ RULES:
 5. Preserve the original wording of questions and choices exactly as written.
 6. If choices are labeled A/B/C/D or 1/2/3/4, remove the labels and just keep the text.
 7. Set "needs_image" to true if the question refers to a figure, image, photograph, diagram, graph, table, or any visual element that is required to answer correctly. Set to false otherwise.
-8. Return ONLY the JSON object. No markdown backticks, no commentary.`
+8. Return ONLY the JSON object. No markdown backticks, no commentary.
+9. If you encounter a complex mathematical formula, equation, syntax, or expression that cannot be clearly expressed in plain text, use MathML format (e.g., <math>...</math>) to represent it within the question or choice text. Ensure the MathML is valid and properly closed.`
 
 // ── Questions preview ──────────────────────────────────────────────────────────
 function QuestionsPreview({ data }) {
@@ -101,12 +103,14 @@ function QuestionsPreview({ data }) {
       <div className="space-y-2 max-h-48 overflow-y-auto">
         {data.questions.slice(0, 5).map((q, i) => (
           <div key={i} className="bg-gray-700/50 rounded-lg p-3">
-            <p className="text-gray-200 text-sm font-bold mb-1 line-clamp-2">{i + 1}. {q.question}</p>
+            <p className="text-gray-200 text-sm font-bold mb-1 line-clamp-2">
+              {i + 1}. <MathText text={q.question} />
+            </p>
             <div className="flex flex-wrap gap-1">
               {q.choices.map((c, ci) => (
                 <span key={ci} className={`text-xs px-2 py-0.5 rounded font-mono ${
                   ci === q.correct ? 'bg-green-500/20 text-green-400 border border-green-500/40' : 'bg-gray-600/50 text-gray-400'
-                }`}>{c}</span>
+                }`}>{ci === q.correct ? '✅ ' : ''}<MathText text={c} /></span>
               ))}
             </div>
           </div>

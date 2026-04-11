@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
+import MathText from '../../components/common/MathText'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, update, get, set, onDisconnect } from 'firebase/database'
 import { doc, getDoc } from 'firebase/firestore'
@@ -1162,7 +1163,9 @@ export default function HostGameRoom() {
                 </div>
               )}
 
-              <h2 dir={room.force_rtl ? 'rtl' : 'auto'} className="text-2xl font-bold mb-6">{currentQ.question}</h2>
+              <h2 dir={room.force_rtl ? 'rtl' : 'auto'} className="text-2xl font-bold mb-6">
+                <MathText text={currentQ.question} dir={room.force_rtl ? 'rtl' : 'auto'} />
+              </h2>
 
               {currentQ.image_url && (
                 <div className="mb-5">
@@ -1180,7 +1183,9 @@ export default function HostGameRoom() {
                         ? isCorrect ? 'border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,255,255,0.15)]' : 'border-gray-700 bg-gray-800 opacity-50'
                         : 'border-gray-700 bg-gray-800'
                     }`}>
-                      <span dir={room.force_rtl ? 'rtl' : 'auto'} className={isRevealPhase && isCorrect ? 'font-bold text-primary' : ''}>{choice}</span>
+                      <span dir={room.force_rtl ? 'rtl' : 'auto'} className={isRevealPhase && isCorrect ? 'font-bold text-primary' : ''}>
+                        <MathText text={choice} dir={room.force_rtl ? 'rtl' : 'auto'} />
+                      </span>
                       <span className="font-mono text-lg font-bold ml-3 flex-shrink-0">{count}</span>
                     </div>
                   )
