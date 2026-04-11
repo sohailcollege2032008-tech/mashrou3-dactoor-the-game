@@ -178,15 +178,16 @@ export default function PublicProfile() {
     )
   }
 
-  // Determine if phone should be shown:
-  // 1. This is the viewer's own profile
-  // 2. phone_visible is true
-  // 3. Viewer is in the target's hosted_by map (host who has hosted this player)
+  // Phone visibility rules:
+  // - Own profile → always show
+  // - Viewer is a host who hosted this player → always show (regardless of toggle)
+  // - phone_visible=true → show to everyone (including other students)
+  // - Otherwise → hidden
   const viewerIsHost = viewerUid && profile.hosted_by?.[viewerUid]
   const showPhone = profile.phone && (
     isOwnProfile ||
-    profile.phone_visible === true ||
-    !!viewerIsHost
+    !!viewerIsHost ||
+    profile.phone_visible === true
   )
 
   // Stats
@@ -255,7 +256,7 @@ export default function PublicProfile() {
               <p className="text-white font-mono font-bold">{profile.phone}</p>
             </div>
             {viewerIsHost && !profile.phone_visible && (
-              <span className="mr-auto text-xs text-gray-600 font-mono">(مرئي لك كهوست)</span>
+              <span className="mr-auto text-xs text-gray-600 font-mono">(مرئي للدكاترة فقط)</span>
             )}
           </div>
         )}

@@ -17,12 +17,16 @@ function Toggle({ value, onChange }) {
     <button
       dir="ltr"
       onClick={() => onChange(!value)}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-        value ? 'bg-primary' : 'bg-gray-700'
+      className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-all duration-300 shadow-inner ${
+        value
+          ? 'bg-primary shadow-primary/30'
+          : 'bg-gray-700/80'
       }`}
     >
-      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-        value ? 'translate-x-5' : 'translate-x-0.5'
+      <span className={`inline-block h-5 w-5 transform rounded-full shadow-md transition-all duration-300 ${
+        value
+          ? 'translate-x-6 bg-white'
+          : 'translate-x-1 bg-gray-400'
       }`} />
     </button>
   )
@@ -303,13 +307,30 @@ export default function PlayerProfile() {
               />
 
               {/* Phone visibility toggle */}
-              <div className="flex items-center justify-between px-4 py-3 bg-gray-800/60 border border-gray-700 rounded-xl">
-                <div className="flex items-center gap-2">
-                  {profile?.phone_visible ? <Eye size={14} className="text-primary" /> : <EyeOff size={14} className="text-gray-500" />}
+              <div className={`flex items-center justify-between px-4 py-3.5 rounded-2xl border transition-all duration-300 ${
+                profile?.phone_visible
+                  ? 'bg-primary/5 border-primary/25'
+                  : 'bg-gray-800/40 border-gray-700/60'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${
+                    profile?.phone_visible ? 'bg-primary/15' : 'bg-gray-700/50'
+                  }`}>
+                    {profile?.phone_visible
+                      ? <Eye size={15} className="text-primary" />
+                      : <EyeOff size={15} className="text-gray-500" />
+                    }
+                  </div>
                   <div>
-                    <p className="text-sm text-gray-300 font-bold">إظهار رقم الهاتف</p>
-                    <p className="text-xs text-gray-600">
-                      {profile?.phone_visible ? 'مرئي لمن استضافك' : 'مخفي — لن يراه أحد'}
+                    <p className={`text-sm font-bold transition-colors duration-300 ${
+                      profile?.phone_visible ? 'text-white' : 'text-gray-400'
+                    }`}>
+                      إظهار رقم الهاتف للطلاب
+                    </p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      {profile?.phone_visible
+                        ? 'الطلاب الآخرين يمكنهم رؤيته في ملفك'
+                        : 'الدكاترة يرونه دائماً · الطلاب لا'}
                     </p>
                   </div>
                 </div>
