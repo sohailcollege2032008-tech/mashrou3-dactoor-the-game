@@ -100,6 +100,7 @@ export default function HostDashboard() {
           question_set_id: bank.id,
           title: roomTitle,
           questions: bank.questions,
+          force_rtl: bank.force_rtl || false,
           status: 'lobby',
           current_question_index: 0,
           question_started_at: null,

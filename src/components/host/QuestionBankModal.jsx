@@ -360,6 +360,7 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
   // Global deck settings
   const [isGlobal, setIsGlobal]         = useState(bank.is_global || false)
   const [tags, setTags]                 = useState((bank.tags || []).join(', '))
+  const [forceRtl, setForceRtl]         = useState(bank.force_rtl || false)
   const [savingGlobal, setSavingGlobal] = useState(false)
 
   const saveGlobalSettings = async () => {
@@ -372,6 +373,7 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
       await updateDoc(doc(db, 'question_sets', bank.id), {
         is_global: isGlobal,
         tags: tagsArray,
+        force_rtl: forceRtl,
       })
     } catch (e) {
       alert('فشل الحفظ: ' + e.message)
@@ -458,8 +460,10 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
         </div>
 
         {/* Global Deck Settings */}
-        <div className="px-6 py-4 border-b border-gray-800 flex-shrink-0 bg-gray-900/30">
-          <div className="flex items-center justify-between mb-3">
+        <div className="px-6 py-4 border-b border-gray-800 flex-shrink-0 bg-gray-900/30 space-y-3">
+
+          {/* is_global row */}
+          <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-gray-300">عام (Deck مرئي للطلاب)</span>
             <button
               onClick={() => setIsGlobal(prev => !prev)}
@@ -468,32 +472,41 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
               <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isGlobal ? 'left-5.5 right-0.5' : 'left-0.5'}`} />
             </button>
           </div>
+
+          {/* Tags row (only when global) */}
           {isGlobal && (
-            <div className="flex items-center gap-2">
-              <input
-                value={tags}
-                onChange={e => setTags(e.target.value)}
-                placeholder="أناتومي، فيزيولوجي، ..."
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-gray-600"
-              />
-              <button
-                onClick={saveGlobalSettings}
-                disabled={savingGlobal}
-                className="px-4 py-2 bg-primary text-background font-bold text-sm rounded-lg hover:bg-[#00D4FF] transition-colors disabled:opacity-50 flex-shrink-0"
-              >
-                {savingGlobal ? '...' : 'حفظ'}
-              </button>
+            <input
+              value={tags}
+              onChange={e => setTags(e.target.value)}
+              placeholder="أناتومي، فيزيولوجي، ..."
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-gray-600"
+            />
+          )}
+
+          {/* force_rtl row */}
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm font-bold text-gray-300">اتجاه النص: RTL إجباري</span>
+              <p className="text-xs text-gray-600 mt-0.5 font-mono">
+                {forceRtl ? 'النص دايماً من اليمين' : 'تلقائي (عربي RTL · إنجليزي LTR)'}
+              </p>
             </div>
-          )}
-          {!isGlobal && (
             <button
-              onClick={saveGlobalSettings}
-              disabled={savingGlobal}
-              className="text-xs text-gray-600 hover:text-gray-400 transition-colors disabled:opacity-50"
+              onClick={() => setForceRtl(prev => !prev)}
+              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${forceRtl ? 'bg-primary' : 'bg-gray-700'}`}
             >
-              {savingGlobal ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${forceRtl ? 'left-5.5 right-0.5' : 'left-0.5'}`} />
             </button>
-          )}
+          </div>
+
+          {/* Save button */}
+          <button
+            onClick={saveGlobalSettings}
+            disabled={savingGlobal}
+            className="text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
+          >
+            {savingGlobal ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+          </button>
         </div>
 
         {/* Questions list */}

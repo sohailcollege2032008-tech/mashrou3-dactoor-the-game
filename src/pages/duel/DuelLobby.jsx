@@ -173,7 +173,7 @@ export default function DuelLobby() {
           <div className="w-16 h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mx-auto">
             <Swords size={28} className="text-primary" />
           </div>
-          <h1 className="text-xl font-bold font-display">{duel.deck_title}</h1>
+          <h1 dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-xl font-bold font-display">{duel.deck_title}</h1>
           <p className="text-gray-400 text-sm font-mono">{duel.total_questions} سؤال · دويل 1v1</p>
         </div>
 

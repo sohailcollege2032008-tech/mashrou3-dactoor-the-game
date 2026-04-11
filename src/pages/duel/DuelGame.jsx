@@ -451,7 +451,7 @@ export default function DuelGame() {
       {/* Question */}
       <div className="flex-1 flex flex-col px-4 pt-4 pb-4 gap-4 overflow-y-auto">
         <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5">
-          <p className="text-white font-bold text-base leading-relaxed text-center">{question?.question}</p>
+          <p dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-white font-bold text-base leading-relaxed text-center">{question?.question}</p>
           {question?.image_url && (
             <img
               src={question.image_url}
@@ -512,7 +512,7 @@ export default function DuelGame() {
               <span className="w-7 h-7 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-xs font-bold flex-shrink-0 font-mono">
                 {String.fromCharCode(65 + i)}
               </span>
-              <span className="flex-1 text-sm font-medium leading-snug">{choice}</span>
+              <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="flex-1 text-sm font-medium leading-snug">{choice}</span>
               {isRevealing && i === question?.correct && (
                 <span className="text-green-500 font-bold flex-shrink-0">✓</span>
               )}

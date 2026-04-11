@@ -600,7 +600,7 @@ export default function PlayerGameView() {
               <span className="text-primary font-bold text-xs tracking-widest uppercase block">
                 سؤال {room.current_question_index + 1} / {room.questions.questions.length}
               </span>
-              <p className={`text-white font-bold ${questionFontClass(currentQ.question)} leading-snug`}>
+              <p dir={room.force_rtl ? 'rtl' : 'auto'} className={`text-white font-bold ${questionFontClass(currentQ.question)} leading-snug`}>
                 {currentQ.question}
               </p>
               {currentQ.image_url && (
@@ -621,7 +621,7 @@ export default function PlayerGameView() {
                     <span className="w-8 h-8 rounded-lg bg-gray-700 group-hover:bg-primary/20 text-gray-300 group-hover:text-primary font-bold flex-shrink-0 flex items-center justify-center text-sm transition-colors">
                       {String.fromCharCode(65 + idx)}
                     </span>
-                    <span className="text-white font-medium text-sm leading-snug">{choice}</span>
+                    <span dir={room.force_rtl ? 'rtl' : 'auto'} className="text-white font-medium text-sm leading-snug">{choice}</span>
                   </button>
                 ))}
               </div>
@@ -641,7 +641,7 @@ export default function PlayerGameView() {
                         }`}>
                           {String.fromCharCode(65 + idx)}
                         </span>
-                        <span className={`font-medium text-sm leading-snug ${isPicked ? 'text-white' : 'text-gray-400'}`}>
+                        <span dir={room.force_rtl ? 'rtl' : 'auto'} className={`font-medium text-sm leading-snug ${isPicked ? 'text-white' : 'text-gray-400'}`}>
                           {choice}
                         </span>
                         {isPicked && <Zap size={13} className="ml-auto flex-shrink-0 text-primary" fill="currentColor" />}
@@ -669,7 +669,7 @@ export default function PlayerGameView() {
 
             {/* Question */}
             <div className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0 space-y-2">
-              <p className={`text-gray-300 font-medium ${questionFontClass(currentQ.question)} leading-snug`}>
+              <p dir={room.force_rtl ? 'rtl' : 'auto'} className={`text-gray-300 font-medium ${questionFontClass(currentQ.question)} leading-snug`}>
                 {currentQ.question}
               </p>
               {currentQ.image_url && (
@@ -696,7 +696,7 @@ export default function PlayerGameView() {
                     }`}>
                       {String.fromCharCode(65 + idx)}
                     </span>
-                    <span className={`font-medium text-sm leading-snug ${isCorrect || isPicked ? 'text-white' : 'text-gray-400'}`}>
+                    <span dir={room.force_rtl ? 'rtl' : 'auto'} className={`font-medium text-sm leading-snug ${isCorrect || isPicked ? 'text-white' : 'text-gray-400'}`}>
                       {choice}
                     </span>
                     {isCorrect && <CheckCircle2 size={14} className="ml-auto flex-shrink-0 text-primary" />}

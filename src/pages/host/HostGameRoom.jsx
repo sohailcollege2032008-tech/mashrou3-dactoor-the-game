@@ -1008,7 +1008,7 @@ export default function HostGameRoom() {
         {/* Header */}
         <div className="flex items-center justify-between bg-gray-900/50 p-5 rounded-2xl border border-gray-800">
           <div>
-            <h1 className="text-3xl font-display font-bold text-white">{room.title}</h1>
+            <h1 dir={room.force_rtl ? 'rtl' : 'auto'} className="text-3xl font-display font-bold text-white">{room.title}</h1>
             <p className="text-lg text-primary font-mono tracking-widest mt-1">JOIN: {roomId}</p>
           </div>
           <div className="flex items-center gap-3">
@@ -1162,7 +1162,7 @@ export default function HostGameRoom() {
                 </div>
               )}
 
-              <h2 className="text-2xl font-bold mb-6">{currentQ.question}</h2>
+              <h2 dir={room.force_rtl ? 'rtl' : 'auto'} className="text-2xl font-bold mb-6">{currentQ.question}</h2>
 
               {currentQ.image_url && (
                 <div className="mb-5">
@@ -1180,7 +1180,7 @@ export default function HostGameRoom() {
                         ? isCorrect ? 'border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,255,255,0.15)]' : 'border-gray-700 bg-gray-800 opacity-50'
                         : 'border-gray-700 bg-gray-800'
                     }`}>
-                      <span className={isRevealPhase && isCorrect ? 'font-bold text-primary' : ''}>{choice}</span>
+                      <span dir={room.force_rtl ? 'rtl' : 'auto'} className={isRevealPhase && isCorrect ? 'font-bold text-primary' : ''}>{choice}</span>
                       <span className="font-mono text-lg font-bold ml-3 flex-shrink-0">{count}</span>
                     </div>
                   )
