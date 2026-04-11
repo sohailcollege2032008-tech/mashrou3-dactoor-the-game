@@ -7,13 +7,16 @@ import {
   update,
   get as rtdbGet,
   increment,
+  set,
+  onDisconnect,
 } from 'firebase/database'
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { Loader2, Timer } from 'lucide-react'
+import { Loader2, Timer, WifiOff } from 'lucide-react'
 
 const QUESTION_DURATION_MS = 30_000
 const REVEAL_DURATION_MS = 3_000
+const FORFEIT_TIMEOUT_S = 120
 
 // ── Avatar pill ───────────────────────────────────────────────────────────────
 function PlayerPill({ player, score, align = 'right' }) {
@@ -61,16 +64,84 @@ export default function DuelGame() {
   const [hasAnswered, setHasAnswered] = useState(false)
   const [answerTime, setAnswerTime] = useState(null)
 
+  // Presence
+  const [opponentUid, setOpponentUid] = useState(null)
+  const [opponentConnected, setOpponentConnected] = useState(true)
+  const [disconnectCountdown, setDisconnectCountdown] = useState(null)
+
   // Refs to avoid stale closures
   const duelRef = useRef(null)
   const transitionInProgressRef = useRef(false)
   const timerIntervalRef = useRef(null)
   const revealTimerRef = useRef(null)
+  const countdownIntervalRef = useRef(null)
 
   // Keep duelRef in sync
   useEffect(() => {
     duelRef.current = duel
   }, [duel])
+
+  // ── Own presence + activeDuelId in localStorage ───────────────────────────
+  useEffect(() => {
+    if (!duelId || !uid) return
+    const presRef = rtdbRef(rtdb, `duel_presence/${duelId}/${uid}`)
+    set(presRef, { connected: true })
+    onDisconnect(presRef).set({ connected: false })
+    localStorage.setItem('activeDuelId', duelId)
+    return () => { set(presRef, { connected: false }) }
+  }, [duelId, uid])
+
+  // ── Watch opponent presence ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!duelId || !opponentUid) return
+    const presRef = rtdbRef(rtdb, `duel_presence/${duelId}/${opponentUid}`)
+    const unsub = onValue(presRef, snap => {
+      const data = snap.val()
+      // null means presence not written yet → assume connected
+      setOpponentConnected(!data || data.connected !== false)
+    })
+    return () => unsub()
+  }, [duelId, opponentUid])
+
+  // ── Disconnect countdown → forfeit after FORFEIT_TIMEOUT_S seconds ────────
+  useEffect(() => {
+    if (opponentConnected) {
+      // Opponent reconnected — clear countdown
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current)
+        countdownIntervalRef.current = null
+      }
+      setDisconnectCountdown(null)
+      return
+    }
+    if (countdownIntervalRef.current) return // already running
+
+    let secs = FORFEIT_TIMEOUT_S
+    setDisconnectCountdown(secs)
+
+    countdownIntervalRef.current = setInterval(() => {
+      secs -= 1
+      setDisconnectCountdown(secs)
+      if (secs <= 0) {
+        clearInterval(countdownIntervalRef.current)
+        countdownIntervalRef.current = null
+        const cur = duelRef.current
+        if (!cur || cur.status === 'finished') return
+        const oppUid = Object.keys(cur.players || {}).find(p => p !== uid)
+        update(rtdbRef(rtdb, `duels/${duelId}`), {
+          status: 'finished',
+          forfeit_by: oppUid || null,
+        }).catch(console.error)
+      }
+    }, 1000)
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current)
+        countdownIntervalRef.current = null
+      }
+    }
+  }, [opponentConnected, duelId, uid])
 
   // Reset per-question state when question index changes
   const lastQiRef = useRef(null)
@@ -94,12 +165,18 @@ export default function DuelGame() {
       const data = snap.val()
       setDuel(data)
       setLoading(false)
+      // Extract opponent UID once duel has 2 players
+      if (data?.players && uid) {
+        const oppUid = Object.keys(data.players).find(p => p !== uid)
+        if (oppUid) setOpponentUid(prev => prev ?? oppUid)
+      }
       if (data?.status === 'finished') {
+        localStorage.removeItem('activeDuelId')
         navigate(`/duel/results/${duelId}`, { replace: true })
       }
     })
     return () => unsub()
-  }, [duelId, navigate])
+  }, [duelId, navigate, uid])
 
   // ── Transition helpers ────────────────────────────────────────────────────
 
@@ -311,6 +388,24 @@ export default function DuelGame() {
 
   return (
     <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl">
+
+      {/* Disconnect banner */}
+      {!opponentConnected && disconnectCountdown !== null && (
+        <div className="mx-4 mt-3 z-50">
+          <div className="bg-yellow-500/10 border border-yellow-500/40 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <WifiOff size={16} className="text-yellow-400 flex-shrink-0" />
+              <div>
+                <p className="text-yellow-300 font-bold text-sm">خصمك انقطع الاتصال</p>
+                <p className="text-yellow-600 text-xs">ستفوز تلقائياً إذا لم يعد خلال</p>
+              </div>
+            </div>
+            <span className="text-yellow-300 font-mono font-bold text-2xl tabular-nums flex-shrink-0">
+              {disconnectCountdown}s
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">

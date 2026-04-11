@@ -1,11 +1,47 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
-import { Gamepad2, User, LogOut, Swords } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Gamepad2, User, LogOut, Swords, RotateCcw } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useAuthStore } from '../../stores/authStore'
+import { ref as rtdbRef, get as rtdbGet } from 'firebase/database'
+import { rtdb } from '../../lib/firebase'
 
 export default function PlayerDashboard() {
-  const { profile } = useAuth()
+  const { profile, session } = useAuth()
+  const navigate = useNavigate()
+  const uid = session?.uid
+
+  const [activeDuel, setActiveDuel] = useState(null)
+
+  // ── Check for an active duel to rejoin ───────────────────────────────────
+  useEffect(() => {
+    const check = async () => {
+      const duelId = localStorage.getItem('activeDuelId')
+      if (!duelId || !uid) return
+      try {
+        const snap = await rtdbGet(rtdbRef(rtdb, `duels/${duelId}`))
+        const duel = snap.val()
+        if (
+          duel &&
+          duel.status !== 'finished' &&
+          duel.players?.[uid]
+        ) {
+          setActiveDuel({ id: duelId, ...duel })
+        } else {
+          localStorage.removeItem('activeDuelId')
+        }
+      } catch {
+        localStorage.removeItem('activeDuelId')
+      }
+    }
+    check()
+  }, [uid])
+
+  const rejoinPath = activeDuel
+    ? activeDuel.status === 'waiting'
+      ? `/duel/lobby/${activeDuel.id}`
+      : `/duel/game/${activeDuel.id}`
+    : null
 
   return (
     <div className="min-h-screen bg-background text-white flex flex-col">
@@ -39,7 +75,26 @@ export default function PlayerDashboard() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-5 gap-4 -mt-16">
+      <div className="flex-1 flex flex-col items-center justify-center px-5 gap-4 -mt-10">
+
+        {/* Rejoin active duel — shown only if an active duel exists */}
+        {activeDuel && rejoinPath && (
+          <button
+            onClick={() => navigate(rejoinPath)}
+            className="w-full max-w-xs flex items-center gap-3 bg-orange-500/10 border-2 border-orange-500/40 hover:border-orange-400 hover:bg-orange-500/15 rounded-2xl p-4 transition-all active:scale-95"
+          >
+            <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+              <RotateCcw size={20} className="text-orange-400" />
+            </div>
+            <div className="flex-1 text-right min-w-0">
+              <p className="text-orange-300 font-bold text-sm">لديك دويل جارٍ!</p>
+              <p className="text-gray-500 text-xs truncate">{activeDuel.deck_title}</p>
+            </div>
+            <span className="text-orange-400 font-bold text-xs flex-shrink-0 bg-orange-500/20 px-2.5 py-1 rounded-xl">
+              انضم مجدداً
+            </span>
+          </button>
+        )}
 
         {/* Join Game — primary action */}
         <Link

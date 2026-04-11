@@ -6,14 +6,40 @@ import {
 } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { Search, X, Swords, ChevronDown, ArrowRight, Loader2, BookOpen } from 'lucide-react'
+import { Search, X, Swords, ChevronDown, ArrowRight, Loader2, BookOpen, Settings2 } from 'lucide-react'
+
+// ── Toggle ────────────────────────────────────────────────────────────────────
+function Toggle({ value, onChange, disabled }) {
+  return (
+    <button
+      dir="ltr"
+      onClick={() => !disabled && onChange(!value)}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+        value ? 'bg-primary' : 'bg-gray-700'
+      } ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+          value ? 'translate-x-5' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  )
+}
 
 // ── Bottom Sheet ──────────────────────────────────────────────────────────────
-function BottomSheet({ deck, onClose, onDuel, matchmaking }) {
+function BottomSheet({ deck, config, onConfigChange, onClose, onDuel, matchmaking }) {
+  const maxQ = deck.question_count || 0
+  const countOptions = [null, 5, 10, 15, 20, 25, 30].filter(n => n === null || n < maxQ)
+
+  // If selected count is now >= maxQ (e.g. deck is small), reset to null
+  const safeCount = config.questionCount && config.questionCount >= maxQ ? null : config.questionCount
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" dir="rtl">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-[#0D1321] border-t border-gray-700 rounded-t-2xl p-6 space-y-5 animate-slide-up">
+      <div className="relative bg-[#0D1321] border-t border-gray-700 rounded-t-2xl p-6 space-y-5 animate-slide-up max-h-[90vh] overflow-y-auto">
         {/* Handle */}
         <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto -mt-2 mb-2" />
 
@@ -36,6 +62,65 @@ function BottomSheet({ deck, onClose, onDuel, matchmaking }) {
               ))}
             </div>
           )}
+        </div>
+
+        {/* ── Config ── */}
+        <div className="border border-gray-800 rounded-2xl p-4 space-y-4 bg-gray-900/40">
+          <div className="flex items-center gap-2 text-gray-400 text-xs font-bold">
+            <Settings2 size={13} />
+            إعدادات الدويل
+          </div>
+
+          {/* Question count */}
+          {countOptions.length > 1 && (
+            <div>
+              <p className="text-gray-400 text-xs font-mono mb-2">عدد الأسئلة</p>
+              <div className="flex flex-wrap gap-2">
+                {countOptions.map(n => (
+                  <button
+                    key={n ?? 'all'}
+                    onClick={() => onConfigChange({ ...config, questionCount: n })}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-mono border transition-colors ${
+                      safeCount === n
+                        ? 'bg-primary text-background border-primary font-bold'
+                        : 'bg-gray-900 text-gray-400 border-gray-700 hover:border-gray-500'
+                    }`}
+                  >
+                    {n === null ? `الكل (${maxQ})` : n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Toggles */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-gray-300 text-sm">ترتيب عشوائي للأسئلة</span>
+              <Toggle
+                value={config.shuffleQuestions || !!safeCount}
+                onChange={v => onConfigChange({ ...config, shuffleQuestions: v })}
+                disabled={!!safeCount} // force shuffle if subset selected
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-gray-300 text-sm">ترتيب عشوائي للإجابات</span>
+              <Toggle
+                value={config.shuffleAnswers}
+                onChange={v => onConfigChange({ ...config, shuffleAnswers: v })}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="text-gray-300 text-sm">تخطي الأسئلة المحلولة سابقاً</span>
+                <p className="text-gray-600 text-xs font-mono mt-0.5">على هذا الجهاز</p>
+              </div>
+              <Toggle
+                value={config.excludePlayed}
+                onChange={v => onConfigChange({ ...config, excludePlayed: v })}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Duel button */}
@@ -103,8 +188,48 @@ function DeckCard({ deck, onClick }) {
   )
 }
 
+// ── Apply config to questions ─────────────────────────────────────────────────
+function prepareQuestions(rawQuestions, config, deckId, uid) {
+  let questions = [...rawQuestions]
+
+  // Exclude previously played questions (stored in localStorage per device)
+  if (config.excludePlayed && deckId && uid) {
+    try {
+      const played = new Set(
+        JSON.parse(localStorage.getItem(`played_qs_${deckId}_${uid}`) || '[]')
+      )
+      const filtered = questions.filter(q => !played.has(q.question))
+      // Only apply filter if there are enough unplayed questions left
+      if (filtered.length >= 3) questions = filtered
+    } catch { /* ignore */ }
+  }
+
+  // Shuffle questions (always shuffle if selecting a subset)
+  const mustShuffle = config.shuffleQuestions || (config.questionCount && config.questionCount < questions.length)
+  if (mustShuffle) {
+    questions = questions.sort(() => Math.random() - 0.5)
+  }
+
+  // Slice to desired count
+  if (config.questionCount && config.questionCount < questions.length) {
+    questions = questions.slice(0, config.questionCount)
+  }
+
+  // Shuffle answer choices
+  if (config.shuffleAnswers) {
+    questions = questions.map(q => {
+      if (!Array.isArray(q.choices) || q.correct == null) return q
+      const correctAnswer = q.choices[q.correct]
+      const shuffled = [...q.choices].sort(() => Math.random() - 0.5)
+      return { ...q, choices: shuffled, correct: shuffled.indexOf(correctAnswer) }
+    })
+  }
+
+  return questions
+}
+
 // ── Matchmaking logic ─────────────────────────────────────────────────────────
-async function doMatchmaking({ deck, profile, session, navigate }) {
+async function doMatchmaking({ deck, profile, session, navigate, config }) {
   const uid = session.uid
   const deckId = deck.id
 
@@ -121,13 +246,13 @@ async function doMatchmaking({ deck, profile, session, navigate }) {
     const [opponentUid, opponentEntry] = opponents[0]
     const duelId = opponentEntry.duel_id
 
-    // Fetch the waiting duel to get questions
+    // Fetch the waiting duel
     const duelRef = rtdbRef(rtdb, `duels/${duelId}`)
     const duelSnap = await rtdbGet(duelRef)
     const duelData = duelSnap.val()
     if (!duelData) throw new Error('لم يتم العثور على الدويل')
 
-    // Add ourselves to players + start game
+    // Add ourselves + start game
     await update(rtdbRef(rtdb, `duels/${duelId}`), {
       [`players/${uid}`]: {
         uid,
@@ -145,10 +270,16 @@ async function doMatchmaking({ deck, profile, session, navigate }) {
     navigate(`/duel/lobby/${duelId}`)
   } else {
     // Create new duel
-    // Fetch deck questions
     const deckDoc = await getDoc(doc(db, 'question_sets', deckId))
     const deckFull = deckDoc.data()
-    const questions = deckFull?.questions?.questions || []
+    const rawQuestions = deckFull?.questions?.questions || []
+
+    // Apply config (shuffle, slice, exclude played)
+    const questions = prepareQuestions(rawQuestions, config, deckId, uid)
+
+    if (questions.length === 0) {
+      throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
+    }
 
     const newDuelRef = push(rtdbRef(rtdb, 'duels'))
     const duelId = newDuelRef.key
@@ -200,6 +331,14 @@ export default function DeckBrowser() {
   const [selectedDeck, setSelectedDeck] = useState(null)
   const [matchmaking, setMatchmaking] = useState(false)
   const [error, setError] = useState(null)
+
+  // Duel config state
+  const [duelConfig, setDuelConfig] = useState({
+    questionCount: null,    // null = all
+    shuffleQuestions: true,
+    shuffleAnswers: false,
+    excludePlayed: false,
+  })
 
   // Load global decks
   useEffect(() => {
@@ -253,13 +392,19 @@ export default function DeckBrowser() {
     setMatchmaking(true)
     setError(null)
     try {
-      await doMatchmaking({ deck: selectedDeck, profile, session, navigate })
+      await doMatchmaking({
+        deck: selectedDeck,
+        profile,
+        session,
+        navigate,
+        config: duelConfig,
+      })
     } catch (e) {
       console.error(e)
-      setError('حصل خطأ أثناء البحث عن خصم. حاول مرة ثانية.')
+      setError(e.message || 'حصل خطأ أثناء البحث عن خصم. حاول مرة ثانية.')
       setMatchmaking(false)
     }
-  }, [selectedDeck, matchmaking, profile, session, navigate])
+  }, [selectedDeck, matchmaking, profile, session, navigate, duelConfig])
 
   return (
     <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl">
@@ -362,6 +507,8 @@ export default function DeckBrowser() {
       {selectedDeck && (
         <BottomSheet
           deck={selectedDeck}
+          config={duelConfig}
+          onConfigChange={setDuelConfig}
           onClose={() => !matchmaking && setSelectedDeck(null)}
           onDuel={handleDuel}
           matchmaking={matchmaking}

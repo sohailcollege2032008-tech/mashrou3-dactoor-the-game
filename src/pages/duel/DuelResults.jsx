@@ -108,13 +108,27 @@ export default function DuelResults() {
   useEffect(() => {
     if (!duelId) return
     rtdbGet(rtdbRef(rtdb, `duels/${duelId}`)).then(snap => {
-      setDuel(snap.val())
+      const data = snap.val()
+      setDuel(data)
       setLoading(false)
+
+      // ── Track played questions in localStorage for "exclude played" feature ──
+      if (data && uid && data.deck_id && Array.isArray(data.questions)) {
+        const key = `played_qs_${data.deck_id}_${uid}`
+        try {
+          const existing = JSON.parse(localStorage.getItem(key) || '[]')
+          const newPlayed = [...new Set([
+            ...existing,
+            ...data.questions.map(q => q.question).filter(Boolean),
+          ])]
+          localStorage.setItem(key, JSON.stringify(newPlayed))
+        } catch { /* ignore */ }
+      }
     }).catch(e => {
       console.error(e)
       setLoading(false)
     })
-  }, [duelId])
+  }, [duelId, uid])
 
   if (loading) {
     return (
