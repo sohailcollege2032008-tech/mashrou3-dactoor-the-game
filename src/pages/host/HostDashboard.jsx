@@ -4,6 +4,7 @@ import { ref, set, get } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuthStore } from '../../stores/authStore'
 import { Link, useNavigate } from 'react-router-dom'
+import { FileText, AlertCircle } from 'lucide-react'
 import UploadQuestionsModal from '../../components/host/UploadQuestionsModal'
 import QuestionBankModal from '../../components/host/QuestionBankModal'
 
@@ -223,17 +224,25 @@ export default function HostDashboard() {
                     <div className="flex flex-wrap gap-2 text-xs text-gray-400 mb-4 font-mono">
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md">{bank.question_count} سؤال</span>
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md uppercase">{bank.source_type}</span>
-                      {bank.source_file_url && (
+                      {bank.source_file_url ? (
                         <a 
                           href={bank.source_file_url} 
                           target="_blank" 
                           rel="noreferrer"
-                          className="bg-blue-500/10 text-blue-400 px-2 py-1 rounded-md border border-blue-500/20 hover:bg-blue-500/20 transition-colors flex items-center gap-1"
+                          className="bg-blue-500/10 text-blue-400 px-2 py-1 rounded-md border border-blue-500/20 hover:bg-blue-500/20 transition-colors flex items-center gap-1.5"
                           onClick={(e) => e.stopPropagation()}
-                          title={bank.source_filename || 'الملف الأصلي'}
+                          title={bank.source_filename || 'المصدر'}
                         >
-                          📎 المصدر
+                          <FileText size={12} />
+                          المصدر
                         </a>
+                      ) : (
+                        bank.source_type === 'ai' && (
+                          <span className="bg-amber-500/10 text-amber-500 px-2 py-1 rounded-md border border-amber-500/20 flex items-center gap-1.5" title="لم يتم أرشفة الملف الأصلي">
+                            <AlertCircle size={12} />
+                            ملف ناقص
+                          </span>
+                        )
                       )}
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md">
                         {bank.created_at?.seconds
