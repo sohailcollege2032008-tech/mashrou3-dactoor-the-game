@@ -1,3 +1,14 @@
+/* Any element explicitly marked rtl keeps its content direction isolated
+   so it doesn't bleed into surrounding LTR layout */
+[dir="rtl"] { 
+  unicode-bidi: isolate; 
+  text-align: right;
+}
+
+[dir="ltr"] {
+  text-align: left;
+}
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;
