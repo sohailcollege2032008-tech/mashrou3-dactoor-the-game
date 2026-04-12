@@ -224,7 +224,7 @@ export default function HostDashboard() {
                     <div className="flex flex-wrap gap-2 text-xs text-gray-400 mb-4 font-mono">
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md">{bank.question_count} سؤال</span>
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md uppercase">{bank.source_type}</span>
-                      {bank.source_file_url ? (
+                      {bank.source_file_url && (
                         <a 
                           href={bank.source_file_url} 
                           target="_blank" 
