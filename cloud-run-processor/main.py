@@ -28,6 +28,15 @@ MODEL_NAME      = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
 genai.configure(api_key=GEMINI_API_KEY)
 
+# ── Safety Settings ────────────────────────────────────────────────────────────
+# Set to BLOCK_NONE to allow medical content and avoid false positives
+SAFETY_SETTINGS = [
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+]
+
 # ── FastAPI ────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Dactoor Processor", version="1.3.0")
 
@@ -66,13 +75,17 @@ RULES:
 1. Extract every single MCQ from the document — do not skip any.
 2. The "correct" field must be the 0-based index of the correct answer in the choices array.
 3. If the correct answer is marked/highlighted/bolded/starred, use that. If no answer is marked, set "correct" to -1.
-4. If the question is in Arabic, put it in both "question" and "question_ar". If in English, put in "question" only and set "question_ar" to null.
+4. LANGUAGE POLICY: Do NOT translate the questions. If the text is in Arabic, extract it in Arabic. If English, extract it in English.
+   - For ARABIC questions: Set both "question" and "question_ar" to the Arabic text.
+   - For ENGLISH questions: Set "question" to the English text and "question_ar" to null.
 5. Preserve the original wording of questions and choices exactly as written.
 6. If choices are labeled A/B/C/D or 1/2/3/4, remove the labels and just keep the text.
 7. Set "needs_image" to true if the question refers to a figure, image, photograph, diagram, \
 graph, table, or any visual element that is required to answer correctly — even if the image \
 was already provided above. Set to false otherwise.
-8. Return ONLY the JSON object. No markdown backticks, no commentary.\
+8. Return ONLY the JSON object. No markdown backticks, no commentary.
+9. If you encounter a complex mathematical formula, equation, syntax, or expression that cannot be clearly expressed in plain text, use MathML format (e.g., <math>...</math>) to represent it within the text. Ensure the MathML is valid and properly closed.
+10. If the question contains a mix of Arabic and English (common in medical exams), preserve the mixture in both "question" and "question_ar".
 """
 
 # ── MIME helpers ───────────────────────────────────────────────────────────────
@@ -167,7 +180,6 @@ def parse_gemini_response(raw: str) -> dict:
         if cleaned.rstrip().endswith("```"):
             cleaned = cleaned.rstrip()[:-3]
     return json.loads(cleaned.strip())
-
 
 # ── Fallback Config ────────────────────────────────────────────────────────────
 MODEL_FALLBACK_LIST = [

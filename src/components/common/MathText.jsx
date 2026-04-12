@@ -1,36 +1,39 @@
 import React, { useEffect, useRef } from 'react'
 
 /**
- * MathText handles rendering of text that might contain MathML.
- * It uses the global MathJax instance to typeset the content.
- * 
- * @param {string} text - The text content to render (can include MathML <math> tags)
- * @param {string} dir - 'rtl' or 'ltr' or 'auto'
+ * MathText Component
+ * Renders text that may contain MathML tags.
+ * It uses dangerouslySetInnerHTML to allow MathML tags to exist in the DOM,
+ * and then triggers MathJax to typeset the current component.
  */
-export default function MathText({ text = '', dir = 'auto' }) {
+export default function MathText({ text, className = "", dir = "auto" }) {
   const containerRef = useRef(null)
 
   useEffect(() => {
-    // If MathJax is loaded, trigger a re-typeset when text changes
     if (window.MathJax && containerRef.current) {
-      window.MathJax.typesetPromise([containerRef.current]).catch((err) => {
-        console.error('MathJax typeset failed:', err)
-      })
+      // Trigger MathJax to process this specific container
+      // MathJax 3.x uses typesetPromise or typeset
+      try {
+        window.MathJax.typesetPromise([containerRef.current]).catch(err => {
+          console.error('MathJax typeset failed:', err)
+        })
+      } catch (e) {
+        console.warn('MathJax not ready or failed:', e)
+      }
     }
   }, [text])
 
-  // Split text by MathML tags to ensure they stay in their own flow
-  // but for now, we just dangerouslySetInnerHTML because MathML is HTML.
+  // If there's no MathML, just render normally to avoid overhead
+  if (!text || !text.includes('<math')) {
+    return <span className={className} dir={dir}>{text}</span>
+  }
+
   return (
     <span
       ref={containerRef}
-      className="math-text-container"
-      style={{ 
-        display: 'inline-block',
-        unicodeBidi: 'plaintext',
-        textAlign: 'inherit'
-      }}
+      className={`math-container ${className}`}
       dir={dir}
+      style={{ display: 'inline-block' }}
       dangerouslySetInnerHTML={{ __html: text }}
     />
   )

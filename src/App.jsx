@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { useEffect, Component } from 'react'
+import FullscreenButton from './components/FullscreenButton'
 import { useAuthStore } from './stores/authStore'
 import Landing from './pages/Landing'
 import AuthCallback from './pages/AuthCallback'
@@ -9,8 +10,15 @@ import OwnerDashboard from './pages/owner/OwnerDashboard'
 import HostDashboard from './pages/host/HostDashboard'
 import HostGameRoom from './pages/host/HostGameRoom'
 import JoinGame from './pages/player/JoinGame'
+import PlayerDashboard from './pages/player/PlayerDashboard'
+import PlayerProfile from './pages/player/PlayerProfile'
 import WaitingRoom from './pages/player/WaitingRoom'
 import PlayerGameView from './pages/player/PlayerGameView'
+import DeckBrowser from './pages/player/DeckBrowser'
+import PublicProfile from './pages/player/PublicProfile'
+import DuelLobby from './pages/duel/DuelLobby'
+import DuelGame from './pages/duel/DuelGame'
+import DuelResults from './pages/duel/DuelResults'
 
 // ── Global Error Boundary — prevents blank screen on unexpected render errors ──
 class ErrorBoundary extends Component {
@@ -44,6 +52,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <BrowserRouter>
+      <FullscreenButton />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
@@ -52,9 +61,16 @@ export default function App() {
         <Route path="/owner/dashboard" element={<ProtectedRoute allowedRoles={['owner']}><OwnerDashboard /></ProtectedRoute>} />
         <Route path="/host/dashboard" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostDashboard /></ProtectedRoute>} />
         <Route path="/host/game/:roomId" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostGameRoom /></ProtectedRoute>} />
+        <Route path="/player/dashboard" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerDashboard /></ProtectedRoute>} />
+        <Route path="/player/profile" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerProfile /></ProtectedRoute>} />
         <Route path="/player/join" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><JoinGame /></ProtectedRoute>} />
         <Route path="/player/waiting/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><WaitingRoom /></ProtectedRoute>} />
         <Route path="/player/game/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerGameView /></ProtectedRoute>} />
+        <Route path="/player/decks" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DeckBrowser /></ProtectedRoute>} />
+        <Route path="/player/profile/:uid" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PublicProfile /></ProtectedRoute>} />
+        <Route path="/duel/lobby/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelLobby /></ProtectedRoute>} />
+        <Route path="/duel/game/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelGame /></ProtectedRoute>} />
+        <Route path="/duel/results/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelResults /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>

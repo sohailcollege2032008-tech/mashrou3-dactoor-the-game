@@ -1,0 +1,189 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": "root.child('rooms').child($roomId).child('players').child(auth.uid).exists() || root.child('rooms').child($roomId).child('host_id').val() === auth.uid",
+        ".write": false,
+
+        // Host can write room status, config, and management data
+        "host_id": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        "status": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        "title": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        "created_at": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        // Questions with hashes (no plain correct answers)
+        "questions": {
+          ".read": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid || root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid",
+          "questions": {
+            "$qIdx": {
+              "correct_hash": {
+                // Only host can read correct_hash during game
+                ".read": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid && root.child('rooms').child($roomId).child('status').val() === 'playing'"
+              },
+              "correct": {
+                // NEVER expose plain correct answer
+                ".read": false,
+                ".write": false
+              }
+            }
+          }
+        },
+
+        // Revealed answers (after game ends)
+        "revealed_answers": {
+          ".read": "root.child('rooms').child($roomId).child('status').val() === 'finished' || root.child('rooms').child($roomId).child('host_id').val() === auth.uid",
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        "current_question_index": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        "question_started_at": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        "config": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        "countdown_started_at": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        "countdown_duration": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        "reveal_data": {
+          ".read": true,
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+        },
+
+        // Players can manage their own player node
+        "players": {
+          ".read": "root.child('rooms').child($roomId).child('players').child(auth.uid).exists() || root.child('rooms').child($roomId).child('host_id').val() === auth.uid",
+          ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid",
+          "$playerId": {
+            "nickname": {
+              ".read": true,
+              ".write": "$playerId === auth.uid || root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+            },
+            "avatar_url": {
+              ".read": true,
+              ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+            },
+            "score": {
+              ".read": true,
+              ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+            },
+            "joined_at": {
+              ".read": true,
+              ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+            }
+          }
+        },
+
+        // Answers must not expose correct answers
+        "answers": {
+          ".read": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid || root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
+          ".write": false,
+          "$qIdx": {
+            "$playerId": {
+              ".write": "$playerId === auth.uid && !data.exists()",
+
+              // Players can only write their own answers, once
+              "selected_choice": {
+                ".write": "$playerId === auth.uid && !data.exists()"
+              },
+              "reaction_time_ms": {
+                ".write": "$playerId === auth.uid && !data.exists()"
+              },
+              "timestamp": {
+                ".write": "$playerId === auth.uid && !data.exists()"
+              },
+              "signature": {
+                ".write": "$playerId === auth.uid && !data.exists()"
+              },
+
+              // Only host can write scoring and reveal data
+              "is_correct": {
+                ".read": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid || root.child('rooms').child($roomId).child('status').val() === 'finished'",
+                ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+              },
+              "points_earned": {
+                ".read": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid || root.child('rooms').child($roomId).child('status').val() === 'finished'",
+                ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+              },
+              "rank": {
+                ".read": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid || root.child('rooms').child($roomId).child('status').val() === 'finished'",
+                ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+              },
+              "is_first_correct": {
+                ".read": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid || root.child('rooms').child($roomId).child('status').val() === 'finished'",
+                ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+              },
+
+              // Player-submitted data
+              "player_name": {
+                ".read": true,
+                ".write": "$playerId === auth.uid && !data.exists()"
+              },
+              "player_avatar": {
+                ".read": true,
+                ".write": "$playerId === auth.uid && !data.exists()"
+              }
+            }
+          }
+        },
+
+        // Join requests
+        "join_requests": {
+          ".read": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid || root.child('rooms').child($roomId).child('join_requests').child(auth.uid).exists()",
+          ".write": false,
+          "$playerId": {
+            ".write": "$playerId === auth.uid && !data.exists()",
+            "status": {
+              ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+            }
+          }
+        },
+
+        // Presence tracking
+        "presence": {
+          "host": {
+            ".read": true,
+            ".write": "root.child('rooms').child($roomId).child('host_id').val() === auth.uid"
+          },
+          "players": {
+            ".read": true,
+            "$playerId": {
+              ".write": "$playerId === auth.uid"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -80,6 +80,7 @@ export default function WaitingRoom() {
             ممكن تقفل الصفحة دي.
           </p>
         )}
+
       </div>
     </div>
   )
