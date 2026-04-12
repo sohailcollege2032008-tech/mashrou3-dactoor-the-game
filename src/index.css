@@ -1,14 +1,13 @@
-/* ── Mixed Arabic/English text direction ─────────────────────────────────────
-   Elements that carry the dir="rtl" attribute (or are inside one) render
-   Arabic-primary mixed text correctly without flipping the whole page layout.
-   unicode-bidi:plaintext lets each element resolve its own bidi direction
-   from its first strong character, so a <p> starting with Arabic stays RTL
-   and one starting with English stays LTR automatically. */
-* { unicode-bidi: plaintext; }
-
 /* Any element explicitly marked rtl keeps its content direction isolated
    so it doesn't bleed into surrounding LTR layout */
-[dir="rtl"] { unicode-bidi: isolate; }
+[dir="rtl"] { 
+  unicode-bidi: isolate; 
+  text-align: right;
+}
+
+[dir="ltr"] {
+  text-align: left;
+}
 
 :root {
   --text: #6b6375;

@@ -287,7 +287,7 @@ function QuestionEditor({ question, index, bankId, onSave, onClose }) {
 
 // ── Question row — memoized so only changed rows re-render ────────────────────
 const QuestionItem = memo(function QuestionItem({
-  q, i, isExpanded, onEdit, onToggleExpand
+  q, i, isExpanded, onEdit, onToggleExpand, forceRtl
 }) {
   const hasImage = !!q.image_url
   const needsImg = q.needs_image && !hasImage
@@ -296,7 +296,7 @@ const QuestionItem = memo(function QuestionItem({
   return (
     <div className={`rounded-xl border ${needsImg ? 'border-amber-500/30 bg-amber-500/5' : 'border-gray-800 bg-gray-900/50'}`}>
       {/* Header row */}
-      <div className="flex items-center gap-3 p-4">
+      <div dir={forceRtl ? 'rtl' : 'ltr'} className="flex items-center gap-3 p-4">
         <span className="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-400 flex-shrink-0">
           {i + 1}
         </span>
@@ -341,7 +341,7 @@ const QuestionItem = memo(function QuestionItem({
 
       {/* Expanded choices */}
       {isExpanded && (
-        <div className="px-4 pb-4 pt-3 border-t border-gray-800/60 space-y-2">
+        <div dir={forceRtl ? 'rtl' : 'ltr'} className="px-4 pb-4 pt-3 border-t border-gray-800/60 space-y-2">
           {hasImage && (
             <img
               src={q.image_url}
@@ -545,6 +545,7 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
               isExpanded={expandedIndex === i}
               onEdit={handleEdit}
               onToggleExpand={handleToggleExpand}
+              forceRtl={forceRtl}
             />
           ))}
         </div>

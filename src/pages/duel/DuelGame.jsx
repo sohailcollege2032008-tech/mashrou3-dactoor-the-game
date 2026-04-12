@@ -450,7 +450,7 @@ export default function DuelGame() {
       <TimerBar pct={duel.status === 'revealing' ? 0 : timerPct} />
 
       {/* Question */}
-      <div className="flex-1 flex flex-col px-4 pt-4 pb-4 gap-4 overflow-y-auto">
+      <div dir={duel.force_rtl ? 'rtl' : 'ltr'} className="flex-1 flex flex-col px-4 pt-4 pb-4 gap-4 overflow-y-auto">
         <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5">
           <p dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-white font-bold text-base leading-relaxed text-center">
             <MathText text={question?.question} dir={duel.force_rtl ? 'rtl' : 'auto'} />
@@ -504,13 +504,13 @@ export default function DuelGame() {
         )}
 
         {/* Choices */}
-        <div className="space-y-3">
+        <div dir={duel.force_rtl ? 'rtl' : 'ltr'} className="space-y-3">
           {(question?.choices || []).map((choice, i) => (
             <button
               key={i}
               onClick={() => submitAnswer(i)}
               disabled={hasAnswered || isRevealing}
-              className={`w-full flex items-center gap-3 px-4 py-4 rounded-2xl text-right transition-all duration-150 ${choiceStyle(i)} disabled:cursor-default`}
+              className={`w-full flex items-center gap-3 px-4 py-4 rounded-2xl transition-all duration-150 ${choiceStyle(i)} disabled:cursor-default`}
             >
               <span className="w-7 h-7 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-xs font-bold flex-shrink-0 font-mono">
                 {String.fromCharCode(65 + i)}

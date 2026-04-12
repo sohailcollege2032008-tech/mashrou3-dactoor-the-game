@@ -1029,9 +1029,9 @@ export default function HostGameRoom() {
       <div className="max-w-6xl mx-auto space-y-6">
 
         {/* Header */}
-        <div className="flex items-center justify-between bg-gray-900/50 p-5 rounded-2xl border border-gray-800">
+        <div dir={room.force_rtl ? 'rtl' : 'ltr'} className="flex items-center justify-between bg-gray-900/50 p-5 rounded-2xl border border-gray-800">
           <div>
-            <h1 dir={room.force_rtl ? 'rtl' : 'auto'} className="text-3xl font-display font-bold text-white">{room.title}</h1>
+            <h1 className="text-3xl font-display font-bold text-white">{room.title}</h1>
             <p className="text-lg text-primary font-mono tracking-widest mt-1">JOIN: {roomId}</p>
           </div>
           <div className="flex items-center gap-3">
@@ -1157,7 +1157,7 @@ export default function HostGameRoom() {
         {/* ── PLAYING & REVEALING ─────────────────────────────────────────── */}
         {(room.status === 'playing' || room.status === 'revealing') && currentQ && (
           <div className="space-y-5">
-            <div className="bg-gray-900/50 p-6 rounded-2xl border border-primary relative overflow-hidden">
+            <div dir={room.force_rtl ? 'rtl' : 'ltr'} className="bg-gray-900/50 p-6 rounded-2xl border border-primary relative overflow-hidden">
               {/* Progress strip */}
               <div className="absolute top-0 left-0 w-full h-1 bg-gray-800">
                 <div className="h-full bg-primary" style={{ width: `${((room.current_question_index + 1) / room.questions.questions.length) * 100}%` }} />
@@ -1185,7 +1185,7 @@ export default function HostGameRoom() {
                 </div>
               )}
 
-              <h2 dir={room.force_rtl ? 'rtl' : 'auto'} className="text-2xl font-bold mb-6">
+              <h2 className="text-2xl font-bold mb-6">
                 <MathText text={currentQ.question} dir={room.force_rtl ? 'rtl' : 'auto'} />
               </h2>
 
@@ -1200,12 +1200,12 @@ export default function HostGameRoom() {
                   const isCorrect = i === room.revealed_correct_index
                   const count     = answers.filter(a => a.selected_choice === i).length
                   return (
-                    <div key={i} className={`p-4 rounded-xl border flex justify-between items-center transition-colors ${
+                    <div key={i} dir={room.force_rtl ? 'rtl' : 'ltr'} className={`p-4 rounded-xl border flex justify-between items-center transition-colors ${
                       isRevealPhase
                         ? isCorrect ? 'border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,255,255,0.15)]' : 'border-gray-700 bg-gray-800 opacity-50'
                         : 'border-gray-700 bg-gray-800'
                     }`}>
-                      <span dir={room.force_rtl ? 'rtl' : 'auto'} className={isRevealPhase && isCorrect ? 'font-bold text-primary' : ''}>
+                      <span className={isRevealPhase && isCorrect ? 'font-bold text-primary' : ''}>
                         <MathText text={choice} dir={room.force_rtl ? 'rtl' : 'auto'} />
                       </span>
                       <span className="font-mono text-lg font-bold ml-3 flex-shrink-0">{count}</span>

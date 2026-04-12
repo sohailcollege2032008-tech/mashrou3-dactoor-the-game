@@ -33,6 +33,7 @@ export default function MathText({ text, className = "", dir = "auto" }) {
       ref={containerRef}
       className={`math-container ${className}`}
       dir={dir}
+      style={{ display: 'inline-block' }}
       dangerouslySetInnerHTML={{ __html: text }}
     />
   )

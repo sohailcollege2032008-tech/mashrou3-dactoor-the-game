@@ -1,7 +1,8 @@
 import React, { useState, useRef, useCallback } from 'react'
 import MathText from '../common/MathText'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { db, storage } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 
 const CLOUD_RUN_URL  = import.meta.env.VITE_CLOUD_RUN_URL
@@ -134,6 +135,7 @@ function FileUploadTab({ session, onSuccess, onClose }) {
   const [status, setStatus]       = useState('idle')   // idle | uploading | done | error
   const [statusMsg, setStatusMsg] = useState('')
   const [parsed, setParsed]       = useState(null)
+  const [sourceData, setSourceData] = useState(null) // { url, filename }
   const [saving, setSaving]       = useState(false)
   const fileInputRef              = useRef(null)
 
@@ -149,10 +151,27 @@ function FileUploadTab({ session, onSuccess, onClose }) {
     }
 
     setParsed(null)
+    setSourceData(null)
     setStatus('uploading')
-    setStatusMsg('⏫ جاري رفع الملف...')
+    setStatusMsg('⏫ جاري رفع الملف والأرشفة...')
 
     try {
+      // 1. Archive to Firebase Storage
+      let archiveUrl = null
+      try {
+        const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5)
+        const path = `question_sources/${session.uid}/${uniqueId}_${file.name}`
+        const sRef = storageRef(storage, path)
+        await uploadBytes(sRef, file)
+        archiveUrl = await getDownloadURL(sRef)
+        setSourceData({ url: archiveUrl, filename: file.name })
+      } catch (storageErr) {
+        console.warn('Failed to archive source file:', storageErr)
+        // We continue anyway so as not to block extraction, 
+        // but maybe the user should know? For now, we proceed.
+      }
+
+      // 2. Extract with AI
       const formData = new FormData()
       formData.append('file', file)
 
@@ -196,7 +215,7 @@ function FileUploadTab({ session, onSuccess, onClose }) {
   }, [])
 
   const handleSave = async () => {
-    if (!parsed) return
+    if (!parsed || !session) return
     setSaving(true)
     try {
       await addDoc(collection(db, 'question_sets'), {
@@ -205,7 +224,8 @@ function FileUploadTab({ session, onSuccess, onClose }) {
         questions:       parsed,
         question_count:  parsed.questions.length,
         source_type:     'ai',
-        source_filename: null,
+        source_file_url: sourceData?.url || null,
+        source_filename: sourceData?.filename || null,
         created_at:      serverTimestamp(),
       })
       onSuccess()

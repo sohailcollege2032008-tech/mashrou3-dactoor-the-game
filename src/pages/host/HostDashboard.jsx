@@ -223,6 +223,18 @@ export default function HostDashboard() {
                     <div className="flex flex-wrap gap-2 text-xs text-gray-400 mb-4 font-mono">
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md">{bank.question_count} سؤال</span>
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md uppercase">{bank.source_type}</span>
+                      {bank.source_file_url && (
+                        <a 
+                          href={bank.source_file_url} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="bg-blue-500/10 text-blue-400 px-2 py-1 rounded-md border border-blue-500/20 hover:bg-blue-500/20 transition-colors flex items-center gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                          title={bank.source_filename || 'الملف الأصلي'}
+                        >
+                          📎 المصدر
+                        </a>
+                      )}
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md">
                         {bank.created_at?.seconds
                           ? new Date(bank.created_at.seconds * 1000).toLocaleDateString('ar-EG')
