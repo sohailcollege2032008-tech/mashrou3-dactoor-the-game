@@ -66,8 +66,17 @@ RULES:
 6. If choices are labeled A/B/C/D or 1/2/3/4, remove the labels and just keep the text.
 7. Set "needs_image" to true if the question refers to a figure, image, photograph, diagram, graph, table, or any visual element that is required to answer correctly. Set to false otherwise.
 8. Return ONLY the JSON object. No markdown backticks, no commentary.
-9. If you encounter a complex mathematical formula, equation, syntax, or expression that cannot be clearly expressed in plain text, use MathML format (e.g., <math>...</math>) to represent it within the text. Ensure the MathML is valid and properly closed.
-10. If the question contains a mix of Arabic and English (common in medical exams), preserve the mixture in both "question" and "question_ar".`
+9. USE MathML for EVERYTHING that is not plain text. This is MANDATORY for:
+   - ALL subscripts and superscripts (e.g., use <msub> for q1, F2).
+   - ALL vector symbols (e.g., use <mover> with an arrow for vectors).
+   - ALL mathematical operators, fractions, and complex expressions.
+   - Ensure all <math> tags and their children are properly closed and valid.
+10. If the question contains a mix of Arabic and English (common in medical exams), preserve the mixture in both "question" and "question_ar".
+11. ARABIC MATH SYMBOLS: When extracting Arabic math variables (like ق, س, ص, ع):
+   - Use <mi> for the Arabic letter.
+   - Use <msub> for indexing (e.g., ق١ becomes <math><msub><mi>ق</mi><mn>١</mn></msub></math>).
+   - Use <mover> for vectors (e.g., <math><mover><mi>ق</mi><mo>→</mo></mover></math>).
+   - Match the numeral style (Arabic 1, 2 or Arabic-Indic ١, ٢) and arrow direction (left or right) EXACTLY as they appear in the source image/document.`
 
 // ── Questions preview ──────────────────────────────────────────────────────────
 function QuestionsPreview({ data }) {
