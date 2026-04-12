@@ -164,6 +164,20 @@ function GameConfigPanel({ config, onChange }) {
         </button>
       </label>
 
+      {/* Auto-Accept toggle */}
+      <label className="flex items-center justify-between cursor-pointer select-none">
+        <div className="flex items-center gap-2">
+          <UserCheck size={15} className="text-green-400" />
+          <span className="ar text-sm text-gray-200 font-medium">قبول تلقائي للاعبين</span>
+        </div>
+        <button
+          onClick={() => apply('auto_accept', !config.auto_accept)}
+          className={`relative w-11 h-6 rounded-full transition-colors ${config.auto_accept ? 'bg-green-500' : 'bg-gray-700'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.auto_accept ? 'translate-x-5' : ''}`} />
+        </button>
+      </label>
+
       {/* Repeat entry */}
       <div className="pt-1 border-t border-gray-800 space-y-2">
         <p className="ar text-xs text-gray-500 font-bold">الدخول المتكرر للـ Deck</p>
@@ -395,6 +409,7 @@ export default function HostGameRoom() {
     auto_mode: false,
     auto_timer: 45,
     shuffle_questions: false,
+    auto_accept: false,      // NEW: Auto-accept join requests
     repeat_entry: 'allow',   // 'allow' | 'badge' | 'block'
   })
   const [playHistory, setPlayHistory] = useState({})  // { [uid]: count }
@@ -438,6 +453,18 @@ export default function HostGameRoom() {
     const unsubRoom = onValue(ref(rtdb, `rooms/${roomId}`), snap => {
       if (!snap.exists()) return
       const data = snap.val()
+      
+      // Initialize local gameConfig from DB if it exists (for refreshes/rejoins)
+      if (data.config) {
+        setGameConfig(prev => {
+          // Only update if something changed to avoid unnecessary re-renders
+          if (JSON.stringify(prev) !== JSON.stringify(data.config)) {
+            return { ...prev, ...data.config }
+          }
+          return prev
+        })
+      }
+
       roomStatusRef.current = data.status   // keep ref in sync for callbacks
       setRoom(prev => {
         if (prev && data.current_question_index !== prev.current_question_index) {
@@ -451,6 +478,22 @@ export default function HostGameRoom() {
     })
     return () => unsubRoom()
   }, [roomId, session])
+
+  // ── Sync gameConfig to DB ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!session || !roomId || !room) return
+
+    // We only push the config to DB if it's different from what's already there
+    // This avoids circular updates since the room listener also updates local config
+    const currentDbConfigStr = JSON.stringify(room.config || {})
+    const localConfigStr     = JSON.stringify(gameConfig)
+
+    if (currentDbConfigStr !== localConfigStr) {
+      console.log("Syncing config to DB...")
+      update(ref(rtdb, `rooms/${roomId}`), { config: gameConfig })
+        .catch(err => console.error("Config sync failed:", err))
+    }
+  }, [gameConfig, roomId, session, room?.config])
 
   // ── Fetch play history for pending requesters ──────────────────────────────
   useEffect(() => {
@@ -519,6 +562,23 @@ export default function HostGameRoom() {
     })
     return () => unsubAns()
   }, [roomId, session, room?.current_question_index])
+
+  // ── Auto-Accept Logic ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!gameConfig.auto_accept || !requests.length) return
+
+    requests.forEach(req => {
+      // Check for repeater block rule
+      const playCount  = playHistory[req.key] || 0
+      const isBlocked  = playCount > 0 && gameConfig.repeat_entry === 'block'
+      
+      // Auto-approve if not blocked and not already being processed
+      if (!isBlocked && !processingRequests.has(req.key)) {
+        console.log(`Auto-accepting player: ${req.player_name} (${req.key})`)
+        handleRequest(req.key, 'approved')
+      }
+    });
+  }, [gameConfig.auto_accept, requests, playHistory, gameConfig.repeat_entry])
 
   // ── Auto Mode: Reveal ───────────────────────────────────────────────────
   useEffect(() => {
@@ -1055,6 +1115,18 @@ export default function HostGameRoom() {
                 >
                   <Zap size={14} className={gameConfig.auto_mode ? 'animate-pulse' : ''} />
                   <span className="text-xs font-bold ar">تلقائي</span>
+                </button>
+                <button
+                  onClick={() => setGameConfig(prev => ({ ...prev, auto_accept: !prev.auto_accept }))}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
+                    gameConfig.auto_accept 
+                      ? 'bg-green-500/20 border-green-500/50 text-green-400 shadow-[0_0_15px_-5px_rgba(34,197,94,0.4)]' 
+                      : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-gray-400'
+                  }`}
+                  title="Toggle Auto-Accept Players"
+                >
+                  <UserCheck size={14} className={gameConfig.auto_accept ? 'animate-pulse' : ''} />
+                  <span className="text-xs font-bold ar">دخول تلقائي</span>
                 </button>
                 <div className="text-right">
                   <div className="text-xl font-bold">{totalPlayers} Players</div>
