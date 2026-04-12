@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react'
+import { hasArabic } from '../../utils/rtlUtils'
 
 /**
  * MathText Component
@@ -23,16 +24,19 @@ export default function MathText({ text, className = "", dir = "auto" }) {
     }
   }, [text])
 
+  // Automatic RTL detection if dir is "auto"
+  const finalDir = dir === 'auto' ? (hasArabic(text) ? 'rtl' : 'ltr') : dir
+
   // If there's no MathML, just render normally to avoid overhead
   if (!text || !text.includes('<math')) {
-    return <span className={className} dir={dir}>{text}</span>
+    return <span className={className} dir={finalDir}>{text}</span>
   }
 
   return (
     <span
       ref={containerRef}
       className={`math-container ${className}`}
-      dir={dir}
+      dir={finalDir}
       style={{ display: 'inline-block' }}
       dangerouslySetInnerHTML={{ __html: text }}
     />

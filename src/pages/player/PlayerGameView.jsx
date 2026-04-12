@@ -11,6 +11,7 @@ import confetti from 'canvas-confetti'
 import QuestionImage from '../../components/QuestionImage'
 import { signAnswer, validateReactionTime, verifyAnswerHash } from '../../utils/crypto'
 import { initActivityLogger, getActivityLogger, logActivity } from '../../utils/activityLogger'
+import { getDir } from '../../utils/rtlUtils'
 
 // ── Mini leaderboard strip ────────────────────────────────────────────────────
 // top5: [{rank, user_id, nickname, score}] — from rooms/${roomId}/leaderboard/top5
@@ -597,12 +598,12 @@ export default function PlayerGameView() {
             <MiniLeaderboard top5={top5} myId={myId} myRank={player?.rank} myScore={player?.score} myNickname={player?.nickname} />
 
             {/* Question card */}
-            <div dir={room.force_rtl ? 'rtl' : 'ltr'} className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0 space-y-3">
+            <div dir={getDir(currentQ.question, room.force_rtl)} className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0 space-y-3">
               <span className="text-primary font-bold text-xs tracking-widest uppercase block">
                 سؤال {room.current_question_index + 1} / {room.questions.questions.length}
               </span>
-              <p dir={room.force_rtl ? 'rtl' : 'auto'} className={`text-white font-bold ${questionFontClass(currentQ.question)} leading-snug`}>
-                <MathText text={currentQ.question} dir={room.force_rtl ? 'rtl' : 'auto'} />
+              <p className={`text-white font-bold ${questionFontClass(currentQ.question)} leading-snug`}>
+                <MathText text={currentQ.question} dir={getDir(currentQ.question, room.force_rtl)} />
               </p>
               {currentQ.image_url && (
                 <QuestionImage src={currentQ.image_url} className="w-full max-h-36 object-contain rounded-xl border border-gray-700 bg-gray-950" />
@@ -615,22 +616,22 @@ export default function PlayerGameView() {
 
             {/* Choices */}
             {!answerLocked ? (
-              <div dir={room.force_rtl ? 'rtl' : 'ltr'} className="grid grid-cols-2 gap-2">
+              <div dir={getDir(currentQ.question, room.force_rtl)} className="grid grid-cols-2 gap-2">
                 {currentQ.choices.map((choice, idx) => (
                   <button key={idx} onClick={() => handleChoiceClick(idx)}
                     className="flex items-center gap-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl px-4 py-3 transition-all active:scale-95 group">
                     <span className="w-8 h-8 rounded-lg bg-gray-700 group-hover:bg-primary/20 text-gray-300 group-hover:text-primary font-bold flex-shrink-0 flex items-center justify-center text-sm transition-colors">
                       {String.fromCharCode(65 + idx)}
                     </span>
-                    <span dir={room.force_rtl ? 'rtl' : 'auto'} className="text-white font-medium text-sm leading-snug">
-                      <MathText text={choice} dir={room.force_rtl ? 'rtl' : 'auto'} />
+                    <span className="text-white font-medium text-sm leading-snug">
+                      <MathText text={choice} dir={getDir(choice, room.force_rtl)} />
                     </span>
                   </button>
                 ))}
               </div>
             ) : (
               <>
-                <div dir={room.force_rtl ? 'rtl' : 'ltr'} className="grid grid-cols-2 gap-2">
+                <div dir={getDir(currentQ.question, room.force_rtl)} className="grid grid-cols-2 gap-2">
                   {currentQ.choices.map((choice, idx) => {
                     const isPicked = idx === selectedChoice
                     return (
@@ -644,8 +645,8 @@ export default function PlayerGameView() {
                         }`}>
                           {String.fromCharCode(65 + idx)}
                         </span>
-                        <span dir={room.force_rtl ? 'rtl' : 'auto'} className={`font-medium text-sm leading-snug ${isPicked ? 'text-white' : 'text-gray-400'}`}>
-                          <MathText text={choice} dir={room.force_rtl ? 'rtl' : 'auto'} />
+                        <span className={`font-medium text-sm leading-snug ${isPicked ? 'text-white' : 'text-gray-400'}`}>
+                          <MathText text={choice} dir={getDir(choice, room.force_rtl)} />
                         </span>
                         {isPicked && <Zap size={13} className="ml-auto flex-shrink-0 text-primary" fill="currentColor" />}
                       </div>
@@ -671,9 +672,9 @@ export default function PlayerGameView() {
             <MiniLeaderboard top5={top5} myId={myId} myRank={player?.rank} myScore={player?.score} myNickname={player?.nickname} />
 
             {/* Question */}
-            <div dir={room.force_rtl ? 'rtl' : 'ltr'} className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0 space-y-2">
-              <p dir={room.force_rtl ? 'rtl' : 'auto'} className={`text-gray-300 font-medium ${questionFontClass(currentQ.question)} leading-snug`}>
-                <MathText text={currentQ.question} dir={room.force_rtl ? 'rtl' : 'auto'} />
+            <div dir={getDir(currentQ.question, room.force_rtl)} className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0 space-y-2">
+              <p className={`text-gray-300 font-medium ${questionFontClass(currentQ.question)} leading-snug`}>
+                <MathText text={currentQ.question} dir={getDir(currentQ.question, room.force_rtl)} />
               </p>
               {currentQ.image_url && (
                 <QuestionImage src={currentQ.image_url} className="w-full max-h-28 object-contain rounded-xl border border-gray-700 bg-gray-950" />
@@ -681,7 +682,7 @@ export default function PlayerGameView() {
             </div>
 
             {/* Choices with correct highlight (revealed_answer shows only text, not index) */}
-            <div dir={room.force_rtl ? 'rtl' : 'ltr'} className="grid grid-cols-2 gap-2 flex-shrink-0">
+            <div dir={getDir(currentQ.question, room.force_rtl)} className="grid grid-cols-2 gap-2 flex-shrink-0">
               {currentQ.choices.map((choice, idx) => {
                 const revealedAnswer = room.revealed_answers?.[room.current_question_index]
                 const isCorrect = choice === revealedAnswer
@@ -699,8 +700,8 @@ export default function PlayerGameView() {
                     }`}>
                       {String.fromCharCode(65 + idx)}
                     </span>
-                    <span dir={room.force_rtl ? 'rtl' : 'auto'} className={`font-medium text-sm leading-snug ${isCorrect || isPicked ? 'text-white' : 'text-gray-400'}`}>
-                      <MathText text={choice} dir={room.force_rtl ? 'rtl' : 'auto'} />
+                    <span className={`font-medium text-sm leading-snug ${isCorrect || isPicked ? 'text-white' : 'text-gray-400'}`}>
+                      <MathText text={choice} dir={getDir(choice, room.force_rtl)} />
                     </span>
                     {isCorrect && <CheckCircle2 size={14} className="ml-auto flex-shrink-0 text-primary" />}
                     {!isCorrect && isPicked && <XCircle size={14} className="ml-auto flex-shrink-0 text-red-400" />}

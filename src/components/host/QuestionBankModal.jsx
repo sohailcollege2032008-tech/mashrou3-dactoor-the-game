@@ -4,6 +4,7 @@ import { doc, updateDoc } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '../../lib/firebase'
 import { compressImage, formatBytes } from '../../utils/imageCompressor'
+import { hasArabic, getDir } from '../../utils/rtlUtils'
 import {
   X, Edit2, Save, XCircle, Image,
   ChevronDown, ChevronUp, Camera, Trash2, AlertTriangle, Clipboard
@@ -293,21 +294,24 @@ const QuestionItem = memo(function QuestionItem({
   const needsImg = q.needs_image && !hasImage
   const correctLabel = q.choices?.[q.correct] ?? '—'
 
+  // Decide direction for the whole item container
+  const itemDir = getDir(q.question, forceRtl)
+
   return (
     <div className={`rounded-xl border ${needsImg ? 'border-amber-500/30 bg-amber-500/5' : 'border-gray-800 bg-gray-900/50'}`}>
       {/* Header row */}
-      <div dir={forceRtl ? 'rtl' : 'ltr'} className="flex items-center gap-3 p-4">
+      <div dir={itemDir} className="flex items-center gap-3 p-4">
         <span className="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-400 flex-shrink-0">
           {i + 1}
         </span>
 
         <div className="flex-1 min-w-0">
           <p className="text-white font-medium text-sm leading-snug line-clamp-2">
-            <MathText text={q.question} />
+            <MathText text={q.question} dir={itemDir} />
           </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className="text-xs text-green-400 font-mono truncate max-w-[160px]">
-              <MathText text={correctLabel} />
+              <MathText text={correctLabel} dir={itemDir} />
             </span>
             {hasImage && (
               <span className="flex items-center gap-1 text-xs text-blue-400">
@@ -341,7 +345,7 @@ const QuestionItem = memo(function QuestionItem({
 
       {/* Expanded choices */}
       {isExpanded && (
-        <div dir={forceRtl ? 'rtl' : 'ltr'} className="px-4 pb-4 pt-3 border-t border-gray-800/60 space-y-2">
+        <div dir={itemDir} className="px-4 pb-4 pt-3 border-t border-gray-800/60 space-y-2">
           {hasImage && (
             <img
               src={q.image_url}
@@ -362,7 +366,7 @@ const QuestionItem = memo(function QuestionItem({
               >
                 <span className="font-bold font-mono w-5 flex-shrink-0">{String.fromCharCode(65 + ci)}</span>
                 <span className="flex-1 min-w-0">
-                  <MathText text={choice} />
+                  <MathText text={choice} dir={itemDir} />
                 </span>
                 {ci === q.correct && <span className="text-green-500 text-xs font-bold ml-auto">✓</span>}
               </div>
@@ -389,23 +393,49 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
   const [forceRtl, setForceRtl]         = useState(bank.force_rtl || false)
   const [savingGlobal, setSavingGlobal] = useState(false)
 
-  const saveGlobalSettings = async () => {
+  const saveGlobalSettings = async (overrides = {}) => {
     setSavingGlobal(true)
     try {
-      const tagsArray = tags
+      const finalIsGlobal = overrides.hasOwnProperty('isGlobal') ? overrides.isGlobal : isGlobal
+      const finalTags = overrides.hasOwnProperty('tags') ? overrides.tags : tags
+      const finalForceRtl = overrides.hasOwnProperty('forceRtl') ? overrides.forceRtl : forceRtl
+
+      const tagsArray = finalTags
         .split(',')
         .map(t => t.trim())
         .filter(Boolean)
-      await updateDoc(doc(db, 'question_sets', bank.id), {
-        is_global: isGlobal,
+
+      const updatePayload = {
+        is_global: finalIsGlobal,
         tags: tagsArray,
-        force_rtl: forceRtl,
+        force_rtl: finalForceRtl,
+      }
+
+      await updateDoc(doc(db, 'question_sets', bank.id), updatePayload)
+
+      // Sync with parent context (HostDashboard)
+      onUpdate?.(bank.id, bank.questions, bankTitle, {
+        ...bank,
+        ...updatePayload
       })
     } catch (e) {
       alert('فشل الحفظ: ' + e.message)
     } finally {
       setSavingGlobal(false)
     }
+  }
+
+  // Auto-save toggle handlers
+  const handleForceRtlToggle = async () => {
+    const newVal = !forceRtl
+    setForceRtl(newVal)
+    await saveGlobalSettings({ forceRtl: newVal })
+  }
+
+  const handleIsGlobalToggle = async () => {
+    const newVal = !isGlobal
+    setIsGlobal(newVal)
+    await saveGlobalSettings({ isGlobal: newVal })
   }
 
   const needsImageCount = questions.filter(q => q.needs_image && !q.image_url).length
@@ -492,7 +522,7 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-gray-300">عام (Deck مرئي للطلاب)</span>
             <button
-              onClick={() => setIsGlobal(prev => !prev)}
+              onClick={handleIsGlobalToggle}
               className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${isGlobal ? 'bg-primary' : 'bg-gray-700'}`}
             >
               <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isGlobal ? 'left-5.5 right-0.5' : 'left-0.5'}`} />
@@ -518,7 +548,7 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
               </p>
             </div>
             <button
-              onClick={() => setForceRtl(prev => !prev)}
+              onClick={handleForceRtlToggle}
               className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${forceRtl ? 'bg-primary' : 'bg-gray-700'}`}
             >
               <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${forceRtl ? 'left-5.5 right-0.5' : 'left-0.5'}`} />
