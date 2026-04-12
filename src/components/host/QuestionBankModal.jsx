@@ -392,6 +392,17 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
   const [tags, setTags]                 = useState((bank.tags || []).join(', '))
   const [forceRtl, setForceRtl]         = useState(bank.force_rtl || false)
   const [savingGlobal, setSavingGlobal] = useState(false)
+  
+  // Keep local state in sync with parent prop updates
+  useEffect(() => {
+    setIsGlobal(bank.is_global || false)
+    setTags((bank.tags || []).join(', '))
+    setForceRtl(bank.force_rtl || false)
+    setBankTitle(bank.title)
+    if (bank.questions?.questions) {
+      setQuestions(bank.questions.questions)
+    }
+  }, [bank])
 
   const saveGlobalSettings = async (overrides = {}) => {
     setSavingGlobal(true)

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <title>MathJax Arabic Left-Side Subscripts Test</title>
+    <script>
+      window.MathJax = {
+        loader: { load: ['input/mml', 'output/chtml'] },
+        displayAlign: 'inherit',
+        chtml: {
+          displayAlign: 'inherit',
+          matchFontHeight: true
+        }
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/mml-chtml.js"></script>
+    <style>
+        body {
+            background: #0D1321;
+            color: white;
+            padding: 50px;
+            font-family: sans-serif;
+            text-align: right;
+        }
+        .test-case {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+        h2 { color: #00D4FF; }
+        .math-render { font-size: 48px; border: 1px dashed #444; padding: 10px; display: inline-block; }
+        .label { display: block; margin-bottom: 10px; font-size: 16px; opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <h1>اختبار الأرقام السفلية على اليسار (Arabic Left-Side Subscripts)</h1>
+    
+    <div class="test-case">
+        <span class="label">ق١ (الرقم على اليسار باستخدام mmultiscripts)</span>
+        <div class="math-render">
+            <math>
+                <mmultiscripts>
+                    <mi>ق</mi>
+                    <mprescripts/>
+                    <mn>١</mn>
+                    <none/>
+                </mmultiscripts>
+            </math>
+        </div>
+    </div>
+
+    <div class="test-case">
+        <span class="label">متجه مع رقم على اليسار (Vector + Left Subscript)</span>
+        <div class="math-render">
+            <math>
+                <mmultiscripts>
+                    <mover>
+                        <mi>ق</mi>
+                        <mo>→</mo>
+                    </mover>
+                    <mprescripts/>
+                    <mn>٢</mn>
+                    <none/>
+                </mmultiscripts>
+            </math>
+        </div>
+    </div>
+
+    <div class="test-case">
+        <span class="label">مقارنة مع msub التقليدي (الذي يضعه على اليمين حالياً)</span>
+        <div class="math-render">
+            <math>
+                <msub>
+                    <mi>ق</mi>
+                    <mn>٣</mn>
+                </msub>
+            </math>
+        </div>
+    </div>
+</body>
+</html>

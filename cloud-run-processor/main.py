@@ -92,10 +92,11 @@ was already provided above. Set to false otherwise.
 10. If the question contains a mix of Arabic and English (common in medical exams), preserve the mixture in both "question" and "question_ar".
 11. ARABIC MATH SYMBOLS: When extracting Arabic math variables (like ق, س, ص, ع):
    - Use <mi> for the Arabic letter.
-   - FOR SUBSCRIPTS: Use <mmultiscripts> to put the index on the LEFT side (e.g., ق١ becomes <math><mmultiscripts><mi>ق</mi><mprescripts/><mn>١</mn><none/></mmultiscripts></math>).
-   - FOR VECTORS: Use <mover> (e.g., <math><mover><mi>ق</mi><mo>→</mo></mover></math>).
-   - FOR BOTH: Nest them (e.g., <math><mmultiscripts><mover><mi>ق</mi><mo>→</mo></mover><mprescripts/><mn>١</mn><none/></mmultiscripts></math>).
-   - Match the numeral style (Arabic 1, 2 or Arabic-Indic ١, ٢) and arrow direction (left or right) EXACTLY as per the source.
+   - FOR SUBSCRIPTS: Use standard <msub> (e.g., ق١ becomes <math><msub><mi>ق</mi><mn>١</mn></msub></math>). 
+     NOTE: In an Arabic RTL context, <msub> naturally places the subscript on the LEFT side of the letter. This is the correct standard.
+   - FOR VECTORS: Use <mover> (e.g., <math><mover><mi>ق</mi><mo>→</mo></mover></math>). Use the standard right arrow →.
+   - FOR BOTH: Nest them (e.g., <math><msub><mover><mi>ق</mi><mo>→</mo></mover><mn>١</mn></msub></math>).
+   - Match the numeral style (Arabic 1, 2 or Arabic-Indic ١, ٢) EXACTLY as per the source.
 """
 
 # ── MIME helpers ───────────────────────────────────────────────────────────────

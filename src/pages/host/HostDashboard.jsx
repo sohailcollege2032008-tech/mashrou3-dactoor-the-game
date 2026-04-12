@@ -127,15 +127,15 @@ export default function HostDashboard() {
     alert('فشل إنشاء الأوضة بعد عدة محاولات — من المحتمل تعارض في الكود. حاول تاني.')
   }
 
-  const handleBankUpdate = (bankId, updatedQuestions, updatedTitle) => {
+  const handleBankUpdate = (bankId, updatedQuestions, updatedTitle, fullBankUpdate = null) => {
     setBanks(prev => prev.map(b =>
       b.id === bankId
-        ? { ...b, questions: updatedQuestions, title: updatedTitle, question_count: updatedQuestions.questions.length }
+        ? (fullBankUpdate ? { ...b, ...fullBankUpdate } : { ...b, questions: updatedQuestions, title: updatedTitle, question_count: updatedQuestions.questions.length })
         : b
     ))
     // Update selectedBank so modal reflects changes immediately
     setSelectedBank(prev => prev && prev.id === bankId
-      ? { ...prev, questions: updatedQuestions, title: updatedTitle }
+      ? (fullBankUpdate ? { ...prev, ...fullBankUpdate } : { ...prev, questions: updatedQuestions, title: updatedTitle })
       : prev
     )
   }
