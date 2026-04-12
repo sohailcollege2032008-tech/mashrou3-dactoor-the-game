@@ -88,8 +88,25 @@ function GameConfigPanel({ config, onChange }) {
         <Settings size={16} className="text-primary" /> إعدادات الجيم
       </h3>
 
+      {/* Auto-Accept toggle */}
+      <div className="pb-3 border-b border-gray-800">
+        <label className="flex items-center justify-between cursor-pointer select-none">
+          <div className="flex items-center gap-2">
+            <UserCheck size={16} className="text-green-400" />
+            <span className="ar text-sm text-gray-100 font-bold">قبول تلقائي للاعبين</span>
+          </div>
+          <button
+            onClick={() => apply('auto_accept', !config.auto_accept)}
+            className={`relative w-11 h-6 rounded-full transition-all duration-300 ${config.auto_accept ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]' : 'bg-gray-700'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.auto_accept ? 'translate-x-5' : ''}`} />
+          </button>
+        </label>
+        <p className="ar text-[10px] text-gray-500 mt-1 mr-6">قبول طلبات الانضمام فوراً دون تدخل يدوي</p>
+      </div>
+
       {/* Timer duration */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-2">
           <Timer size={15} className="text-gray-400" />
           <span className="ar text-sm text-gray-200 font-medium">وقت العد التنازلي</span>
@@ -161,20 +178,6 @@ function GameConfigPanel({ config, onChange }) {
           className={`relative w-11 h-6 rounded-full transition-colors ${config.shuffle_questions ? 'bg-secondary' : 'bg-gray-700'}`}
         >
           <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.shuffle_questions ? 'translate-x-5' : ''}`} />
-        </button>
-      </label>
-
-      {/* Auto-Accept toggle */}
-      <label className="flex items-center justify-between cursor-pointer select-none">
-        <div className="flex items-center gap-2">
-          <UserCheck size={15} className="text-green-400" />
-          <span className="ar text-sm text-gray-200 font-medium">قبول تلقائي للاعبين</span>
-        </div>
-        <button
-          onClick={() => apply('auto_accept', !config.auto_accept)}
-          className={`relative w-11 h-6 rounded-full transition-colors ${config.auto_accept ? 'bg-green-500' : 'bg-gray-700'}`}
-        >
-          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.auto_accept ? 'translate-x-5' : ''}`} />
         </button>
       </label>
 
@@ -1075,17 +1078,6 @@ export default function HostGameRoom() {
       {toasts.length > 0 && (
         <div className="fixed right-5 top-20 z-[200] space-y-2 pointer-events-none max-w-[220px]">
           {toasts.map(t => (
-            <div key={t.id}
-              className="flex items-center gap-2 bg-green-900/95 border border-green-500/60 text-green-100 px-3 py-2 rounded-xl shadow-2xl shadow-black/40"
-              style={{ animation: 'slideInRight .25s ease-out' }}
-            >
-              <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
-              <span className="font-bold text-sm flex-1 truncate">{t.nickname}</span>
-              <span className="text-green-400 font-mono text-xs flex-shrink-0">{t.time_ms}ms</span>
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className="max-w-6xl mx-auto space-y-6">
 
@@ -1109,24 +1101,24 @@ export default function HostGameRoom() {
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
                     gameConfig.auto_mode 
                       ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400 shadow-[0_0_15px_-5px_rgba(234,179,8,0.4)]' 
-                      : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-gray-400'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-300'
                   }`}
                   title="Toggle Auto-Progression"
                 >
                   <Zap size={14} className={gameConfig.auto_mode ? 'animate-pulse' : ''} />
-                  <span className="text-xs font-bold ar">تلقائي</span>
+                  <span className="text-[10px] font-bold ar">مود تلقائي</span>
                 </button>
                 <button
                   onClick={() => setGameConfig(prev => ({ ...prev, auto_accept: !prev.auto_accept }))}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
                     gameConfig.auto_accept 
                       ? 'bg-green-500/20 border-green-500/50 text-green-400 shadow-[0_0_15px_-5px_rgba(34,197,94,0.4)]' 
-                      : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-gray-400'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-300'
                   }`}
                   title="Toggle Auto-Accept Players"
                 >
                   <UserCheck size={14} className={gameConfig.auto_accept ? 'animate-pulse' : ''} />
-                  <span className="text-xs font-bold ar">دخول تلقائي</span>
+                  <span className="text-[10px] font-bold ar">قبول طلبات</span>
                 </button>
                 <div className="text-right">
                   <div className="text-xl font-bold">{totalPlayers} Players</div>
