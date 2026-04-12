@@ -4,7 +4,7 @@ import { ref, set, get } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuthStore } from '../../stores/authStore'
 import { Link, useNavigate } from 'react-router-dom'
-import { FileText, AlertCircle } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import UploadQuestionsModal from '../../components/host/UploadQuestionsModal'
 import QuestionBankModal from '../../components/host/QuestionBankModal'
 
@@ -236,13 +236,6 @@ export default function HostDashboard() {
                           <FileText size={12} />
                           المصدر
                         </a>
-                      ) : (
-                        bank.source_type === 'ai' && (
-                          <span className="bg-amber-500/10 text-amber-500 px-2 py-1 rounded-md border border-amber-500/20 flex items-center gap-1.5" title="لم يتم أرشفة الملف الأصلي">
-                            <AlertCircle size={12} />
-                            ملف ناقص
-                          </span>
-                        )
                       )}
                       <span className="bg-gray-700/80 px-2 py-1 rounded-md">
                         {bank.created_at?.seconds
