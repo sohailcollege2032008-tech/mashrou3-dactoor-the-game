@@ -85,7 +85,7 @@ function GameConfigPanel({ config, onChange }) {
   return (
     <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5 space-y-5">
       <h3 className="text-base font-bold text-white flex items-center gap-2">
-        <Settings size={16} className="text-primary" /> إعدادات الجيم
+        <Settings size={16} className="text-primary" /> إعدادات الجيم - med royale v2
       </h3>
 
       {/* Auto-Accept toggle */}
@@ -1095,7 +1095,7 @@ export default function HostGameRoom() {
         {/* Header */}
         <div dir={getDir(room.title, room.force_rtl)} className="flex items-center justify-between bg-gray-900/50 p-5 rounded-2xl border border-gray-800">
           <div>
-            <h1 className="text-3xl font-display font-bold text-white">{room.title}</h1>
+            <h1 className="text-3xl font-display font-bold text-white">{room.title} - med royale v2</h1>
             <p className="text-lg text-primary font-mono tracking-widest mt-1">JOIN: {roomId}</p>
           </div>
           <div className="flex items-center gap-3">
