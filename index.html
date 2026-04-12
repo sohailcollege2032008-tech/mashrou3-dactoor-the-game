@@ -15,6 +15,12 @@
         }
       };
     </script>
+    <style>
+      /* Ensure MathML containers in RTL don't have stray LTR behavior */
+      [dir="rtl"] mjx-container {
+        text-align: right !important;
+      }
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/mml-chtml.js"></script>
   </head>
   <body>

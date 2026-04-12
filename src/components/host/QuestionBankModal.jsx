@@ -60,7 +60,7 @@ function useImageUpload(bankId, index, onUploaded) {
 }
 
 // ── Single Question Editor ────────────────────────────────────────────────────
-function QuestionEditor({ question, index, bankId, onSave, onClose }) {
+function QuestionEditor({ question, index, bankId, onSave, onClose, forceRtl }) {
   const [q, setQ]     = useState({ ...question })
   const [saving, setSaving] = useState(false)
   const fileInputRef  = useRef(null)
@@ -131,7 +131,8 @@ function QuestionEditor({ question, index, bankId, onSave, onClose }) {
               value={q.question}
               onChange={e => setQ(prev => ({ ...prev, question: e.target.value }))}
               rows={3}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary resize-none transition-colors"
+              dir={forceRtl ? 'rtl' : 'auto'}
+              className={`w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary resize-none transition-colors ${forceRtl ? 'text-right' : 'text-left'}`}
             />
             {q.question.includes('<math') && (
               <div className="mt-2 p-3 bg-gray-900/50 border border-gray-800 rounded-xl text-sm italic text-primary/80">
@@ -239,9 +240,10 @@ function QuestionEditor({ question, index, bankId, onSave, onClose }) {
                   <input
                     value={choice}
                     onChange={e => handleChoiceChange(i, e.target.value)}
+                    dir={forceRtl ? 'rtl' : 'auto'}
                     className={`flex-1 bg-gray-800 border rounded-lg px-4 py-2.5 text-white focus:outline-none transition-colors ${
                       q.correct === i ? 'border-green-500/60 focus:border-green-500' : 'border-gray-700 focus:border-primary'
-                    }`}
+                    } ${forceRtl ? 'text-right' : 'text-left'}`}
                     placeholder={`الخيار ${String.fromCharCode(65 + i)}`}
                   />
                 </div>
@@ -611,6 +613,7 @@ export default function QuestionBankModal({ bank, onClose, onUpdate }) {
           bankId={bank.id}
           onSave={saveQuestion}
           onClose={() => setEditingIndex(null)}
+          forceRtl={forceRtl}
         />
       )}
     </div>

@@ -27,6 +27,16 @@ export default function MathText({ text, className = "", dir = "auto" }) {
   // Automatic RTL detection if dir is "auto"
   const finalDir = dir === 'auto' ? (hasArabic(text) ? 'rtl' : 'ltr') : dir
 
+  // Runtime fix: Inject dir="rtl" into <math> tags if we are in RTL mode 
+  // and the AI didn't already provide it.
+  let processedText = text
+  if (finalDir === 'rtl' && text?.includes('<math')) {
+    processedText = text.replace(/<math([^>]*)>/g, (match, attrs) => {
+      if (attrs.includes('dir=')) return match
+      return `<math${attrs} dir="rtl">`
+    })
+  }
+
   // If there's no MathML, just render normally to avoid overhead
   if (!text || !text.includes('<math')) {
     return <span className={className} dir={finalDir}>{text}</span>
@@ -38,7 +48,7 @@ export default function MathText({ text, className = "", dir = "auto" }) {
       className={`math-container ${className}`}
       dir={finalDir}
       style={{ display: 'inline-block' }}
-      dangerouslySetInnerHTML={{ __html: text }}
+      dangerouslySetInnerHTML={{ __html: processedText }}
     />
   )
 }
