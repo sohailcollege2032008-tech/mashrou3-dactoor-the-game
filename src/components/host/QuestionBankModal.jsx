@@ -132,6 +132,12 @@ function QuestionEditor({ question, index, bankId, onSave, onClose }) {
               rows={3}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary resize-none transition-colors"
             />
+            {q.question.includes('<math') && (
+              <div className="mt-2 p-3 bg-gray-900/50 border border-gray-800 rounded-xl text-sm italic text-primary/80">
+                <p className="text-[10px] text-gray-500 mb-1 uppercase tracking-widest font-bold">معاينة السؤال</p>
+                <MathText text={q.question} />
+              </div>
+            )}
           </div>
 
           {/* Image section */}
@@ -240,6 +246,19 @@ function QuestionEditor({ question, index, bankId, onSave, onClose }) {
                 </div>
               ))}
             </div>
+            {q.choices.some(c => c.includes('<math')) && (
+              <div className="mt-4 p-4 bg-gray-900/50 border border-gray-800 rounded-xl space-y-2">
+                <p className="text-[10px] text-gray-500 mb-1 uppercase tracking-widest font-bold">معاينة الاختيارات</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {q.choices.map((c, ci) => (
+                    <div key={ci} className="text-sm italic text-primary/80 flex gap-2">
+                      <span className="font-bold text-gray-600 font-mono">{String.fromCharCode(65 + ci)}.</span>
+                      <MathText text={c} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <p className="text-xs text-gray-500 mt-2">اضغط على الحرف لتحديد الإجابة الصحيحة</p>
           </div>
 

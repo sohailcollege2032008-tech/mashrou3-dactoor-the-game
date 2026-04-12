@@ -55,6 +55,28 @@ function CountdownBar({ startedAt, duration }) {
   )
 }
 
+/**
+ * Converts MathML/HTML to a human-readable text format for plain-text logs.
+ */
+function formatFormulaForLog(html) {
+  if (!html) return '';
+  let text = html
+    // Fractions: (top)/(bottom)
+    .replace(/<mfrac>\s*(?:<mrow>)?([\s\S]*?)(?:<\/mrow>)?\s*(?:<mrow>)?([\s\S]*?)(?:<\/mrow>)?\s*<\/mfrac>/gi, '($1)/($2)')
+    // Powers: base^(exp)
+    .replace(/<msup>\s*(?:<mrow>)?([\s\S]*?)(?:<\/mrow>)?\s*(?:<mrow>)?([\s\S]*?)(?:<\/mrow>)?\s*<\/msup>/gi, '($1)^($2)')
+    // Subscripts: base_(sub)
+    .replace(/<msub>\s*(?:<mrow>)?([\s\S]*?)(?:<\/mrow>)?\s*(?:<mrow>)?([\s\S]*?)(?:<\/mrow>)?\s*<\/msub>/gi, '($1)_($2)')
+    // Square roots: sqrt(content)
+    .replace(/<msqrt>\s*(?:<mrow>)?([\s\S]*?)(?:<\/mrow>)?\s*<\/msqrt>/gi, 'sqrt($1)');
+
+  // Strip remaining HTML tags
+  const temp = document.createElement('div');
+  temp.innerHTML = text;
+  const plain = temp.textContent || temp.innerText || "";
+  return plain.replace(/\s+/g, ' ').trim();
+}
+
 // ── Config panel ──────────────────────────────────────────────────────────────
 function GameConfigPanel({ config, onChange }) {
   const apply = (key, val) => onChange({ ...config, [key]: val })
@@ -833,7 +855,7 @@ export default function HostGameRoom() {
       for (let qi = 0; qi < questions.length; qi++) {
         const q = questions[qi]
         lines.push('═'.repeat(62))
-        lines.push(`Q${qi + 1}: ${q.question}`)
+        lines.push(`Q${qi + 1}: ${formatFormulaForLog(q.question)}`)
         let correctIdx = -1
         // secretKey handled per question loop if needed, but we can declare it once
         const sessionSecret = `${roomId}:${room.created_at}`
@@ -850,7 +872,7 @@ export default function HostGameRoom() {
             break
           }
         }
-        lines.push(`Correct: ${q.choices[correctIdx] || '?'}`)
+         lines.push(`Correct: ${formatFormulaForLog(q.choices[correctIdx] || '?')}`)
         lines.push('─'.repeat(62))
 
         const ansSnap = await get(ref(rtdb, `rooms/${roomId}/answers/${qi}`))
@@ -867,7 +889,7 @@ export default function HostGameRoom() {
           lines.push(`  ✓  #${i + 1}  ${pad(a.player_name || '?', 28)}${pad(a.reaction_time_ms + 'ms', 10)}${pts}`)
         })
         wrong.forEach(a => {
-          const chosen = q.choices[a.selected_choice] || '?'
+          const chosen = formatFormulaForLog(q.choices[a.selected_choice] || '?')
           lines.push(`  ✗       ${pad(a.player_name || '?', 28)}${pad(a.reaction_time_ms + 'ms', 10)}  chose: ${chosen}`)
         })
         noAnswer.forEach(p => {
