@@ -1078,6 +1078,17 @@ export default function HostGameRoom() {
       {toasts.length > 0 && (
         <div className="fixed right-5 top-20 z-[200] space-y-2 pointer-events-none max-w-[220px]">
           {toasts.map(t => (
+            <div key={t.id}
+              className="flex items-center gap-2 bg-green-900/95 border border-green-500/60 text-green-100 px-3 py-2 rounded-xl shadow-2xl shadow-black/40"
+              style={{ animation: 'slideInRight .25s ease-out' }}
+            >
+              <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
+              <span className="font-bold text-sm flex-1 truncate">{t.nickname}</span>
+              <span className="text-green-400 font-mono text-xs flex-shrink-0">{t.time_ms}ms</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="max-w-6xl mx-auto space-y-6">
 
