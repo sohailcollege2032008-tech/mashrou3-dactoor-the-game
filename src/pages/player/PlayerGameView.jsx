@@ -221,7 +221,8 @@ export default function PlayerGameView() {
                 : []
               const myRank = sortedLeaderboard.findIndex(p => p.user_id === uid) + 1
 
-              await addDoc(collection(db, 'notifications', uid, 'items'), {
+              // Use roomId as document ID so re-navigating never duplicates
+              await setDoc(doc(db, 'notifications', uid, 'items', roomId), {
                 type:             'game_finished',
                 room_id:          roomId,
                 room_title:       data.title || roomId,
@@ -232,7 +233,7 @@ export default function PlayerGameView() {
                 full_leaderboard: sortedLeaderboard,
                 created_at:       serverTimestamp(),
                 read:             false,
-              })
+              }, { merge: false })
 
               // ── Write host notification (backup for unattended mode) ────
               // Only write if host notification doesn't exist yet (use room-keyed doc)
