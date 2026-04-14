@@ -10,6 +10,18 @@
               ".write": "auth != null && auth.uid == $userId && !data.exists()"
             }
           }
+        },
+        "reveal_locks": {
+          "$qIdx": {
+            ".read":  "auth != null",
+            ".write": "auth != null && !data.exists()"
+          }
+        },
+        "next_locks": {
+          "$qIdx": {
+            ".read":  "auth != null",
+            ".write": "auth != null && !data.exists()"
+          }
         }
       }
     },

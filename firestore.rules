@@ -32,5 +32,14 @@ service cloud.firestore {
       allow write: if request.auth != null &&
                       request.auth.token.email == 'sohailcollege2032008@gmail.com';
     }
+
+    // Notifications — any authenticated user can write to any user's notifications
+    // (needed so player clients can write host notifications in unattended mode,
+    //  and so the host can write player notifications).
+    // Only the notification owner can read their own notifications.
+    match /notifications/{userId}/items/{notifId} {
+      allow read:  if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null;
+    }
   }
 }

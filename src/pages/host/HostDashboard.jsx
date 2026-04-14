@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, deleteDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore'
+import React, { useState, useEffect, useRef } from 'react'
+import { collection, query, where, getDocs, deleteDoc, doc, addDoc, serverTimestamp, onSnapshot, updateDoc, orderBy, limit } from 'firebase/firestore'
 import { ref, set, get } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuthStore } from '../../stores/authStore'
 import { Link, useNavigate } from 'react-router-dom'
-import { FileText } from 'lucide-react'
+import { FileText, Bell, Trophy, X, CheckCheck } from 'lucide-react'
 import UploadQuestionsModal from '../../components/host/UploadQuestionsModal'
 import QuestionBankModal from '../../components/host/QuestionBankModal'
 
@@ -18,6 +18,9 @@ export default function HostDashboard() {
   const [deletingId, setDeletingId] = useState(null)
   const [selectedBank, setSelectedBank] = useState(null)
   const [activeRoom, setActiveRoom] = useState(null)   // { code, title } if host has live game
+  const [notifications, setNotifications] = useState([])
+  const [showNotifications, setShowNotifications] = useState(false)
+  const notifPanelRef = useRef(null)
 
   useEffect(() => {
     if (profile) fetchBanks()
@@ -42,6 +45,39 @@ export default function HostDashboard() {
     }
     check()
   }, [profile])
+
+  // ── Subscribe to host notifications ──────────────────────────────────────
+  useEffect(() => {
+    if (!session?.uid) return
+    const q = query(
+      collection(db, 'notifications', session.uid, 'items'),
+      orderBy('created_at', 'desc'),
+      limit(20)
+    )
+    const unsub = onSnapshot(q, snap => {
+      setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, () => {})
+    return () => unsub()
+  }, [session?.uid])
+
+  // Close notification panel when clicking outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target)) {
+        setShowNotifications(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const markAllRead = async () => {
+    if (!session?.uid) return
+    const unread = notifications.filter(n => !n.read)
+    await Promise.all(unread.map(n =>
+      updateDoc(doc(db, 'notifications', session.uid, 'items', n.id), { read: true })
+    ))
+  }
 
   const fetchBanks = async () => {
     setLoading(true)
@@ -154,6 +190,80 @@ export default function HostDashboard() {
             <p className="text-gray-400 mt-2 font-sans">Manage your Question Banks and Game Rooms</p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Notification Bell */}
+            <div className="relative" ref={notifPanelRef}>
+              <button
+                onClick={() => { setShowNotifications(v => !v); if (!showNotifications) markAllRead() }}
+                className="relative p-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-gray-600 transition-colors"
+                title="الإشعارات"
+              >
+                <Bell size={18} className="text-gray-300" />
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-background text-[9px] font-bold rounded-full flex items-center justify-center">
+                    {notifications.filter(n => !n.read).length}
+                  </span>
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                    <span className="font-bold text-sm text-white ar">الإشعارات</span>
+                    <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <p className="text-gray-500 text-sm text-center py-8 ar">لا توجد إشعارات</p>
+                    ) : (
+                      notifications.map(n => (
+                        <div
+                          key={n.id}
+                          className={`px-4 py-3 border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors ${!n.read ? 'bg-primary/5' : ''}`}
+                        >
+                          {n.type === 'game_finished' && (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <Trophy size={13} className="text-primary flex-shrink-0" />
+                                <span className="text-white font-bold text-sm truncate ar">{n.room_title}</span>
+                                {!n.read && <span className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />}
+                              </div>
+                              <p className="text-gray-400 text-xs ar">
+                                {n.total_players} لاعب
+                                {n.winner_nickname ? ` · الفايز: ${n.winner_nickname}` : ''}
+                              </p>
+                              {n.results_url && (
+                                <Link
+                                  to={n.results_url}
+                                  onClick={() => setShowNotifications(false)}
+                                  className="inline-block text-primary text-xs font-bold hover:underline mt-0.5"
+                                >
+                                  عرض النتائج ←
+                                </Link>
+                              )}
+                              {n.created_at?.seconds && (
+                                <p className="text-gray-600 text-[10px] font-mono">
+                                  {new Date(n.created_at.seconds * 1000).toLocaleString('ar-EG')}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {notifications.length > 0 && (
+                    <div className="px-4 py-2 border-t border-gray-800">
+                      <button onClick={markAllRead} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors ar">
+                        <CheckCheck size={12} /> تحديد الكل كمقروء
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <Link to="/" className="text-gray-400 hover:text-white transition-colors font-sans text-sm">Return Home</Link>
             <Link
               to="/player/decks"

@@ -3,17 +3,19 @@ import MathText from '../../components/common/MathText'
 import { getDir } from '../../utils/rtlUtils'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, update, get, set, onDisconnect } from 'firebase/database'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
+import { performReveal, performNextQuestion } from '../../utils/gameRunner'
 import { useAuth } from '../../hooks/useAuth'
 import {
   Play, UserCheck, XCircle, CheckCircle, SkipForward, Trophy,
   Eye, Timer, Loader2, WifiOff, StopCircle, Shuffle, Star, Zap, Settings, Layers, Shield,
-  X, Phone, Mail, User
+  X, Phone, Mail, User, Moon
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import QuestionImage from '../../components/QuestionImage'
 import { generateCorrectAnswerHash, verifyAnswerHash } from '../../utils/crypto'
+// Note: verifyAnswerHash is still used in downloadLogs
 import HostGameReport from '../../components/HostGameReport'
 import ActivityLogViewer from '../../components/ActivityLogViewer'
 
@@ -151,6 +153,33 @@ function GameConfigPanel({ config, onChange }) {
             />
           </div>
         )}
+      </div>
+
+      {/* Unattended Mode toggle */}
+      <div className="space-y-2 pt-1 border-t border-gray-800">
+        <label className="flex items-center justify-between cursor-pointer select-none">
+          <div className="flex items-center gap-2">
+            <Moon size={15} className="text-purple-400" />
+            <span className="ar text-sm text-gray-200 font-medium">وضع غير مُراقَب</span>
+          </div>
+          <button
+            onClick={() => {
+              const next = !config.unattended_mode
+              // Enabling unattended forces auto_accept + auto_mode on
+              if (next) {
+                onChange({ ...config, unattended_mode: true, auto_accept: true, auto_mode: true })
+              } else {
+                onChange({ ...config, unattended_mode: false })
+              }
+            }}
+            className={`relative w-11 h-6 rounded-full transition-colors ${config.unattended_mode ? 'bg-purple-500' : 'bg-gray-700'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.unattended_mode ? 'translate-x-5' : ''}`} />
+          </button>
+        </label>
+        <p className="ar text-[10px] text-gray-500 mr-6">
+          ابدأ الجيم وسيبه يشتغل لوحده — حتى لو سكرت المتصفح يكمل ويبعتلك إشعار لما يخلص
+        </p>
       </div>
 
       {/* Shuffle Choices toggle */}
@@ -412,8 +441,9 @@ export default function HostGameRoom() {
     auto_mode: false,
     auto_timer: 45,
     shuffle_questions: false,
-    auto_accept: false,      // NEW: Auto-accept join requests
+    auto_accept: false,
     repeat_entry: 'allow',   // 'allow' | 'badge' | 'block'
+    unattended_mode: false,  // game runs without host present
   })
   const [playHistory, setPlayHistory] = useState({})  // { [uid]: count }
 
@@ -728,137 +758,7 @@ export default function HostGameRoom() {
   const revealAnswer = async () => {
     setIsRevealing(true)
     try {
-      const config       = room.config || { scoring_mode: 'classic' }
-      const qIdx         = room.current_question_index
-      const currentQuestion = room.questions.questions[qIdx]
-      const correctHash = currentQuestion.correct_hash
-
-      const answersSnap = await get(ref(rtdb, `rooms/${roomId}/answers/${qIdx}`))
-      const allAnswers  = answersSnap.exists() ? Object.values(answersSnap.val()) : []
-
-      // Generate secret key for hash verification
-      const secretKey = `${roomId}:${room.created_at}`
-
-      // Verify each answer against the correct hash
-      const correct = []
-      for (const answer of allAnswers) {
-        const isCorrect = await verifyAnswerHash(
-          answer.selected_choice,
-          correctHash,
-          `${roomId}-q${qIdx}`,
-          roomId,
-          secretKey
-        )
-        if (isCorrect) {
-          correct.push(answer)
-        }
-      }
-      correct.sort((a, b) => a.reaction_time_ms - b.reaction_time_ms)
-
-      const winner = correct[0] || null
-
-      // ── Calculate points per rank ─────────────────────────────────────────
-      const getPoints = (rank0) => {   // rank0 = 0-indexed
-        const { scoring_mode, first_correct_points: N = 3, other_correct_points: M = 1, points_decrement: X = 1 } = config
-        if (scoring_mode === 'classic')  return rank0 === 0 ? 1 : 0
-        if (scoring_mode === 'custom')   return rank0 === 0 ? N : M
-        if (scoring_mode === 'ranked')   return Math.max(0, N - rank0 * X)
-        return 0
-      }
-
-      // ── Build updates ─────────────────────────────────────────────────────
-      const scoreUpdates  = {}
-      const answerUpdates = {}
-
-      // Batch-read all player scores we need to update
-      const toUpdate = correct.filter((_, i) => getPoints(i) > 0)
-      const scoreSnaps = await Promise.all(
-        toUpdate.map(a => get(ref(rtdb, `rooms/${roomId}/players/${a.user_id}/score`)))
-      )
-
-      // Track new scores locally to build leaderboard without extra reads
-      const newScoreById = {}
-      players.forEach(p => { newScoreById[p.user_id] = p.score })
-
-      toUpdate.forEach((a, idx) => {
-        const pts = getPoints(correct.indexOf(a))
-        const newScore = (scoreSnaps[idx].val() || 0) + pts
-        scoreUpdates[`rooms/${roomId}/players/${a.user_id}/score`] = newScore
-        answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/points_earned`] = pts
-        newScoreById[a.user_id] = newScore
-      })
-
-      // Rank + is_first_correct + is_correct for all correct answers
-      correct.forEach((a, i) => {
-        answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/rank`]             = i + 1
-        answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/is_first_correct`] = i === 0
-        answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/is_correct`]       = true
-      })
-
-      // ── Build leaderboard summary (top 5 + each player's rank) ───────────
-      // Sort players by new score (no extra DB read — uses live `players` state)
-      const sortedPlayers = [...players]
-        .map(p => ({ ...p, score: newScoreById[p.user_id] ?? p.score }))
-        .sort((a, b) => b.score - a.score)
-
-      const top5 = sortedPlayers.slice(0, 5).map((p, i) => ({
-        rank:     i + 1,
-        user_id:  p.user_id,
-        nickname: p.nickname,
-        score:    newScoreById[p.user_id] ?? p.score,
-      }))
-
-      const rankUpdates = { [`rooms/${roomId}/leaderboard/top5`]: top5 }
-      sortedPlayers.forEach((p, i) => {
-        rankUpdates[`rooms/${roomId}/players/${p.user_id}/rank`] = i + 1
-      })
-
-      const winners = correct.map((a, i) => {
-        const pts = getPoints(i)
-        return {
-          user_id: a.user_id,
-          nickname: a.player_name || 'Unknown',
-          time_ms: a.reaction_time_ms,
-          points: pts,
-          rank: i + 1
-        }
-      })
-
-      const revealData = {
-        winner_nickname: winner?.player_name || null,
-        winner_time_ms:  winner?.reaction_time_ms || null,
-        correct_count:   correct.length,
-        winners:         winners,
-      }
-
-      // Store the correct answer for reveal after game ends
-      // (secretKey already declared at line 437)
-      let correctIdx = -1
-      for (let i = 0; i < currentQuestion.choices.length; i++) {
-        const isMatch = await verifyAnswerHash(
-          i, 
-          currentQuestion.correct_hash, 
-          `${roomId}-q${qIdx}`, 
-          roomId, 
-          secretKey
-        )
-        if (isMatch) {
-          correctIdx = i
-          break
-        }
-      }
-
-      const correctAnswerText = currentQuestion.choices[correctIdx] || 'Not available'
-
-      await update(ref(rtdb), {
-        ...scoreUpdates,
-        ...answerUpdates,
-        ...rankUpdates,
-        [`rooms/${roomId}/status`]:      'revealing',
-        [`rooms/${roomId}/reveal_data`]: revealData,
-        [`rooms/${roomId}/revealed_answers/${qIdx}`]: correctAnswerText,
-        [`rooms/${roomId}/revealed_correct_index`]:   correctIdx,
-      })
+      const { revealData } = await performReveal(roomId, room, players)
       setRevealResult(revealData)
     } catch (err) { alert('Reveal failed: ' + err.message) }
     finally { setIsRevealing(false) }
@@ -867,22 +767,8 @@ export default function HostGameRoom() {
   // ── Next question ─────────────────────────────────────────────────────────
   const nextQuestion = async () => {
     if (!room?.questions?.questions) return
-    const isFinished = room.current_question_index + 1 >= room.questions.questions.length
     try {
-      if (isFinished) {
-        await update(ref(rtdb, `rooms/${roomId}`), { status: 'finished' })
-        await set(ref(rtdb, `host_rooms/${session.uid}/active`), null)
-      } else {
-        await update(ref(rtdb, `rooms/${roomId}`), {
-          status: 'playing',
-          current_question_index: room.current_question_index + 1,
-          question_started_at: Date.now(),
-          reveal_data: null,
-          revealed_correct_index: null,
-          countdown_started_at: null,
-          countdown_duration: null,
-        })
-      }
+      await performNextQuestion(roomId, room, session.uid)
       setRevealResult(null)
     } catch (err) { alert('Error: ' + err.message) }
   }
@@ -1034,10 +920,56 @@ export default function HostGameRoom() {
     }
   }
 
-  // ── Effect: Collect results when game finishes ──────────────────────────
+  // ── Write notifications to Firestore when game finishes ──────────────────
+  const notificationsWrittenRef = useRef(false)
+  const writeGameNotifications = async () => {
+    if (notificationsWrittenRef.current) return
+    notificationsWrittenRef.current = true
+    try {
+      const hostUid = session?.uid
+      if (!hostUid) return
+
+      // Build full sorted leaderboard from current players state
+      const sortedLeaderboard = [...players].sort((a, b) => b.score - a.score)
+        .map((p, i) => ({ rank: i + 1, user_id: p.user_id, nickname: p.nickname, score: p.score }))
+
+      // ── Host notification ──────────────────────────────────────────────
+      const winner = sortedLeaderboard[0] || null
+      await addDoc(collection(db, 'notifications', hostUid, 'items'), {
+        type:            'game_finished',
+        room_id:         roomId,
+        room_title:      room.title || roomId,
+        total_players:   players.length,
+        winner_nickname: winner?.nickname || null,
+        results_url:     `/host/game/${roomId}`,
+        created_at:      serverTimestamp(),
+        read:            false,
+      })
+
+      // ── Player notifications ───────────────────────────────────────────
+      await Promise.all(sortedLeaderboard.map((entry, idx) =>
+        addDoc(collection(db, 'notifications', entry.user_id, 'items'), {
+          type:             'game_finished',
+          room_id:          roomId,
+          room_title:       room.title || roomId,
+          my_rank:          idx + 1,
+          my_score:         entry.score,
+          total_players:    players.length,
+          full_leaderboard: sortedLeaderboard,
+          created_at:       serverTimestamp(),
+          read:             false,
+        })
+      ))
+    } catch (err) {
+      console.error('[Notifications] Failed to write game notifications:', err)
+    }
+  }
+
+  // ── Effect: Collect results + write notifications when game finishes ─────
   useEffect(() => {
     if (room?.status === 'finished' && !gameResults) {
       collectGameResults()
+      writeGameNotifications()
     }
   }, [room?.status, room?.questions, gameResults, roomId, players])
 
@@ -1122,14 +1054,32 @@ export default function HostGameRoom() {
                 <button
                   onClick={() => setGameConfig(prev => ({ ...prev, auto_accept: !prev.auto_accept }))}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
-                    gameConfig.auto_accept 
-                      ? 'bg-green-500/20 border-green-500/50 text-green-400 shadow-[0_0_15px_-5px_rgba(34,197,94,0.4)]' 
+                    gameConfig.auto_accept
+                      ? 'bg-green-500/20 border-green-500/50 text-green-400 shadow-[0_0_15px_-5px_rgba(34,197,94,0.4)]'
                       : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-300'
                   }`}
                   title="Toggle Auto-Accept Players"
                 >
                   <UserCheck size={14} className={gameConfig.auto_accept ? 'animate-pulse' : ''} />
                   <span className="text-[10px] font-bold ar">قبول طلبات</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const next = !gameConfig.unattended_mode
+                    setGameConfig(prev => next
+                      ? { ...prev, unattended_mode: true, auto_accept: true, auto_mode: true }
+                      : { ...prev, unattended_mode: false }
+                    )
+                  }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
+                    gameConfig.unattended_mode
+                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-400 shadow-[0_0_15px_-5px_rgba(168,85,247,0.4)]'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-300'
+                  }`}
+                  title="Unattended Mode — game runs without host"
+                >
+                  <Moon size={14} className={gameConfig.unattended_mode ? 'animate-pulse' : ''} />
+                  <span className="text-[10px] font-bold ar">غير مُراقَب</span>
                 </button>
                 <div className="text-right">
                   <div className="text-xl font-bold">{totalPlayers} Players</div>

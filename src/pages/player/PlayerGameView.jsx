@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import MathText from '../../components/common/MathText'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, get, set, runTransaction, onDisconnect } from 'firebase/database'
-import { doc, updateDoc, increment, getDoc, setDoc, serverTimestamp, collection } from 'firebase/firestore'
+import { doc, updateDoc, increment, getDoc, setDoc, addDoc, serverTimestamp, collection } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
@@ -12,6 +12,7 @@ import QuestionImage from '../../components/QuestionImage'
 import { signAnswer, validateReactionTime, verifyAnswerHash } from '../../utils/crypto'
 import { initActivityLogger, getActivityLogger, logActivity } from '../../utils/activityLogger'
 import { getDir } from '../../utils/rtlUtils'
+import { useUnattendedGameRunner } from '../../hooks/useUnattendedGameRunner'
 
 // ── Mini leaderboard strip ────────────────────────────────────────────────────
 // top5: [{rank, user_id, nickname, score}] — from rooms/${roomId}/leaderboard/top5
@@ -169,7 +170,7 @@ export default function PlayerGameView() {
       }
       if (data.status === 'finished' && prevStatusRef.current !== 'finished') {
         confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 } })
-        const qSetId = data.question_set_id
+        const qSetId  = data.question_set_id
         const hostUid = data.host_id
 
         if (qSetId && uid) {
@@ -178,7 +179,6 @@ export default function PlayerGameView() {
             [`played_decks.${qSetId}`]: increment(1)
           }).catch(() => {})
 
-          // ── Write game history entry ──────────────────────────────────────
           ;(async () => {
             try {
               const [deckSnap, hostSnap] = await Promise.all([
@@ -187,19 +187,20 @@ export default function PlayerGameView() {
               ])
               const deckData = deckSnap.data() || {}
               const hostName = hostSnap?.data()?.display_name || 'دكتور'
-              const myScore = data.players?.[uid]?.score ?? 0
+              const myScore  = data.players?.[uid]?.score ?? 0
 
+              // ── Write game history entry ────────────────────────────────
               await setDoc(doc(db, 'profiles', uid, 'game_history', roomId), {
-                type: 'competition',
-                deck_id: qSetId,
-                deck_title: deckData.title || qSetId,
-                deck_is_global: deckData.is_global || false,
-                played_at: serverTimestamp(),
-                host_uid: hostUid || null,
-                host_name: hostName,
-                score: myScore,
+                type:            'competition',
+                deck_id:         qSetId,
+                deck_title:      deckData.title || qSetId,
+                deck_is_global:  deckData.is_global || false,
+                played_at:       serverTimestamp(),
+                host_uid:        hostUid || null,
+                host_name:       hostName,
+                score:           myScore,
                 total_questions: deckData.questions?.questions?.length || 0,
-                room_code: roomId,
+                room_code:       roomId,
               })
 
               // Track that this host has hosted us (for phone visibility)
@@ -208,8 +209,51 @@ export default function PlayerGameView() {
                   [`hosted_by.${hostUid}`]: hostName,
                 }).catch(() => {})
               }
+
+              // ── Write player notification ───────────────────────────────
+              const sortedLeaderboard = data.players
+                ? Object.values(data.players)
+                    .sort((a, b) => (b.score || 0) - (a.score || 0))
+                    .map((p, i) => ({
+                      rank: i + 1, user_id: p.user_id,
+                      nickname: p.nickname, score: p.score || 0,
+                    }))
+                : []
+              const myRank = sortedLeaderboard.findIndex(p => p.user_id === uid) + 1
+
+              await addDoc(collection(db, 'notifications', uid, 'items'), {
+                type:             'game_finished',
+                room_id:          roomId,
+                room_title:       data.title || roomId,
+                host_name:        hostName,
+                my_rank:          myRank,
+                my_score:         myScore,
+                total_players:    sortedLeaderboard.length,
+                full_leaderboard: sortedLeaderboard,
+                created_at:       serverTimestamp(),
+                read:             false,
+              })
+
+              // ── Write host notification (backup for unattended mode) ────
+              // Only write if host notification doesn't exist yet (use room-keyed doc)
+              if (hostUid) {
+                setDoc(
+                  doc(db, 'notifications', hostUid, 'items', roomId),
+                  {
+                    type:            'game_finished',
+                    room_id:         roomId,
+                    room_title:      data.title || roomId,
+                    total_players:   sortedLeaderboard.length,
+                    winner_nickname: sortedLeaderboard[0]?.nickname || null,
+                    results_url:     `/host/game/${roomId}`,
+                    created_at:      serverTimestamp(),
+                    read:            false,
+                  },
+                  { merge: false }   // don't overwrite if host already wrote it
+                ).catch(() => {})   // silently ignore — host may have already written
+              }
             } catch (e) {
-              console.error('Failed to write competition history:', e)
+              console.error('Failed to write competition history/notifications:', e)
             }
           })()
         }
@@ -247,6 +291,11 @@ export default function PlayerGameView() {
     })
     return () => unsub()
   }, [roomId, session])
+
+  // ── Unattended game runner ────────────────────────────────────────────────
+  // When unattended_mode is on, this client acts as a backup runner so the
+  // game advances even if the host closes their browser.
+  useUnattendedGameRunner({ roomId, room, session })
 
   // ── Rejoin: load existing answer ──────────────────────────────────────────
   useEffect(() => {
