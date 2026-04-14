@@ -191,7 +191,7 @@ export default function HostDashboard() {
           </div>
           <div className="flex items-center gap-3">
             {/* Notification Bell */}
-            <div className="relative" ref={notifPanelRef}>
+            <div ref={notifPanelRef}>
               <button
                 onClick={() => { setShowNotifications(v => !v); if (!showNotifications) markAllRead() }}
                 className="relative p-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-gray-600 transition-colors"
@@ -206,40 +206,39 @@ export default function HostDashboard() {
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                <div className="fixed top-24 right-8 w-80 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[999] overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-                    <span className="font-bold text-sm text-white ar">الإشعارات</span>
-                    <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white">
+                    <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white transition-colors">
                       <X size={14} />
                     </button>
+                    <span className="font-bold text-sm text-white ar">الإشعارات</span>
                   </div>
-                  <div className="max-h-96 overflow-y-auto">
+                  <div className="max-h-[70vh] overflow-y-auto">
                     {notifications.length === 0 ? (
                       <p className="text-gray-500 text-sm text-center py-8 ar">لا توجد إشعارات</p>
                     ) : (
                       notifications.map(n => (
-                        <div
-                          key={n.id}
+                        <div key={n.id}
                           className={`px-4 py-3 border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors ${!n.read ? 'bg-primary/5' : ''}`}
                         >
                           {n.type === 'game_finished' && (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <Trophy size={13} className="text-primary flex-shrink-0" />
-                                <span className="text-white font-bold text-sm truncate ar">{n.room_title}</span>
+                            <div className="space-y-1 text-right" dir="rtl">
+                              <div className="flex items-center gap-2 justify-end">
                                 {!n.read && <span className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />}
+                                <span className="text-white font-bold text-sm ar">{n.room_title}</span>
+                                <Trophy size={13} className="text-primary flex-shrink-0" />
                               </div>
                               <p className="text-gray-400 text-xs ar">
+                                {n.winner_nickname ? `الفايز: ${n.winner_nickname} · ` : ''}
                                 {n.total_players} لاعب
-                                {n.winner_nickname ? ` · الفايز: ${n.winner_nickname}` : ''}
                               </p>
                               {n.results_url && (
                                 <Link
                                   to={n.results_url}
                                   onClick={() => setShowNotifications(false)}
-                                  className="inline-block text-primary text-xs font-bold hover:underline mt-0.5"
+                                  className="inline-block text-primary text-xs font-bold hover:underline"
                                 >
-                                  عرض النتائج ←
+                                  → عرض النتائج
                                 </Link>
                               )}
                               {n.created_at?.seconds && (
@@ -254,9 +253,9 @@ export default function HostDashboard() {
                     )}
                   </div>
                   {notifications.length > 0 && (
-                    <div className="px-4 py-2 border-t border-gray-800">
+                    <div className="px-4 py-2 border-t border-gray-800 flex justify-end">
                       <button onClick={markAllRead} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors ar">
-                        <CheckCheck size={12} /> تحديد الكل كمقروء
+                        تحديد الكل كمقروء <CheckCheck size={12} />
                       </button>
                     </div>
                   )}

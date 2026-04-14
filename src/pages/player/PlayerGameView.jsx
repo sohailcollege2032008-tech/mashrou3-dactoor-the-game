@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import MathText from '../../components/common/MathText'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, get, set, runTransaction, onDisconnect } from 'firebase/database'
-import { doc, updateDoc, increment, getDoc, setDoc, addDoc, serverTimestamp, collection } from 'firebase/firestore'
+import { doc, updateDoc, increment, getDoc, setDoc, serverTimestamp, collection } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
@@ -221,7 +221,7 @@ export default function PlayerGameView() {
                 : []
               const myRank = sortedLeaderboard.findIndex(p => p.user_id === uid) + 1
 
-              // Use roomId as document ID so re-navigating never duplicates
+              // roomId as doc ID — idempotent, re-navigating won't duplicate
               await setDoc(doc(db, 'notifications', uid, 'items', roomId), {
                 type:             'game_finished',
                 room_id:          roomId,
@@ -233,7 +233,7 @@ export default function PlayerGameView() {
                 full_leaderboard: sortedLeaderboard,
                 created_at:       serverTimestamp(),
                 read:             false,
-              }, { merge: false })
+              })
 
               // ── Write host notification (backup for unattended mode) ────
               // Only write if host notification doesn't exist yet (use room-keyed doc)

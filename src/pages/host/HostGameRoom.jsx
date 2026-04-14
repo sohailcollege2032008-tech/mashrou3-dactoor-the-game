@@ -3,7 +3,7 @@ import MathText from '../../components/common/MathText'
 import { getDir } from '../../utils/rtlUtils'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, update, get, set, onDisconnect } from 'firebase/database'
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { performReveal, performNextQuestion } from '../../utils/gameRunner'
 import { useAuth } from '../../hooks/useAuth'
@@ -933,9 +933,9 @@ export default function HostGameRoom() {
       const sortedLeaderboard = [...players].sort((a, b) => b.score - a.score)
         .map((p, i) => ({ rank: i + 1, user_id: p.user_id, nickname: p.nickname, score: p.score }))
 
-      // ── Host notification ──────────────────────────────────────────────
+      // ── Host notification (roomId as doc ID → idempotent) ─────────────
       const winner = sortedLeaderboard[0] || null
-      await addDoc(collection(db, 'notifications', hostUid, 'items'), {
+      await setDoc(doc(db, 'notifications', hostUid, 'items', roomId), {
         type:            'game_finished',
         room_id:         roomId,
         room_title:      room.title || roomId,
@@ -946,9 +946,9 @@ export default function HostGameRoom() {
         read:            false,
       })
 
-      // ── Player notifications ───────────────────────────────────────────
+      // ── Player notifications (roomId as doc ID → idempotent) ──────────
       await Promise.all(sortedLeaderboard.map((entry, idx) =>
-        addDoc(collection(db, 'notifications', entry.user_id, 'items'), {
+        setDoc(doc(db, 'notifications', entry.user_id, 'items', roomId), {
           type:             'game_finished',
           room_id:          roomId,
           room_title:       room.title || roomId,
