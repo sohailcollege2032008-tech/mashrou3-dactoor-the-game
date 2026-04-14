@@ -562,7 +562,7 @@ export default function PlayerGameView() {
     <div className="flex flex-col h-screen bg-background text-white overflow-hidden">
 
       {/* Host offline banner */}
-      {!hostOnline && room?.status !== 'finished' && (
+      {!hostOnline && room?.status !== 'finished' && !room?.config?.unattended_mode && (
         <div className="bg-red-500/20 border-b border-red-500/40 px-4 py-2 flex items-center justify-center gap-2 text-red-300 text-sm font-bold flex-shrink-0">
           <WifiOff size={15} /> الهوست خرج — في انتظار عودته...
         </div>
