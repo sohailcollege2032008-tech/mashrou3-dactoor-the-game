@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { collection, query, where, getDocs, deleteDoc, doc, addDoc, serverTimestamp, onSnapshot, updateDoc, orderBy, limit } from 'firebase/firestore'
 import { ref, set, get } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
@@ -205,65 +206,66 @@ export default function HostDashboard() {
                 )}
               </button>
 
-              {showNotifications && (
+              {showNotifications && createPortal(
                 <>
                   {/* invisible backdrop to close on outside click */}
                   <div className="fixed inset-0 z-[49998]" onClick={() => setShowNotifications(false)} />
-                <div className="fixed top-24 right-8 w-80 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[49999] overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-                    <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white transition-colors">
-                      <X size={14} />
-                    </button>
-                    <span className="font-bold text-sm text-white ar">الإشعارات</span>
-                  </div>
-                  <div className="max-h-[70vh] overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <p className="text-gray-500 text-sm text-center py-8 ar">لا توجد إشعارات</p>
-                    ) : (
-                      notifications.map(n => (
-                        <div key={n.id}
-                          className={`px-4 py-3 border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors ${!n.read ? 'bg-primary/5' : ''}`}
-                        >
-                          {n.type === 'game_finished' && (
-                            <div className="space-y-1 text-right" dir="rtl">
-                              <div className="flex items-center gap-2 justify-end">
-                                {!n.read && <span className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />}
-                                <span className="text-white font-bold text-sm ar">{n.room_title}</span>
-                                <Trophy size={13} className="text-primary flex-shrink-0" />
-                              </div>
-                              <p className="text-gray-400 text-xs ar">
-                                {n.winner_nickname ? `الفايز: ${n.winner_nickname} · ` : ''}
-                                {n.total_players} لاعب
-                              </p>
-                              {n.results_url && (
-                                <Link
-                                  to={n.results_url}
-                                  onClick={() => setShowNotifications(false)}
-                                  className="inline-block text-primary text-xs font-bold hover:underline"
-                                >
-                                  → عرض النتائج
-                                </Link>
-                              )}
-                              {n.created_at?.seconds && (
-                                <p className="text-gray-600 text-[10px] font-mono">
-                                  {new Date(n.created_at.seconds * 1000).toLocaleString('ar-EG')}
+                  <div className="fixed top-24 right-8 w-80 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[49999] overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                      <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white transition-colors">
+                        <X size={14} />
+                      </button>
+                      <span className="font-bold text-sm text-white ar">الإشعارات</span>
+                    </div>
+                    <div className="max-h-[70vh] overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <p className="text-gray-500 text-sm text-center py-8 ar">لا توجد إشعارات</p>
+                      ) : (
+                        notifications.map(n => (
+                          <div key={n.id}
+                            className={`px-4 py-3 border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors ${!n.read ? 'bg-primary/5' : ''}`}
+                          >
+                            {n.type === 'game_finished' && (
+                              <div className="space-y-1 text-right" dir="rtl">
+                                <div className="flex items-center gap-2 justify-end">
+                                  {!n.read && <span className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />}
+                                  <span className="text-white font-bold text-sm ar">{n.room_title}</span>
+                                  <Trophy size={13} className="text-primary flex-shrink-0" />
+                                </div>
+                                <p className="text-gray-400 text-xs ar">
+                                  {n.winner_nickname ? `الفايز: ${n.winner_nickname} · ` : ''}
+                                  {n.total_players} لاعب
                                 </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))
+                                {n.results_url && (
+                                  <Link
+                                    to={n.results_url}
+                                    onClick={() => setShowNotifications(false)}
+                                    className="inline-block text-primary text-xs font-bold hover:underline"
+                                  >
+                                    → عرض النتائج
+                                  </Link>
+                                )}
+                                {n.created_at?.seconds && (
+                                  <p className="text-gray-600 text-[10px] font-mono">
+                                    {new Date(n.created_at.seconds * 1000).toLocaleString('ar-EG')}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {notifications.length > 0 && (
+                      <div className="px-4 py-2 border-t border-gray-800 flex justify-end">
+                        <button onClick={markAllRead} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors ar">
+                          تحديد الكل كمقروء <CheckCheck size={12} />
+                        </button>
+                      </div>
                     )}
                   </div>
-                  {notifications.length > 0 && (
-                    <div className="px-4 py-2 border-t border-gray-800 flex justify-end">
-                      <button onClick={markAllRead} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors ar">
-                        تحديد الكل كمقروء <CheckCheck size={12} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-                </>
+                </>,
+                document.body
               )}
             </div>
 

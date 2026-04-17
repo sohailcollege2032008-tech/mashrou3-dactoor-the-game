@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, Link } from 'react-router-dom'
 import { ref, get, set, update } from 'firebase/database'
 import { collection, query, orderBy, limit, onSnapshot, updateDoc, doc } from 'firebase/firestore'
@@ -159,66 +160,70 @@ export default function JoinGame() {
               )}
             </button>
 
-            {showNotifications && (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden text-right">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-                  <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white">
-                    <X size={14} />
-                  </button>
-                  <span className="font-bold text-sm text-white ar">الإشعارات</span>
-                </div>
-                <div className="max-h-80 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <p className="text-gray-500 text-sm text-center py-8 ar">لا توجد إشعارات</p>
-                  ) : notifications.map(n => (
-                    <div key={n.id} className={`px-4 py-3 border-b border-gray-800/60 ${!n.read ? 'bg-primary/5' : ''}`}>
-                      {n.type === 'game_finished' && (
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-end gap-2">
-                            {!n.read && <span className="w-1.5 h-1.5 bg-primary rounded-full" />}
-                            <span className="text-white font-bold text-sm ar truncate">{n.room_title}</span>
-                            <Trophy size={13} className="text-primary flex-shrink-0" />
-                          </div>
-                          <p className="text-gray-400 text-xs ar">
-                            مرتبتك: <span className="text-white font-bold">#{n.my_rank}</span>
-                            {' '}· نقاطك: <span className="text-primary font-bold">{n.my_score}</span>
-                            {' '}من {n.total_players} لاعب
-                          </p>
-                          {/* Mini leaderboard */}
-                          {n.full_leaderboard?.length > 0 && (
-                            <div className="mt-2 space-y-0.5">
-                              {n.full_leaderboard.slice(0, 5).map((p) => (
-                                <div key={p.user_id} className={`flex items-center justify-between text-xs px-2 py-0.5 rounded ${p.user_id === session?.uid ? 'bg-primary/20 text-primary' : 'text-gray-400'}`}>
-                                  <span className="font-mono">#{p.rank}</span>
-                                  <span className="flex-1 text-right mx-2 truncate">{p.nickname}</span>
-                                  <span className="font-mono font-bold">{p.score}</span>
-                                </div>
-                              ))}
-                              {n.full_leaderboard.length > 5 && (
-                                <p className="text-gray-600 text-[10px] text-center">
-                                  +{n.full_leaderboard.length - 5} آخرين
-                                </p>
-                              )}
-                            </div>
-                          )}
-                          {n.created_at?.seconds && (
-                            <p className="text-gray-600 text-[10px] font-mono mt-1">
-                              {new Date(n.created_at.seconds * 1000).toLocaleString('ar-EG')}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {notifications.length > 0 && (
-                  <div className="px-4 py-2 border-t border-gray-800">
-                    <button onClick={markAllRead} className="flex items-center justify-end gap-1.5 w-full text-xs text-gray-500 hover:text-gray-300 transition-colors ar">
-                      <CheckCheck size={12} /> تحديد الكل كمقروء
+            {showNotifications && createPortal(
+              <>
+                <div className="fixed inset-0 z-[49998]" onClick={() => setShowNotifications(false)} />
+                <div className="fixed top-24 right-8 w-72 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[49999] overflow-hidden text-right">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                    <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white">
+                      <X size={14} />
                     </button>
+                    <span className="font-bold text-sm text-white ar">الإشعارات</span>
                   </div>
-                )}
-              </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <p className="text-gray-500 text-sm text-center py-8 ar">لا توجد إشعارات</p>
+                    ) : notifications.map(n => (
+                      <div key={n.id} className={`px-4 py-3 border-b border-gray-800/60 ${!n.read ? 'bg-primary/5' : ''}`}>
+                        {n.type === 'game_finished' && (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-end gap-2">
+                              {!n.read && <span className="w-1.5 h-1.5 bg-primary rounded-full" />}
+                              <span className="text-white font-bold text-sm ar truncate">{n.room_title}</span>
+                              <Trophy size={13} className="text-primary flex-shrink-0" />
+                            </div>
+                            <p className="text-gray-400 text-xs ar">
+                              مرتبتك: <span className="text-white font-bold">#{n.my_rank}</span>
+                              {' '}· نقاطك: <span className="text-primary font-bold">{n.my_score}</span>
+                              {' '}من {n.total_players} لاعب
+                            </p>
+                            {/* Mini leaderboard */}
+                            {n.full_leaderboard?.length > 0 && (
+                              <div className="mt-2 space-y-0.5">
+                                {n.full_leaderboard.slice(0, 5).map((p) => (
+                                  <div key={p.user_id} className={`flex items-center justify-between text-xs px-2 py-0.5 rounded ${p.user_id === session?.uid ? 'bg-primary/20 text-primary' : 'text-gray-400'}`}>
+                                    <span className="font-mono">#{p.rank}</span>
+                                    <span className="flex-1 text-right mx-2 truncate">{p.nickname}</span>
+                                    <span className="font-mono font-bold">{p.score}</span>
+                                  </div>
+                                ))}
+                                {n.full_leaderboard.length > 5 && (
+                                  <p className="text-gray-600 text-[10px] text-center">
+                                    +{n.full_leaderboard.length - 5} آخرين
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {n.created_at?.seconds && (
+                              <p className="text-gray-600 text-[10px] font-mono mt-1">
+                                {new Date(n.created_at.seconds * 1000).toLocaleString('ar-EG')}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {notifications.length > 0 && (
+                    <div className="px-4 py-2 border-t border-gray-800">
+                      <button onClick={markAllRead} className="flex items-center justify-end gap-1.5 w-full text-xs text-gray-500 hover:text-gray-300 transition-colors ar">
+                        <CheckCheck size={12} /> تحديد الكل كمقروء
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>,
+              document.body
             )}
           </div>
         </div>
