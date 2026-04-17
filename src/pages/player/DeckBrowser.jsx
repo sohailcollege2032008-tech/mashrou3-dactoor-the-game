@@ -84,8 +84,13 @@ function BottomSheet({ deck, config, onConfigChange, onClose, profile, session, 
       const rawQuestions = deckDoc.data()?.questions?.questions || []
 
       const creatorPlayed = await fetchPlayedQuestions(uid, deckId)
+      const creatorPlayedSet = new Set(creatorPlayed)
 
       const questions = applyDuelConfig(rawQuestions, config, creatorPlayed)
+        .map(q => ({
+          ...q,
+          played_by_uids: creatorPlayedSet.has(q.question) ? [uid] : [],
+        }))
 
       if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
 
@@ -151,8 +156,17 @@ function BottomSheet({ deck, config, onConfigChange, onClose, profile, session, 
         fetchPlayedQuestions(uid, duelData.deck_id),
       ])
       const allPlayed = [...new Set([...creatorPlayed, ...joinerPlayed])]
+      const creatorPlayedSet = new Set(creatorPlayed)
+      const joinerPlayedSet  = new Set(joinerPlayed)
 
       const questions = applyDuelConfig(rawQuestions, duelData.config || {}, allPlayed)
+        .map(q => ({
+          ...q,
+          played_by_uids: [
+            ...(creatorPlayedSet.has(q.question) ? [opponentUid] : []),
+            ...(joinerPlayedSet.has(q.question)  ? [uid]         : []),
+          ],
+        }))
 
       if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
 
