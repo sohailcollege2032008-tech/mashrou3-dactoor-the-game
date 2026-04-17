@@ -21,8 +21,15 @@ import {
 } from '../../utils/tournamentUtils'
 import BracketTree from '../../components/tournament/BracketTree'
 import TournamentCountdown from '../../components/tournament/TournamentCountdown'
-import { Trophy, Download, Play, Loader2, ChevronRight, Settings } from 'lucide-react'
+import { Trophy, Download, Play, Loader2, ChevronRight, ChevronDown, Settings, Lock } from 'lucide-react'
 import html2canvas from 'html2canvas'
+
+function getRoundName(round, totalRounds) {
+  if (round === totalRounds)     return 'النهائي'
+  if (round === totalRounds - 1) return 'نصف النهائي'
+  if (round === totalRounds - 2) return 'ربع النهائي'
+  return `الجولة ${round}`
+}
 
 export default function TournamentBracket() {
   const { tournamentId } = useParams()
@@ -41,8 +48,9 @@ export default function TournamentBracket() {
   const [countdownMs, setCountdownMs] = useState(0)
   const [error,       setError]       = useState(null)
   // Round question assignment panel
-  const [assignRound, setAssignRound] = useState(null)
+  const [assignRound,   setAssignRound]   = useState(null)
   const [selectedQIdxs, setSelectedQIdxs] = useState([])
+  const [showQMgmt,     setShowQMgmt]     = useState(false)
 
   // Subscribe to tournament
   useEffect(() => {
@@ -263,7 +271,7 @@ export default function TournamentBracket() {
                     )}
                     className="mt-0.5 accent-primary"
                   />
-                  <span className="ar text-sm text-gray-300 leading-tight">{i + 1}. {q.question?.slice(0, 80)}…</span>
+                  <span className="ar text-sm text-gray-300 leading-tight">{i + 1}. {q.question}</span>
                 </label>
               ))}
             </div>
@@ -323,22 +331,75 @@ export default function TournamentBracket() {
           </div>
         )}
 
+        {/* Round Question Management — all rounds */}
+        {['transition', 'bracket'].includes(tournament.status) && matches.length > 0 && totalRounds > 0 && (
+          <div className="bg-gray-900 rounded-2xl border border-gray-800 mb-4 overflow-hidden">
+            <button
+              onClick={() => setShowQMgmt(v => !v)}
+              className="flex items-center justify-between w-full px-5 py-4 hover:bg-gray-800 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Settings size={15} className="text-primary" />
+                <span className="ar text-sm font-bold text-white">تخصيص أسئلة الجولات</span>
+              </div>
+              <ChevronDown
+                size={16}
+                className={`text-gray-400 transition-transform duration-200 ${showQMgmt ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {showQMgmt && (
+              <div className="px-4 pb-4 space-y-2 border-t border-gray-800 pt-3">
+                <p className="ar text-xs text-gray-500 mb-3">
+                  اختر الأسئلة المخصصة لكل جولة — اتركها فارغة للاختيار التلقائي من غير المستخدمة
+                </p>
+                {Array.from({ length: totalRounds }, (_, i) => i + 1).map(round => {
+                  const assigned = tournament.round_questions?.[String(round)] || []
+                  const isLocked = round < currentRound // already played
+                  return (
+                    <div key={round} className="flex items-center gap-3 bg-gray-800 rounded-xl px-3 py-2.5">
+                      <div className="flex-1">
+                        <p className="ar text-sm font-semibold text-white">
+                          {getRoundName(round, totalRounds)}
+                          {round === currentRound && (
+                            <span className="mr-2 text-xs text-primary font-mono">• جارية</span>
+                          )}
+                        </p>
+                        <p className="ar text-xs text-gray-500 mt-0.5">
+                          {assigned.length > 0
+                            ? `${assigned.length} سؤال مخصص`
+                            : 'تلقائي (أسئلة عشوائية غير مستخدمة)'}
+                        </p>
+                      </div>
+                      {isLocked ? (
+                        <div className="flex items-center gap-1 text-gray-600">
+                          <Lock size={13} />
+                          <span className="ar text-xs">منتهية</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setAssignRound(round)
+                            setSelectedQIdxs(assigned)
+                          }}
+                          className="flex items-center gap-1.5 text-xs text-primary hover:text-[#00D4FF] transition-colors font-bold ar"
+                        >
+                          <Settings size={12} />
+                          تعديل
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Round controls */}
         {tournament.status === 'bracket' && matches.length > 0 && (
           <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="ar font-bold text-white">مباريات الجولة {currentRound}</h2>
-              <button
-                onClick={() => {
-                  setAssignRound(currentRound)
-                  setSelectedQIdxs(tournament.round_questions?.[String(currentRound)] || [])
-                }}
-                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-primary transition-colors"
-              >
-                <Settings size={13} />
-                <span className="ar">تحديد أسئلة الجولة</span>
-              </button>
-            </div>
+            <h2 className="ar font-bold text-white">مباريات {getRoundName(currentRound, totalRounds)}</h2>
 
             <div className="space-y-2">
               {roundMatches.map(match => (

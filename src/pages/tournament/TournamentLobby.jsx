@@ -74,7 +74,11 @@ export default function TournamentLobby() {
     setError(null)
 
     try {
-      const actualTopCut = computeActualTopCut(registrations.length, tournament.top_cut)
+      // Auto mode: largest power-of-2 ≤ registered count; fixed mode: cap at tournament.top_cut
+      const desiredCap   = (tournament.is_auto_top_cut || !tournament.top_cut)
+        ? registrations.length
+        : tournament.top_cut
+      const actualTopCut = computeActualTopCut(registrations.length, desiredCap)
 
       // Fetch deck questions
       const deckDoc = await getDoc(doc(db, 'question_sets', tournament.deck_id))
@@ -134,8 +138,11 @@ export default function TournamentLobby() {
     )
   }
 
+  const renderDesiredCap = (tournament.is_auto_top_cut || !tournament.top_cut)
+    ? registrations.length
+    : tournament.top_cut
   const actualTopCut = registrations.length >= 2
-    ? computeActualTopCut(registrations.length, tournament.top_cut)
+    ? computeActualTopCut(registrations.length, renderDesiredCap)
     : null
 
   return (
@@ -173,7 +180,10 @@ export default function TournamentLobby() {
             <p className="ar text-xs text-gray-400">Top Cut المتوقع</p>
             <p className="ar text-lg font-black text-primary">أفضل {actualTopCut} لاعب</p>
             <p className="ar text-[10px] text-gray-500">
-              {registrations.length} مشارك → أقرب قوة لـ 2 ≤ {tournament.top_cut}
+              {registrations.length} مشارك → أقرب قوة لـ 2
+              {(tournament.is_auto_top_cut || !tournament.top_cut)
+                ? ' (وضع تلقائي)'
+                : ` ≤ ${tournament.top_cut}`}
             </p>
           </div>
         )}
