@@ -52,11 +52,28 @@ function TimerBar({ pct }) {
   )
 }
 
-export default function DuelGame() {
-  const { duelId } = useParams()
-  const navigate   = useNavigate()
+/**
+ * DuelGame can be used standalone (regular duel) or embedded in a tournament.
+ * Props:
+ *   duelPath          {string}  RTDB base path — default 'duels'
+ *   questionDurationMs {number} override for question timer — default 30000
+ *   onFinished        {fn}      called on game end instead of navigating to /duel/results
+ *   duelIdOverride    {string}  use this duelId instead of the URL param
+ */
+export default function DuelGame({
+  duelPath          = 'duels',
+  questionDurationMs: propDurationMs,
+  onFinished,
+  duelIdOverride,
+} = {}) {
+  const { duelId: duelIdParam } = useParams()
+  const duelId  = duelIdOverride || duelIdParam
+  const navigate = useNavigate()
   const { session } = useAuth()
   const uid = session?.uid
+
+  // Effective question duration (prop overrides constant)
+  const activeDurationMs = propDurationMs || QUESTION_DURATION_MS
 
   const [duel, setDuel]               = useState(null)
   const [loading, setLoading]         = useState(true)
@@ -140,7 +157,7 @@ export default function DuelGame() {
         const cur = duelRef.current
         if (!cur || cur.status === 'finished') return
         const oppUid = Object.keys(cur.players || {}).find(p => p !== uid)
-        update(rtdbRef(rtdb, `duels/${duelId}`), {
+        update(rtdbRef(rtdb, `${duelPath}/${duelId}`), {
           status: 'finished',
           forfeit_by: oppUid || null,
         }).catch(console.error)
@@ -153,7 +170,7 @@ export default function DuelGame() {
         countdownIntervalRef.current = null
       }
     }
-  }, [opponentConnected, duelId, uid])
+  }, [opponentConnected, duelId, duelPath, uid])
 
   // ── Reset per-question state ──────────────────────────────────────────────
   const lastQiRef = useRef(null)
@@ -172,7 +189,7 @@ export default function DuelGame() {
   // ── Subscribe to duel ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!duelId) return
-    const unsub = onValue(rtdbRef(rtdb, `duels/${duelId}`), snap => {
+    const unsub = onValue(rtdbRef(rtdb, `${duelPath}/${duelId}`), snap => {
       const data = snap.val()
       setDuel(data)
       setLoading(false)
@@ -182,7 +199,11 @@ export default function DuelGame() {
       }
       if (data?.status === 'finished') {
         localStorage.removeItem('activeDuelId')
-        navigate(`/duel/results/${duelId}`, { replace: true })
+        if (onFinished) {
+          onFinished()
+        } else {
+          navigate(`/duel/results/${duelId}`, { replace: true })
+        }
       }
     })
     return () => unsub()
@@ -196,7 +217,7 @@ export default function DuelGame() {
     revealInProgressRef.current = true
 
     try {
-      const statusRef = rtdbRef(rtdb, `duels/${duelId}/status`)
+      const statusRef = rtdbRef(rtdb, `${duelPath}/${duelId}/status`)
       let iWon = false
       await runTransaction(statusRef, current => {
         if (current === 'playing') { iWon = true; return 'revealing' }
@@ -208,7 +229,7 @@ export default function DuelGame() {
       // Only the winner of the transaction computes scores
       const qi = currentDuel.current_question_index
       const question = currentDuel.questions?.[qi]
-      const answersSnap = await rtdbGet(rtdbRef(rtdb, `duels/${duelId}/answers/${qi}`))
+      const answersSnap = await rtdbGet(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}`))
       const allAnswers  = answersSnap.val() || {}
       const realPlayers = new Set(Object.keys(currentDuel.players || {}))
       // Only score answers from the two registered players — ignore any visitor answers
@@ -217,11 +238,17 @@ export default function DuelGame() {
       )
       const scoreUpdates = {}
 
+      // Race-based scoring: 1st correct = 2pts, 2nd correct = 1pt
+      const correctAnswers = Object.entries(answers)
+        .filter(([, a]) => a.selected_choice === question?.correct)
+        .sort((a, b) => (a[1].reaction_time_ms ?? 0) - (b[1].reaction_time_ms ?? 0))
+      const arrivalRank = {}
+      correctAnswers.forEach(([aUid], i) => { arrivalRank[aUid] = i })
+
       for (const [aUid, answer] of Object.entries(answers)) {
-        const isCorrect  = answer.selected_choice === question?.correct
-        // 2pts normally, 1pt if this player has played this question before
-        const repeated   = isCorrect && question?.played_by_uids?.includes(aUid)
-        const pointsEarned = isCorrect ? (repeated ? 1 : 2) : 0
+        const isCorrect    = answer.selected_choice === question?.correct
+        const rank         = arrivalRank[aUid] ?? 99
+        const pointsEarned = isCorrect ? (rank === 0 ? 2 : 1) : 0
 
         scoreUpdates[`answers/${qi}/${aUid}/is_correct`]    = isCorrect
         scoreUpdates[`answers/${qi}/${aUid}/points_earned`] = pointsEarned
@@ -231,13 +258,13 @@ export default function DuelGame() {
       }
       scoreUpdates['reveal_started_at'] = serverNow()
 
-      await update(rtdbRef(rtdb, `duels/${duelId}`), scoreUpdates)
+      await update(rtdbRef(rtdb, `${duelPath}/${duelId}`), scoreUpdates)
     } catch (e) {
       console.error('triggerReveal error:', e)
     } finally {
       revealInProgressRef.current = false
     }
-  }, [duelId, serverNow])
+  }, [duelId, duelPath, serverNow])
 
   // ── triggerNextOrFinish: revealing → playing (next Q) or finished ─────────
   const triggerNextOrFinish = useCallback(async () => {
@@ -248,7 +275,7 @@ export default function DuelGame() {
 
     try {
       const result = await runTransaction(
-        rtdbRef(rtdb, `duels/${duelId}`),
+        rtdbRef(rtdb, `${duelPath}/${duelId}`),
         current => {
           if (!current || current.status !== 'revealing') return // abort
 
@@ -273,7 +300,7 @@ export default function DuelGame() {
       console.error('triggerNextOrFinish error:', e)
       nextInProgressRef.current = false
     }
-  }, [duelId, serverNow])
+  }, [duelId, duelPath, serverNow])
 
   // ── Timer: question countdown ─────────────────────────────────────────────
   useEffect(() => {
@@ -285,7 +312,7 @@ export default function DuelGame() {
 
     const tick = () => {
       const elapsed = serverNow() - duel.question_started_at
-      const pct     = Math.max(0, 1 - elapsed / QUESTION_DURATION_MS)
+      const pct     = Math.max(0, 1 - elapsed / activeDurationMs)
       setTimerPct(pct)
       if (pct <= 0) {
         clearInterval(timerIntervalRef.current)
@@ -295,7 +322,7 @@ export default function DuelGame() {
     tick()
     timerIntervalRef.current = setInterval(tick, 200)
     return () => clearInterval(timerIntervalRef.current)
-  }, [duel?.status, duel?.question_started_at, triggerReveal, serverNow])
+  }, [duel?.status, duel?.question_started_at, triggerReveal, serverNow, activeDurationMs])
 
   // ── Watch answers: both answered → reveal early ───────────────────────────
   useEffect(() => {
@@ -335,13 +362,13 @@ export default function DuelGame() {
 
     const qi = duel.current_question_index
     try {
-      await update(rtdbRef(rtdb, `duels/${duelId}/answers/${qi}`), {
+      await update(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}`), {
         [uid]: { uid, selected_choice: choiceIndex, reaction_time_ms: reactionTimeMs }
       })
     } catch (e) {
       console.error('submitAnswer error:', e)
     }
-  }, [hasAnswered, duel, uid, duelId, serverNow])
+  }, [hasAnswered, duel, uid, duelId, duelPath, serverNow])
 
   // ── Forfeit (loss) ────────────────────────────────────────────────────────
   const handleForfeit = useCallback(async () => {
@@ -349,12 +376,12 @@ export default function DuelGame() {
     setActionLoading(true)
     setConfirmAction(null)
     try {
-      await update(rtdbRef(rtdb, `duels/${duelId}`), { status: 'finished', forfeit_by: uid })
+      await update(rtdbRef(rtdb, `${duelPath}/${duelId}`), { status: 'finished', forfeit_by: uid })
     } catch (e) {
       console.error(e)
       setActionLoading(false)
     }
-  }, [duelId, uid, actionLoading])
+  }, [duelId, duelPath, uid, actionLoading])
 
   // ── Surrender (draw) ──────────────────────────────────────────────────────
   const handleSurrender = useCallback(async () => {
@@ -362,12 +389,12 @@ export default function DuelGame() {
     setActionLoading(true)
     setConfirmAction(null)
     try {
-      await update(rtdbRef(rtdb, `duels/${duelId}`), { status: 'finished', surrender_by: uid })
+      await update(rtdbRef(rtdb, `${duelPath}/${duelId}`), { status: 'finished', surrender_by: uid })
     } catch (e) {
       console.error(e)
       setActionLoading(false)
     }
-  }, [duelId, uid, actionLoading])
+  }, [duelId, duelPath, uid, actionLoading])
 
   // ── Render guards ─────────────────────────────────────────────────────────
   if (loading || !duel) {
@@ -391,7 +418,7 @@ export default function DuelGame() {
   const myAnswer       = currentAnswers[uid]
   const opponentAnswer = opponentUid ? currentAnswers[opponentUid] : null
 
-  const timeLeftSec = Math.ceil(timerPct * (QUESTION_DURATION_MS / 1000))
+  const timeLeftSec = Math.ceil(timerPct * (activeDurationMs / 1000))
 
   function choiceStyle(i) {
     if (!isRevealing && !hasAnswered) {

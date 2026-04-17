@@ -4,9 +4,23 @@
  * unattended-mode player-driven runner so the game can progress
  * even when the host is not connected.
  */
-import { ref, get, update, set } from 'firebase/database'
+import { ref, get, update, set, increment } from 'firebase/database'
 import { rtdb } from '../lib/firebase'
 import { verifyAnswerHash } from './crypto'
+
+/**
+ * Sort players by: Points DESC → Correct answers DESC → Speed ASC.
+ * "Speed" = total_reaction_ms (sum of reaction times on correct answers).
+ * Exported so HostGameRoom and tournament logic can reuse the same comparator.
+ */
+export function sortPlayers(players) {
+  return [...players].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    if ((b.correct_count ?? 0) !== (a.correct_count ?? 0))
+      return (b.correct_count ?? 0) - (a.correct_count ?? 0)
+    return (a.total_reaction_ms ?? 0) - (b.total_reaction_ms ?? 0)
+  })
+}
 
 /**
  * Reveal the current question: verify answers, calculate scores,
@@ -81,16 +95,37 @@ export async function performReveal(roomId, room, players) {
     answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/is_correct`]       = true
   })
 
+  // ── Track correct_count and total_reaction_ms for 3-key tie-breaking ─────
+  const correctCountDelta   = {}
+  const totalReactionDelta  = {}
+  players.forEach(p => {
+    correctCountDelta[p.user_id]  = p.correct_count   ?? 0
+    totalReactionDelta[p.user_id] = p.total_reaction_ms ?? 0
+  })
+  correct.forEach(a => {
+    correctCountDelta[a.user_id]  = (correctCountDelta[a.user_id]  ?? 0) + 1
+    totalReactionDelta[a.user_id] = (totalReactionDelta[a.user_id] ?? 0) + (a.reaction_time_ms ?? 0)
+    scoreUpdates[`rooms/${roomId}/players/${a.user_id}/correct_count`]    = increment(1)
+    scoreUpdates[`rooms/${roomId}/players/${a.user_id}/total_reaction_ms`] = increment(a.reaction_time_ms ?? 0)
+  })
+
   // ── Build leaderboard ────────────────────────────────────────────────────
-  const sortedPlayers = [...players]
-    .map(p => ({ ...p, score: newScoreById[p.user_id] ?? p.score }))
-    .sort((a, b) => b.score - a.score)
+  const sortedPlayers = sortPlayers(
+    [...players].map(p => ({
+      ...p,
+      score:             newScoreById[p.user_id]        ?? p.score,
+      correct_count:     correctCountDelta[p.user_id]   ?? (p.correct_count   ?? 0),
+      total_reaction_ms: totalReactionDelta[p.user_id]  ?? (p.total_reaction_ms ?? 0),
+    }))
+  )
 
   const top5 = sortedPlayers.slice(0, 5).map((p, i) => ({
-    rank:     i + 1,
-    user_id:  p.user_id,
-    nickname: p.nickname,
-    score:    newScoreById[p.user_id] ?? p.score,
+    rank:              i + 1,
+    user_id:           p.user_id,
+    nickname:          p.nickname,
+    score:             newScoreById[p.user_id]       ?? p.score,
+    correct_count:     correctCountDelta[p.user_id]  ?? (p.correct_count   ?? 0),
+    total_reaction_ms: totalReactionDelta[p.user_id] ?? (p.total_reaction_ms ?? 0),
   }))
 
   const rankUpdates = { [`rooms/${roomId}/leaderboard/top5`]: top5 }

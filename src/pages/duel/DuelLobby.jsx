@@ -67,17 +67,8 @@ export default function DuelLobby() {
         fetchPlayedQuestions(uid, duel.deck_id),
       ])
       const allPlayed = [...new Set([...creatorPlayed, ...joinerPlayed])]
-      const creatorPlayedSet = new Set(creatorPlayed)
-      const joinerPlayedSet = new Set(joinerPlayed)
 
       const questions = applyDuelConfig(rawQuestions, duel.config || {}, allPlayed)
-        .map(q => ({
-          ...q,
-          played_by_uids: [
-            ...(creatorPlayedSet.has(q.question) ? [duel.creator_uid] : []),
-            ...(joinerPlayedSet.has(q.question) ? [uid] : []),
-          ]
-        }))
 
       if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
 

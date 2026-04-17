@@ -19,6 +19,12 @@ import PublicProfile from './pages/player/PublicProfile'
 import DuelLobby from './pages/duel/DuelLobby'
 import DuelGame from './pages/duel/DuelGame'
 import DuelResults from './pages/duel/DuelResults'
+import TournamentCreate from './pages/tournament/TournamentCreate'
+import TournamentLobby from './pages/tournament/TournamentLobby'
+import TournamentJoin from './pages/tournament/TournamentJoin'
+import TournamentBracket from './pages/tournament/TournamentBracket'
+import TournamentPlayerWait from './pages/tournament/TournamentPlayerWait'
+import TournamentDuelWrapper from './pages/tournament/TournamentDuelWrapper'
 
 // ── Global Error Boundary — prevents blank screen on unexpected render errors ──
 class ErrorBoundary extends Component {
@@ -71,6 +77,14 @@ export default function App() {
         <Route path="/duel/lobby/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelLobby /></ProtectedRoute>} />
         <Route path="/duel/game/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelGame /></ProtectedRoute>} />
         <Route path="/duel/results/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelResults /></ProtectedRoute>} />
+
+        {/* ── Tournament routes ─────────────────────────────────────────── */}
+        <Route path="/tournament/create" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentCreate /></ProtectedRoute>} />
+        <Route path="/tournament/join" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentJoin /></ProtectedRoute>} />
+        <Route path="/tournament/:tournamentId/lobby" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentLobby /></ProtectedRoute>} />
+        <Route path="/tournament/:tournamentId/bracket" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentBracket /></ProtectedRoute>} />
+        <Route path="/tournament/:tournamentId/wait" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentPlayerWait /></ProtectedRoute>} />
+        <Route path="/tournament/:tournamentId/duel/:matchId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentDuelWrapper /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>

@@ -877,6 +877,15 @@ export default function PlayerGameView() {
                 </div>
               )}
               <div className="flex gap-3 justify-center flex-wrap">
+                {/* Tournament FFA redirect */}
+                {room.tournament_id && (
+                  <button
+                    onClick={() => navigate(`/tournament/${room.tournament_id}/wait`)}
+                    className="ar flex items-center gap-2 bg-primary text-background font-bold py-3 px-6 rounded-xl hover:bg-[#00D4FF] transition-colors"
+                  >
+                    <Trophy size={15} /> متابعة البطولة
+                  </button>
+                )}
                 <button
                   onClick={downloadLogs}
                   disabled={downloadingLogs}
@@ -886,10 +895,12 @@ export default function PlayerGameView() {
                     ? <><Loader2 size={15} className="animate-spin" /> جاري التحميل...</>
                     : <><Download size={15} /> تحميل اللوجز</>}
                 </button>
-                <button onClick={() => navigate('/')}
-                  className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-xl transition-colors">
-                  الرئيسية
-                </button>
+                {!room.tournament_id && (
+                  <button onClick={() => navigate('/')}
+                    className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-xl transition-colors">
+                    الرئيسية
+                  </button>
+                )}
               </div>
             </div>
           </div>

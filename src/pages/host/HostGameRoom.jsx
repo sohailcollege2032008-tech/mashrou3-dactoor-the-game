@@ -3,9 +3,9 @@ import MathText from '../../components/common/MathText'
 import { getDir } from '../../utils/rtlUtils'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, update, get, set, onDisconnect } from 'firebase/database'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, collection, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
-import { performReveal, performNextQuestion } from '../../utils/gameRunner'
+import { performReveal, performNextQuestion, sortPlayers } from '../../utils/gameRunner'
 import { useAuth } from '../../hooks/useAuth'
 import {
   Play, UserCheck, XCircle, CheckCircle, SkipForward, Trophy,
@@ -562,7 +562,7 @@ export default function HostGameRoom() {
     if (!session) return
     const unsubPlayers = onValue(ref(rtdb, `rooms/${roomId}/players`), snap => {
       if (!snap.exists()) { setPlayers([]); return }
-      setPlayers(Object.values(snap.val()).sort((a, b) => b.score - a.score))
+      setPlayers(sortPlayers(Object.values(snap.val())))
     })
     return () => unsubPlayers()
   }, [roomId, session])
@@ -664,8 +664,9 @@ export default function HostGameRoom() {
           [`rooms/${roomId}/join_requests/${reqKey}/status`]: 'approved',
           [`rooms/${roomId}/players/${reqKey}`]: {
             user_id: reqKey, nickname: reqData.player_name,
-            avatar_url: reqData.player_avatar || null, score: 0, joined_at: Date.now(),
-            joined_at_question_index: currentQIdx,
+            avatar_url: reqData.player_avatar || null, score: 0,
+            correct_count: 0, total_reaction_ms: 0,
+            joined_at: Date.now(), joined_at_question_index: currentQIdx,
           }
         })
       } else {
@@ -930,7 +931,7 @@ export default function HostGameRoom() {
       if (!hostUid) return
 
       // Build full sorted leaderboard from current players state
-      const sortedLeaderboard = [...players].sort((a, b) => b.score - a.score)
+      const sortedLeaderboard = sortPlayers([...players])
         .map((p, i) => ({ rank: i + 1, user_id: p.user_id, nickname: p.nickname, score: p.score }))
 
       // ── Host notification (roomId as doc ID → idempotent) ─────────────
@@ -965,11 +966,52 @@ export default function HostGameRoom() {
     }
   }
 
+  // ── Write FFA results to Firestore if this was a tournament FFA room ─────
+  const ffaResultsWrittenRef = useRef(false)
+  const writeTournamentFFAResults = useCallback(async (tournamentId) => {
+    if (ffaResultsWrittenRef.current) return
+    ffaResultsWrittenRef.current = true
+    try {
+      const sorted = sortPlayers([...players])
+      const topCutSnap = await getDoc(doc(db, 'tournaments', tournamentId))
+      const actualTopCut = topCutSnap.data()?.actual_top_cut || 8
+
+      const batch = writeBatch(db)
+      sorted.forEach((p, i) => {
+        const rank     = i + 1
+        const advanced = rank <= actualTopCut
+        batch.set(
+          doc(db, 'tournaments', tournamentId, 'ffa_results', p.user_id),
+          {
+            uid:               p.user_id,
+            nickname:          p.nickname,
+            avatar_url:        p.avatar_url || null,
+            score:             p.score,
+            correct_count:     p.correct_count     ?? 0,
+            total_reaction_ms: p.total_reaction_ms ?? 0,
+            rank,
+            advanced,
+          }
+        )
+      })
+      await batch.commit()
+
+      // Transition tournament to bracket phase
+      await updateDoc(doc(db, 'tournaments', tournamentId), { status: 'transition' })
+    } catch (err) {
+      console.error('[Tournament] Failed to write FFA results:', err)
+    }
+  }, [players])
+
   // ── Effect: Collect results + write notifications when game finishes ─────
   useEffect(() => {
     if (room?.status === 'finished' && !gameResults) {
       collectGameResults()
       writeGameNotifications()
+      // If this is a tournament FFA, write FFA results and transition
+      if (room?.tournament_id) {
+        writeTournamentFFAResults(room.tournament_id)
+      }
     }
   }, [room?.status, room?.questions, gameResults, roomId, players])
 
@@ -1494,6 +1536,21 @@ export default function HostGameRoom() {
               </div>
             ) : (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Tournament FFA banner */}
+                {room?.tournament_id && (
+                  <div className="mb-4 bg-primary/10 border border-primary/40 rounded-2xl p-4 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="ar font-bold text-primary text-sm">انتهت مرحلة FFA 🏆</p>
+                      <p className="ar text-xs text-gray-400">جاري تحضير نتائج التأهل…</p>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/tournament/${room.tournament_id}/bracket`)}
+                      className="ar flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-background font-bold text-sm hover:bg-[#00D4FF] transition-colors whitespace-nowrap"
+                    >
+                      <Trophy size={16} /> عرض الـ Bracket
+                    </button>
+                  </div>
+                )}
                 {gameResults ? (
                   <HostGameReport
                     gameResults={gameResults}

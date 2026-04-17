@@ -297,14 +297,22 @@ export default function HostDashboard() {
         )}
 
         <section className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 backdrop-blur-sm shadow-xl">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
             <h2 className="text-2xl font-bold font-display">My Question Banks</h2>
-            <button
-              onClick={() => setShowUpload(true)}
-              className="bg-primary text-background font-bold px-5 py-2.5 rounded-xl hover:bg-[#00D4FF] hover:scale-105 active:scale-95 transition-all text-sm"
-            >
-              + رفع بنك أسئلة
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/tournament/create')}
+                className="flex items-center gap-2 bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 font-bold px-4 py-2.5 rounded-xl hover:bg-yellow-500/30 transition-all text-sm ar"
+              >
+                <Trophy size={15} /> إنشاء بطولة
+              </button>
+              <button
+                onClick={() => setShowUpload(true)}
+                className="bg-primary text-background font-bold px-5 py-2.5 rounded-xl hover:bg-[#00D4FF] hover:scale-105 active:scale-95 transition-all text-sm"
+              >
+                + رفع بنك أسئلة
+              </button>
+            </div>
           </div>
 
           {loading ? (
