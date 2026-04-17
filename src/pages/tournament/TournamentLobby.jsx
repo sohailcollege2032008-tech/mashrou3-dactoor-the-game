@@ -1,20 +1,23 @@
 /**
- * TournamentLobby.jsx — Host sees live registrations and configures the tournament
- * before launching FFA. Includes round-by-round question assignment.
+ * TournamentLobby.jsx — Host registration lobby.
+ * • Live registration list
+ * • Round-by-round question assignment
+ * • Optional scheduled-start countdown → auto-triggers launchFFA
+ * • Cancel tournament (deletes Firestore doc + RTDB registrations)
  */
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  doc, onSnapshot, updateDoc, getDocs,
-  collection, getDoc
+  doc, onSnapshot, updateDoc, getDoc, deleteDoc
 } from 'firebase/firestore'
-import { ref as rtdbRef, onValue, set } from 'firebase/database'
+import { ref as rtdbRef, onValue, set, remove } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { computeActualTopCut } from '../../utils/tournamentUtils'
 import {
   Trophy, Users, Play, Loader2, Copy, Check,
-  Settings, ChevronDown, Lock, BookOpen
+  Settings, ChevronDown, BookOpen, Calendar,
+  AlertTriangle, Trash2
 } from 'lucide-react'
 
 const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -27,6 +30,18 @@ function getRoundName(round, totalRounds) {
   if (round === totalRounds - 1) return 'نصف النهائي'
   if (round === totalRounds - 2) return 'ربع النهائي'
   return `الجولة ${round}`
+}
+
+function formatCountdown(secs) {
+  if (secs <= 0) return 'جاري البدء…'
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  const s = secs % 60
+  const parts = []
+  if (h > 0) parts.push(`${h}س`)
+  if (m > 0 || h > 0) parts.push(`${String(m).padStart(2, '0')}د`)
+  parts.push(`${String(s).padStart(2, '0')}ث`)
+  return parts.join(' ')
 }
 
 export default function TournamentLobby() {
@@ -43,10 +58,18 @@ export default function TournamentLobby() {
 
   // Round question assignment
   const [showQMgmt,     setShowQMgmt]     = useState(false)
-  const [assignRound,   setAssignRound]   = useState(null)   // null = panel closed
+  const [assignRound,   setAssignRound]   = useState(null)
   const [selectedQIdxs, setSelectedQIdxs] = useState([])
 
-  // Subscribe to tournament doc
+  // Scheduled countdown
+  const [timeLeft,      setTimeLeft]      = useState(null)  // seconds
+  const autoLaunchedRef = useRef(false)
+
+  // Cancel confirmation
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [cancelling,        setCancelling]        = useState(false)
+
+  // ── Subscriptions ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!tournamentId) return
     const unsub = onSnapshot(doc(db, 'tournaments', tournamentId), snap => {
@@ -55,7 +78,6 @@ export default function TournamentLobby() {
     return () => unsub()
   }, [tournamentId])
 
-  // Subscribe to RTDB registrations for live count
   useEffect(() => {
     if (!tournamentId) return
     const unsub = onValue(rtdbRef(rtdb, `tournament_registrations/${tournamentId}`), snap => {
@@ -64,7 +86,6 @@ export default function TournamentLobby() {
     return () => unsub()
   }, [tournamentId])
 
-  // Fetch deck questions once we have the tournament doc
   useEffect(() => {
     if (!tournament?.deck_id) return
     getDoc(doc(db, 'question_sets', tournament.deck_id))
@@ -72,17 +93,47 @@ export default function TournamentLobby() {
       .catch(console.error)
   }, [tournament?.deck_id])
 
-  // Redirect host if FFA has already started
+  // Redirect if FFA / bracket already started
   useEffect(() => {
     if (!tournament) return
-    if (tournament.status === 'ffa' && tournament.ffa_room_id) {
+    if (tournament.status === 'ffa' && tournament.ffa_room_id)
       navigate(`/host/game/${tournament.ffa_room_id}`, { replace: true })
-    }
-    if (['transition', 'bracket', 'finished'].includes(tournament.status)) {
+    if (['transition', 'bracket', 'finished'].includes(tournament.status))
       navigate(`/tournament/${tournamentId}/bracket`, { replace: true })
-    }
   }, [tournament, tournamentId, navigate])
 
+  // ── Scheduled countdown ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!tournament?.scheduled_start_at) return
+    const getTargetMs = () => {
+      const t = tournament.scheduled_start_at
+      if (t?.toDate)         return t.toDate().getTime()
+      if (typeof t === 'number') return t
+      return null
+    }
+    const targetMs = getTargetMs()
+    if (!targetMs) return
+
+    const tick = () => {
+      const remaining = Math.ceil((targetMs - Date.now()) / 1000)
+      setTimeLeft(remaining)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [tournament?.scheduled_start_at])
+
+  // Auto-launch when countdown reaches 0
+  useEffect(() => {
+    if (timeLeft === null || timeLeft > 0) return
+    if (autoLaunchedRef.current || launching) return
+    if (registrations.length < 2) return
+    autoLaunchedRef.current = true
+    launchFFA()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft])
+
+  // ── Callbacks ────────────────────────────────────────────────────────────
   const copyCode = useCallback(() => {
     if (!tournament?.code) return
     navigator.clipboard.writeText(tournament.code).then(() => {
@@ -91,7 +142,6 @@ export default function TournamentLobby() {
     })
   }, [tournament?.code])
 
-  // Save question assignment for a specific round to Firestore
   const saveAssignment = useCallback(async () => {
     if (assignRound === null) return
     const updated = {
@@ -100,20 +150,31 @@ export default function TournamentLobby() {
     }
     try {
       await updateDoc(doc(db, 'tournaments', tournamentId), { round_questions: updated })
-    } catch (e) {
-      console.error(e)
-    }
+    } catch (e) { console.error(e) }
     setAssignRound(null)
     setSelectedQIdxs([])
   }, [assignRound, selectedQIdxs, tournament?.round_questions, tournamentId])
+
+  const cancelTournament = useCallback(async () => {
+    if (cancelling) return
+    setCancelling(true)
+    try {
+      await remove(rtdbRef(rtdb, `tournament_registrations/${tournamentId}`))
+      await deleteDoc(doc(db, 'tournaments', tournamentId))
+      navigate('/host/dashboard', { replace: true })
+    } catch (e) {
+      console.error(e)
+      setCancelling(false)
+      setShowCancelConfirm(false)
+    }
+  }, [cancelling, tournamentId, navigate])
 
   const launchFFA = useCallback(async () => {
     if (!tournament || launching || registrations.length < 2) return
     setLaunching(true)
     setError(null)
-
     try {
-      const desiredCap   = (tournament.is_auto_top_cut || !tournament.top_cut)
+      const desiredCap = (tournament.is_auto_top_cut || !tournament.top_cut)
         ? registrations.length
         : tournament.top_cut
       const actualTopCut = computeActualTopCut(registrations.length, desiredCap)
@@ -158,9 +219,11 @@ export default function TournamentLobby() {
       console.error(e)
       setError(e.message || 'حصل خطأ أثناء الإطلاق')
       setLaunching(false)
+      autoLaunchedRef.current = false
     }
   }, [tournament, launching, registrations.length, session?.uid, tournamentId, navigate])
 
+  // ── Loading state ─────────────────────────────────────────────────────────
   if (!tournament) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -169,23 +232,23 @@ export default function TournamentLobby() {
     )
   }
 
-  // Compute tentative round count for question assignment
   const renderDesiredCap = (tournament.is_auto_top_cut || !tournament.top_cut)
-    ? registrations.length
-    : tournament.top_cut
+    ? registrations.length : tournament.top_cut
   const actualTopCut = registrations.length >= 2
-    ? computeActualTopCut(registrations.length, renderDesiredCap)
-    : null
+    ? computeActualTopCut(registrations.length, renderDesiredCap) : null
   const tentativeRounds = actualTopCut ? Math.log2(actualTopCut) : null
 
+  const isScheduled = !!tournament.scheduled_start_at
+  const countdownUrgent = timeLeft !== null && timeLeft <= 60
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background text-white p-4 max-w-lg mx-auto" dir="rtl">
 
-      {/* ── Round question assignment modal ─────────────────────────────── */}
+      {/* ── Question assignment modal ──────────────────────────────────── */}
       {assignRound !== null && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 w-full max-w-md flex flex-col max-h-[85vh]">
-            {/* Header */}
             <div className="flex items-center justify-between mb-1">
               <h3 className="ar font-bold text-white text-base">
                 أسئلة {tentativeRounds ? getRoundName(assignRound, tentativeRounds) : `الجولة ${assignRound}`}
@@ -195,10 +258,8 @@ export default function TournamentLobby() {
               </span>
             </div>
             <p className="ar text-xs text-gray-500 mb-3">
-              اختر الأسئلة لهذه الجولة — اتركها فارغة للاختيار التلقائي من غير المستخدمة
+              اختر الأسئلة — اتركها فارغة للاختيار التلقائي من غير المستخدمة
             </p>
-
-            {/* Quick actions */}
             <div className="flex gap-2 mb-3">
               <button
                 onClick={() => setSelectedQIdxs(deckQs.map((_, i) => i))}
@@ -213,52 +274,47 @@ export default function TournamentLobby() {
                 إلغاء الكل
               </button>
             </div>
-
-            {/* Question list */}
             <div className="flex-1 overflow-y-auto space-y-1 mb-4 border border-gray-800 rounded-xl p-2">
               {deckQs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 gap-2 text-gray-600">
+                <div className="flex flex-col items-center py-8 gap-2 text-gray-600">
                   <BookOpen size={28} />
-                  <p className="ar text-sm">لا توجد أسئلة في هذه المجموعة</p>
+                  <p className="ar text-sm">لا توجد أسئلة</p>
                 </div>
-              ) : (
-                deckQs.map((q, i) => {
-                  const isChecked = selectedQIdxs.includes(i)
-                  // Check if this question is assigned to another round
-                  const usedInRound = Object.entries(tournament.round_questions || {})
-                    .find(([r, idxs]) => Number(r) !== assignRound && idxs.includes(i))
-                  return (
-                    <label
-                      key={i}
-                      className={`flex items-start gap-3 p-2.5 rounded-xl cursor-pointer transition-colors ${
-                        isChecked ? 'bg-primary/10 border border-primary/30' : 'hover:bg-gray-800 border border-transparent'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={e => setSelectedQIdxs(prev =>
-                          e.target.checked ? [...prev, i] : prev.filter(x => x !== i)
-                        )}
-                        className="mt-0.5 accent-primary flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="ar text-sm text-gray-200 leading-snug">{i + 1}. {q.question}</span>
-                        {usedInRound && (
-                          <p className="ar text-[10px] text-yellow-500 mt-0.5">
-                            ⚠ مستخدم في {tentativeRounds
-                              ? getRoundName(Number(usedInRound[0]), tentativeRounds)
-                              : `الجولة ${usedInRound[0]}`}
-                          </p>
-                        )}
-                      </div>
-                    </label>
-                  )
-                })
-              )}
+              ) : deckQs.map((q, i) => {
+                const isChecked  = selectedQIdxs.includes(i)
+                const usedInRound = Object.entries(tournament.round_questions || {})
+                  .find(([r, idxs]) => Number(r) !== assignRound && idxs.includes(i))
+                return (
+                  <label
+                    key={i}
+                    className={`flex items-start gap-3 p-2.5 rounded-xl cursor-pointer transition-colors ${
+                      isChecked
+                        ? 'bg-primary/10 border border-primary/30'
+                        : 'hover:bg-gray-800 border border-transparent'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={e => setSelectedQIdxs(prev =>
+                        e.target.checked ? [...prev, i] : prev.filter(x => x !== i)
+                      )}
+                      className="mt-0.5 accent-primary flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="ar text-sm text-gray-200 leading-snug">{i + 1}. {q.question}</span>
+                      {usedInRound && (
+                        <p className="ar text-[10px] text-yellow-500 mt-0.5">
+                          ⚠ مستخدم في {tentativeRounds
+                            ? getRoundName(Number(usedInRound[0]), tentativeRounds)
+                            : `الجولة ${usedInRound[0]}`}
+                        </p>
+                      )}
+                    </div>
+                  </label>
+                )
+              })}
             </div>
-
-            {/* Actions */}
             <div className="flex gap-3">
               <button
                 onClick={() => { setAssignRound(null); setSelectedQIdxs([]) }}
@@ -277,25 +333,50 @@ export default function TournamentLobby() {
         </div>
       )}
 
-      {/* Header */}
+      {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 mb-6 mt-4">
         <Trophy size={22} className="text-primary" />
         <h1 className="ar text-xl font-bold flex-1">{tournament.title}</h1>
       </div>
 
-      {/* Code card */}
+      {/* ── Scheduled countdown ───────────────────────────────────────────── */}
+      {isScheduled && timeLeft !== null && timeLeft > 0 && (
+        <div className={`rounded-2xl p-4 mb-5 border text-center ${
+          countdownUrgent
+            ? 'bg-red-500/10 border-red-500/40'
+            : 'bg-yellow-500/10 border-yellow-500/30'
+        }`}>
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <Calendar size={14} className={countdownUrgent ? 'text-red-400' : 'text-yellow-400'} />
+            <p className="ar text-xs text-gray-400">موعد البدء التلقائي</p>
+          </div>
+          <p className={`text-3xl font-black font-mono tracking-wider ${
+            countdownUrgent ? 'text-red-400' : 'text-yellow-400'
+          }`}>
+            {formatCountdown(timeLeft)}
+          </p>
+          <p className="ar text-[10px] text-gray-600 mt-1">
+            ستبدأ البطولة تلقائياً — أو اضغط "ابدأ" الآن
+          </p>
+        </div>
+      )}
+
+      {/* ── Code card ─────────────────────────────────────────────────────── */}
       <div className="bg-gray-900 rounded-2xl p-5 mb-5 text-center border border-gray-800">
         <p className="ar text-xs text-gray-500 mb-2">كود التسجيل في البطولة</p>
         <div className="flex items-center justify-center gap-3">
           <span className="text-4xl font-black text-primary tracking-widest">{tournament.code}</span>
-          <button onClick={copyCode} className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white">
+          <button
+            onClick={copyCode}
+            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
+          >
             {copied ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
           </button>
         </div>
         <p className="ar text-xs text-gray-600 mt-2">شاركه مع المشاركين ليتمكنوا من التسجيل</p>
       </div>
 
-      {/* Registrations */}
+      {/* ── Registrations ─────────────────────────────────────────────────── */}
       <div className="bg-gray-900 rounded-2xl p-4 mb-5 border border-gray-800">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -312,8 +393,7 @@ export default function TournamentLobby() {
             <p className="ar text-[10px] text-gray-500">
               {registrations.length} مشارك → أقرب قوة لـ 2
               {(tournament.is_auto_top_cut || !tournament.top_cut)
-                ? ' (وضع تلقائي)'
-                : ` ≤ ${tournament.top_cut}`}
+                ? ' (وضع تلقائي)' : ` ≤ ${tournament.top_cut}`}
             </p>
           </div>
         )}
@@ -335,7 +415,7 @@ export default function TournamentLobby() {
         </div>
       </div>
 
-      {/* ── Round Question Assignment ──────────────────────────────────── */}
+      {/* ── Round Question Assignment ──────────────────────────────────────── */}
       <div className="bg-gray-900 rounded-2xl border border-gray-800 mb-5 overflow-hidden">
         <button
           onClick={() => setShowQMgmt(v => !v)}
@@ -371,20 +451,14 @@ export default function TournamentLobby() {
                           {getRoundName(round, tentativeRounds)}
                         </p>
                         <p className="ar text-xs text-gray-500 mt-0.5">
-                          {assigned.length > 0
-                            ? `${assigned.length} سؤال مخصص`
-                            : 'تلقائي (عشوائي)'}
+                          {assigned.length > 0 ? `${assigned.length} سؤال مخصص` : 'تلقائي (عشوائي)'}
                         </p>
                       </div>
                       <button
-                        onClick={() => {
-                          setAssignRound(round)
-                          setSelectedQIdxs(assigned)
-                        }}
+                        onClick={() => { setAssignRound(round); setSelectedQIdxs(assigned) }}
                         className="flex items-center gap-1 text-xs text-primary hover:text-[#00D4FF] transition-colors font-bold ar"
                       >
-                        <Settings size={12} />
-                        تعديل
+                        <Settings size={12} />تعديل
                       </button>
                     </div>
                   )
@@ -395,7 +469,7 @@ export default function TournamentLobby() {
         )}
       </div>
 
-      {/* Timing summary */}
+      {/* ── Timing summary ────────────────────────────────────────────────── */}
       <div className="bg-gray-900 rounded-xl p-4 mb-5 border border-gray-800 text-xs text-gray-400 space-y-1.5">
         {[
           ['مدة سؤال FFA',           tournament.ffa_question_duration  / 1000 + 'ث'],
@@ -404,18 +478,18 @@ export default function TournamentLobby() {
           ['استراحة بين الجولات',    tournament.round_break_time       / 1000 + 'ث'],
         ].map(([k, v]) => (
           <div key={k} className="flex justify-between ar">
-            <span>{k}</span>
-            <span className="text-gray-300 font-semibold">{v}</span>
+            <span>{k}</span><span className="text-gray-300 font-semibold">{v}</span>
           </div>
         ))}
       </div>
 
       {error && <p className="ar text-red-400 text-sm text-center mb-4">{error}</p>}
 
+      {/* ── Launch FFA ────────────────────────────────────────────────────── */}
       <button
         onClick={launchFFA}
         disabled={launching || registrations.length < 2}
-        className="w-full py-4 rounded-2xl bg-primary text-background font-black text-lg ar flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#00D4FF] active:scale-95 transition-all"
+        className="w-full py-4 rounded-2xl bg-primary text-background font-black text-lg ar flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#00D4FF] active:scale-95 transition-all mb-3"
       >
         {launching
           ? <><Loader2 size={20} className="animate-spin" /><span>جاري الإطلاق…</span></>
@@ -424,8 +498,51 @@ export default function TournamentLobby() {
       </button>
 
       {registrations.length < 2 && (
-        <p className="ar text-center text-xs text-gray-600 mt-2">يلزم مشاركان على الأقل لبدء البطولة</p>
+        <p className="ar text-center text-xs text-gray-600 mb-4">يلزم مشاركان على الأقل لبدء البطولة</p>
       )}
+
+      {/* ── Cancel tournament ─────────────────────────────────────────────── */}
+      {!showCancelConfirm ? (
+        <button
+          onClick={() => setShowCancelConfirm(true)}
+          className="w-full py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-bold ar flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors"
+        >
+          <Trash2 size={15} />
+          إلغاء البطولة وحذفها
+        </button>
+      ) : (
+        <div className="bg-red-500/10 border border-red-500/40 rounded-2xl p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="ar text-sm text-red-300 leading-relaxed">
+              هتحذف البطولة بالكامل وكل التسجيلات — مش هترجعها.
+              هل أنت متأكد؟
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowCancelConfirm(false)}
+              disabled={cancelling}
+              className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm ar font-bold hover:bg-gray-700 transition-colors disabled:opacity-40"
+            >
+              تراجع
+            </button>
+            <button
+              onClick={cancelTournament}
+              disabled={cancelling}
+              className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 text-sm ar font-bold hover:bg-red-500/30 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+            >
+              {cancelling
+                ? <Loader2 size={14} className="animate-spin" />
+                : <Trash2 size={14} />
+              }
+              نعم، احذف
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="h-8" />
     </div>
   )
 }

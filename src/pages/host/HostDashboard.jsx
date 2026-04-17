@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { collection, query, where, getDocs, deleteDoc, doc, addDoc, serverTimestamp, onSnapshot, updateDoc, orderBy, limit } from 'firebase/firestore'
+import { Swords } from 'lucide-react'
 import { ref, set, get } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuthStore } from '../../stores/authStore'
@@ -18,7 +19,8 @@ export default function HostDashboard() {
   const [showUpload, setShowUpload] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [selectedBank, setSelectedBank] = useState(null)
-  const [activeRoom, setActiveRoom] = useState(null)   // { code, title } if host has live game
+  const [activeRoom,       setActiveRoom]       = useState(null)
+  const [activeTournament, setActiveTournament] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
   const notifPanelRef = useRef(null)
@@ -46,6 +48,21 @@ export default function HostDashboard() {
     }
     check()
   }, [profile])
+
+  // ── Subscribe to host's active tournament ────────────────────────────────
+  useEffect(() => {
+    if (!session?.uid) return
+    // Query all tournaments by this host, filter active ones client-side
+    const q = query(collection(db, 'tournaments'), where('host_id', '==', session.uid))
+    const unsub = onSnapshot(q, snap => {
+      const ACTIVE = ['registration', 'ffa', 'transition', 'bracket']
+      const found = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .find(t => ACTIVE.includes(t.status))
+      setActiveTournament(found || null)
+    }, () => {})
+    return () => unsub()
+  }, [session?.uid])
 
   // ── Subscribe to host notifications ──────────────────────────────────────
   useEffect(() => {
@@ -300,6 +317,66 @@ export default function HostDashboard() {
             </Link>
           </div>
         )}
+
+        {/* ── Active tournament banner ───────────────────────────────────── */}
+        {activeTournament && (() => {
+          const statusLabel = {
+            registration: { text: '🟡 تسجيل مفتوح',     color: 'yellow' },
+            ffa:          { text: '🔴 FFA جارية',        color: 'red'    },
+            transition:   { text: '⏱ انتقال للـ Bracket', color: 'blue'   },
+            bracket:      { text: '⚔️ Bracket جارية',    color: 'primary' },
+          }[activeTournament.status] || { text: activeTournament.status, color: 'primary' }
+
+          const url = activeTournament.status === 'registration'
+            ? `/tournament/${activeTournament.id}/lobby`
+            : activeTournament.status === 'ffa' && activeTournament.ffa_room_id
+              ? `/host/game/${activeTournament.ffa_room_id}`
+              : `/tournament/${activeTournament.id}/bracket`
+
+          const borderColor = statusLabel.color === 'yellow'  ? 'border-yellow-500/40'
+            : statusLabel.color === 'red'    ? 'border-red-500/40'
+            : statusLabel.color === 'blue'   ? 'border-blue-500/40'
+            : 'border-primary/40'
+          const bgColor = statusLabel.color === 'yellow'  ? 'bg-yellow-500/10'
+            : statusLabel.color === 'red'    ? 'bg-red-500/10'
+            : statusLabel.color === 'blue'   ? 'bg-blue-500/10'
+            : 'bg-primary/10'
+          const textColor = statusLabel.color === 'yellow'  ? 'text-yellow-400'
+            : statusLabel.color === 'red'    ? 'text-red-400'
+            : statusLabel.color === 'blue'   ? 'text-blue-400'
+            : 'text-primary'
+
+          return (
+            <div className={`${bgColor} border ${borderColor} rounded-2xl p-5 flex items-center justify-between gap-4 shadow-lg`}>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <Swords size={14} className={textColor} />
+                  <p className={`${textColor} text-xs font-bold tracking-widest uppercase ar`}>
+                    {statusLabel.text}
+                  </p>
+                </div>
+                <h3 className="text-white font-bold text-base leading-snug truncate ar">{activeTournament.title}</h3>
+                {activeTournament.code && (
+                  <p className="text-gray-400 text-xs font-mono mt-0.5">
+                    كود: <span className={`font-bold tracking-widest ${textColor}`}>{activeTournament.code}</span>
+                  </p>
+                )}
+              </div>
+              <Link
+                to={url}
+                className={`flex-shrink-0 font-bold px-5 py-2.5 rounded-xl transition-all active:scale-95 text-sm ar ${
+                  statusLabel.color === 'yellow'
+                    ? 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
+                    : statusLabel.color === 'red'
+                      ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                      : 'bg-primary text-background hover:bg-[#00D4FF]'
+                }`}
+              >
+                متابعة البطولة →
+              </Link>
+            </div>
+          )
+        })()}
 
         <section className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 backdrop-blur-sm shadow-xl">
           <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
