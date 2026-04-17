@@ -237,13 +237,12 @@ export default function HostDashboard() {
                                   {n.total_players} لاعب
                                 </p>
                                 {n.results_url && (
-                                  <Link
-                                    to={n.results_url}
-                                    onClick={() => setShowNotifications(false)}
-                                    className="inline-block text-primary text-xs font-bold hover:underline"
+                                  <button
+                                    onClick={() => { setShowNotifications(false); navigate(n.results_url) }}
+                                    className="text-primary text-xs font-bold hover:underline"
                                   >
                                     → عرض النتائج
-                                  </Link>
+                                  </button>
                                 )}
                                 {n.created_at?.seconds && (
                                   <p className="text-gray-600 text-[10px] font-mono">
