@@ -930,13 +930,18 @@ export default function HostGameRoom() {
       const hostUid = session?.uid
       if (!hostUid) return
 
-      // Build full sorted leaderboard from current players state
+      // Guard: skip if host notification already exists (prevents re-mount duplicates)
+      const hostNotifRef = doc(db, 'notifications', hostUid, 'items', roomId)
+      const existing = await getDoc(hostNotifRef)
+      if (existing.exists()) return   // already written by a previous mount or player client
+
       const sortedLeaderboard = sortPlayers([...players])
         .map((p, i) => ({ rank: i + 1, user_id: p.user_id, nickname: p.nickname, score: p.score }))
 
-      // ── Host notification (roomId as doc ID → idempotent) ─────────────
       const winner = sortedLeaderboard[0] || null
-      await setDoc(doc(db, 'notifications', hostUid, 'items', roomId), {
+
+      // ── Host notification ──────────────────────────────────────────────
+      await setDoc(hostNotifRef, {
         type:            'game_finished',
         room_id:         roomId,
         room_title:      room.title || roomId,
@@ -947,9 +952,12 @@ export default function HostGameRoom() {
         read:            false,
       })
 
-      // ── Player notifications (roomId as doc ID → idempotent) ──────────
-      await Promise.all(sortedLeaderboard.map((entry, idx) =>
-        setDoc(doc(db, 'notifications', entry.user_id, 'items', roomId), {
+      // ── Player notifications (skip if already written) ─────────────────
+      await Promise.all(sortedLeaderboard.map(async (entry, idx) => {
+        const playerNotifRef = doc(db, 'notifications', entry.user_id, 'items', roomId)
+        const playerExisting = await getDoc(playerNotifRef)
+        if (playerExisting.exists()) return
+        return setDoc(playerNotifRef, {
           type:             'game_finished',
           room_id:          roomId,
           room_title:       room.title || roomId,
@@ -960,7 +968,7 @@ export default function HostGameRoom() {
           created_at:       serverTimestamp(),
           read:             false,
         })
-      ))
+      }))
     } catch (err) {
       console.error('[Notifications] Failed to write game notifications:', err)
     }

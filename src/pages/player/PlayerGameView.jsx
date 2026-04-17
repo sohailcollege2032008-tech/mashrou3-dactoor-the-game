@@ -221,37 +221,41 @@ export default function PlayerGameView() {
                 : []
               const myRank = sortedLeaderboard.findIndex(p => p.user_id === uid) + 1
 
-              // roomId as doc ID — idempotent, re-navigating won't duplicate
-              await setDoc(doc(db, 'notifications', uid, 'items', roomId), {
-                type:             'game_finished',
-                room_id:          roomId,
-                room_title:       data.title || roomId,
-                host_name:        hostName,
-                my_rank:          myRank,
-                my_score:         myScore,
-                total_players:    sortedLeaderboard.length,
-                full_leaderboard: sortedLeaderboard,
-                created_at:       serverTimestamp(),
-                read:             false,
-              })
+              // Write only if notification doesn't exist yet (prevents re-mount duplicates)
+              const playerNotifRef = doc(db, 'notifications', uid, 'items', roomId)
+              const existingNotif  = await getDoc(playerNotifRef)
+              if (!existingNotif.exists()) {
+                await setDoc(playerNotifRef, {
+                  type:             'game_finished',
+                  room_id:          roomId,
+                  room_title:       data.title || roomId,
+                  host_name:        hostName,
+                  my_rank:          myRank,
+                  my_score:         myScore,
+                  total_players:    sortedLeaderboard.length,
+                  full_leaderboard: sortedLeaderboard,
+                  created_at:       serverTimestamp(),
+                  read:             false,
+                })
+              }
 
               // ── Write host notification (backup for unattended mode) ────
-              // Only write if host notification doesn't exist yet (use room-keyed doc)
               if (hostUid) {
-                setDoc(
-                  doc(db, 'notifications', hostUid, 'items', roomId),
-                  {
-                    type:            'game_finished',
-                    room_id:         roomId,
-                    room_title:      data.title || roomId,
-                    total_players:   sortedLeaderboard.length,
-                    winner_nickname: sortedLeaderboard[0]?.nickname || null,
-                    results_url:     `/host/game/${roomId}`,
-                    created_at:      serverTimestamp(),
-                    read:            false,
-                  },
-                  { merge: false }   // don't overwrite if host already wrote it
-                ).catch(() => {})   // silently ignore — host may have already written
+                const hostNotifRef = doc(db, 'notifications', hostUid, 'items', roomId)
+                getDoc(hostNotifRef).then(snap => {
+                  if (!snap.exists()) {
+                    return setDoc(hostNotifRef, {
+                      type:            'game_finished',
+                      room_id:         roomId,
+                      room_title:      data.title || roomId,
+                      total_players:   sortedLeaderboard.length,
+                      winner_nickname: sortedLeaderboard[0]?.nickname || null,
+                      results_url:     `/host/game/${roomId}`,
+                      created_at:      serverTimestamp(),
+                      read:            false,
+                    })
+                  }
+                }).catch(() => {})
               }
             } catch (e) {
               console.error('Failed to write competition history/notifications:', e)

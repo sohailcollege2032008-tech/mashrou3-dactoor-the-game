@@ -206,7 +206,10 @@ export default function HostDashboard() {
               </button>
 
               {showNotifications && (
-                <div className="fixed top-24 right-8 w-80 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[999] overflow-hidden">
+                <>
+                  {/* invisible backdrop to close on outside click */}
+                  <div className="fixed inset-0 z-[49998]" onClick={() => setShowNotifications(false)} />
+                <div className="fixed top-24 right-8 w-80 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[49999] overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
                     <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white transition-colors">
                       <X size={14} />
@@ -260,6 +263,7 @@ export default function HostDashboard() {
                     </div>
                   )}
                 </div>
+                </>
               )}
             </div>
 
