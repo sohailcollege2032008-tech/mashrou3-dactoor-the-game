@@ -238,7 +238,8 @@ export default function DuelGame({
       )
       const scoreUpdates = {}
 
-      // Race-based scoring: 1st correct = 2pts, 2nd correct = 1pt
+      // Hybrid scoring: regular duels cap repeated questions at 1pt; tournament = pure race
+      const isRegularDuel = duelPath === 'duels'
       const correctAnswers = Object.entries(answers)
         .filter(([, a]) => a.selected_choice === question?.correct)
         .sort((a, b) => (a[1].reaction_time_ms ?? 0) - (b[1].reaction_time_ms ?? 0))
@@ -246,9 +247,16 @@ export default function DuelGame({
       correctAnswers.forEach(([aUid], i) => { arrivalRank[aUid] = i })
 
       for (const [aUid, answer] of Object.entries(answers)) {
-        const isCorrect    = answer.selected_choice === question?.correct
-        const rank         = arrivalRank[aUid] ?? 99
-        const pointsEarned = isCorrect ? (rank === 0 ? 2 : 1) : 0
+        const isCorrect = answer.selected_choice === question?.correct
+        let pointsEarned = 0
+        if (isCorrect) {
+          const rank = arrivalRank[aUid] ?? 99
+          if (isRegularDuel && question?.played_by_uids?.includes(aUid)) {
+            pointsEarned = 1  // repeated question — capped at 1pt regardless of arrival rank
+          } else {
+            pointsEarned = rank === 0 ? 2 : 1  // race-based: 1st correct = 2pts, 2nd+ = 1pt
+          }
+        }
 
         scoreUpdates[`answers/${qi}/${aUid}/is_correct`]    = isCorrect
         scoreUpdates[`answers/${qi}/${aUid}/points_earned`] = pointsEarned
