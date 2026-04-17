@@ -113,7 +113,7 @@ export default function TournamentDuelWrapper() {
         const nextSnap = await getDoc(nextRef)
         if (nextSnap.exists()) {
           const nextMatch = nextSnap.data()
-          const winnerName = match.winner_uid === match.player_a_uid
+          const winnerName = winnerUid === match.player_a_uid
             ? match.player_a_name : match.player_b_name
           // Fill whichever slot is empty
           const updates = !nextMatch.player_a_uid
