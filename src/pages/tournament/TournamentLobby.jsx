@@ -158,14 +158,22 @@ export default function TournamentLobby() {
   const cancelTournament = useCallback(async () => {
     if (cancelling) return
     setCancelling(true)
+    setError(null)
     try {
-      await remove(rtdbRef(rtdb, `tournament_registrations/${tournamentId}`))
+      // Remove RTDB registrations — ignore if path doesn't exist or permission fails
+      try {
+        await remove(rtdbRef(rtdb, `tournament_registrations/${tournamentId}`))
+      } catch (rtdbErr) {
+        console.warn('RTDB registrations removal failed (non-fatal):', rtdbErr)
+      }
+      // Delete the Firestore tournament document
       await deleteDoc(doc(db, 'tournaments', tournamentId))
       navigate('/host/dashboard', { replace: true })
     } catch (e) {
-      console.error(e)
+      console.error('cancelTournament error:', e)
+      setError('فشل حذف البطولة: ' + (e.message || 'خطأ غير معروف'))
       setCancelling(false)
-      setShowCancelConfirm(false)
+      // Keep confirm panel open so user sees the error
     }
   }, [cancelling, tournamentId, navigate])
 
@@ -519,9 +527,14 @@ export default function TournamentLobby() {
               هل أنت متأكد؟
             </p>
           </div>
+          {error && (
+            <p className="ar text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2">
+              ⚠ {error}
+            </p>
+          )}
           <div className="flex gap-3">
             <button
-              onClick={() => setShowCancelConfirm(false)}
+              onClick={() => { setShowCancelConfirm(false); setError(null) }}
               disabled={cancelling}
               className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm ar font-bold hover:bg-gray-700 transition-colors disabled:opacity-40"
             >
