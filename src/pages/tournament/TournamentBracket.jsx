@@ -21,7 +21,7 @@ import {
 } from '../../utils/tournamentUtils'
 import BracketTree from '../../components/tournament/BracketTree'
 import TournamentCountdown from '../../components/tournament/TournamentCountdown'
-import { Trophy, Download, Play, Loader2, ChevronRight, Settings } from 'lucide-react'
+import { Trophy, Download, Play, Loader2, ChevronRight, Settings, Flag, AlertTriangle } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
 
@@ -49,7 +49,10 @@ export default function TournamentBracket() {
   const [countdownMs, setCountdownMs] = useState(0)
   const [error,       setError]       = useState(null)
   // Round question assignment panel
-  const [showQPanel, setShowQPanel] = useState(false)
+  const [showQPanel,      setShowQPanel]      = useState(false)
+  // End tournament confirmation
+  const [showEndConfirm,  setShowEndConfirm]  = useState(false)
+  const [ending,          setEnding]          = useState(false)
 
   // Subscribe to tournament
   useEffect(() => {
@@ -216,6 +219,26 @@ export default function TournamentBracket() {
     }
   }, [tournament, deckQs, tournamentId, ffaResults])
 
+  // End tournament manually
+  const endTournament = useCallback(async () => {
+    if (ending) return
+    setEnding(true)
+    setError(null)
+    try {
+      const finalMatch = matches.find(m => m.round === totalRounds && m.status === 'finished')
+      const winnerUid  = finalMatch?.winner_uid || tournament?.winner_uid || null
+      await updateDoc(doc(db, 'tournaments', tournamentId), {
+        status:     'finished',
+        winner_uid: winnerUid,
+      })
+      navigate('/host/dashboard', { replace: true })
+    } catch (e) {
+      console.error(e)
+      setError(e.message || 'فشل إنهاء البطولة')
+      setEnding(false)
+    }
+  }, [ending, matches, totalRounds, tournament, tournamentId, navigate])
+
   // Save round question assignment
   const saveAssignment = useCallback(async (newAssignments) => {
     try {
@@ -332,6 +355,55 @@ export default function TournamentBracket() {
               <span className="text-gray-600 group-hover:text-primary transition-colors text-xs">←</span>
             </div>
           </button>
+        )}
+
+        {/* ── End Tournament ────────────────────────────────────────────── */}
+        {tournament.status !== 'finished' && (
+          <div className="mt-4 mb-2">
+            {!showEndConfirm ? (
+              <button
+                onClick={() => setShowEndConfirm(true)}
+                className="w-full py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-bold ar flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors"
+              >
+                <Flag size={15} />
+                إنهاء البطولة يدوياً
+              </button>
+            ) : (
+              <div className="bg-red-500/10 border border-red-500/40 rounded-2xl p-4 space-y-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={15} className="text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="ar text-sm text-red-300 leading-relaxed">
+                    هتنهي البطولة الآن وتحولها لـ "منتهية". اللاعبون لن يتمكنوا من الاستمرار. هل أنت متأكد؟
+                  </p>
+                </div>
+                {error && (
+                  <p className="ar text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2">
+                    ⚠ {error}
+                  </p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setShowEndConfirm(false); setError(null) }}
+                    disabled={ending}
+                    className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm ar font-bold hover:bg-gray-700 transition-colors disabled:opacity-40"
+                  >
+                    تراجع
+                  </button>
+                  <button
+                    onClick={endTournament}
+                    disabled={ending}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 text-sm ar font-bold hover:bg-red-500/30 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                  >
+                    {ending
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : <Flag size={14} />
+                    }
+                    نعم، أنهِ البطولة
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Round controls */}
