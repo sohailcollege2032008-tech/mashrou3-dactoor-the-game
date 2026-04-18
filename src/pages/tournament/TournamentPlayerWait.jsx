@@ -82,6 +82,10 @@ export default function TournamentPlayerWait() {
     if (tournament.status === 'ffa' && tournament.ffa_room_id) {
       navigate(`/player/game/${tournament.ffa_room_id}`, { replace: true })
     }
+    // Clear localStorage when tournament finishes
+    if (tournament.status === 'finished') {
+      localStorage.removeItem('activeTournamentId')
+    }
   }, [tournament, navigate])
 
   if (!tournament) {

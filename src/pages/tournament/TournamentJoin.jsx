@@ -64,6 +64,9 @@ export default function TournamentJoin() {
         registered_at: Date.now(),
       })
 
+      // Remember active tournament so dashboard can show the banner
+      localStorage.setItem('activeTournamentId', tDoc.id)
+
       setTournamentId(tDoc.id)
       setTournamentTitle(tournament.title)
       setSuccess(true)
