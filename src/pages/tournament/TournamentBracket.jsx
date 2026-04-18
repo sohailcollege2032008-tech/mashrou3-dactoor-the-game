@@ -225,7 +225,9 @@ export default function TournamentBracket() {
     setEnding(true)
     setError(null)
     try {
-      const finalMatch = matches.find(m => m.round === totalRounds && m.status === 'finished')
+      // Compute totalRounds inline to avoid TDZ (it's declared later in render)
+      const tRounds    = tournament?.total_rounds || Math.log2(tournament?.actual_top_cut || 8)
+      const finalMatch = matches.find(m => m.round === tRounds && m.status === 'finished')
       const winnerUid  = finalMatch?.winner_uid || tournament?.winner_uid || null
       await updateDoc(doc(db, 'tournaments', tournamentId), {
         status:     'finished',
@@ -237,7 +239,7 @@ export default function TournamentBracket() {
       setError(e.message || 'فشل إنهاء البطولة')
       setEnding(false)
     }
-  }, [ending, matches, totalRounds, tournament, tournamentId, navigate])
+  }, [ending, matches, tournament, tournamentId, navigate])
 
   // Save round question assignment
   const saveAssignment = useCallback(async (newAssignments) => {
