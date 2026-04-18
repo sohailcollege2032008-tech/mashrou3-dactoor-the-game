@@ -92,10 +92,8 @@ export default function DuelGame({
   const [confirmAction, setConfirmAction] = useState(null) // 'forfeit' | 'surrender'
   const [actionLoading, setActionLoading] = useState(false)
 
-  // Tournament-duel start countdown (null → 3 → 2 → 1 → 0)
+  // Tournament-duel start countdown (null → 5 → 4 → 3 → 2 → 1 → 0)
   const [startCountdown,  setStartCountdown]  = useState(null)
-  // Becomes true once BOTH actual player UIDs appear in duel_presence as connected
-  const [playersPresent,  setPlayersPresent]  = useState(false)
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const duelRef             = useRef(null)
@@ -193,48 +191,36 @@ export default function DuelGame({
     }
   }, [duel?.current_question_index])
 
-  // ── Watch real player presence (tournament duels only) ───────────────────
-  // Subscribes to duel_presence for BOTH actual player UIDs (from duel.players).
-  // When both are connected, sets playersPresent=true to trigger the countdown.
-  // Observers skip presence write so they can't accidentally trigger this.
+  // ── Auto-start tournament duels with a simple timeout ────────────────────
+  // No presence detection needed. Every client (player or observer) loading a
+  // 'waiting' tournament duel starts a 5-second countdown, then fires a
+  // runTransaction that is idempotent — only the first commit wins, the rest
+  // are no-ops. This avoids dependency on duel_presence reads/rules entirely.
   useEffect(() => {
     if (!duel || duelPath === 'duels' || duel.status !== 'waiting') return
-    const playerUids = Object.keys(duel.players || {})
-    if (playerUids.length < 2) return
 
-    const connected = {}
-    const unsubs = playerUids.map(pUid =>
-      onValue(rtdbRef(rtdb, `duel_presence/${duelId}/${pUid}`), snap => {
-        connected[pUid] = snap.val()?.connected === true
-        if (playerUids.every(u => connected[u])) setPlayersPresent(true)
-      })
-    )
-    return () => unsubs.forEach(u => u())
+    setStartCountdown(5)
+    const ticks = [
+      setTimeout(() => setStartCountdown(4), 1000),
+      setTimeout(() => setStartCountdown(3), 2000),
+      setTimeout(() => setStartCountdown(2), 3000),
+      setTimeout(() => setStartCountdown(1), 4000),
+      setTimeout(async () => {
+        setStartCountdown(0)
+        try {
+          await runTransaction(rtdbRef(rtdb, `${duelPath}/${duelId}`), current => {
+            if (!current || current.status !== 'waiting') return undefined
+            return {
+              ...current,
+              status:              'playing',
+              question_started_at: Date.now() + serverOffsetRef.current,
+            }
+          })
+        } catch (e) { console.error('auto-start error:', e) }
+      }, 5000),
+    ]
+    return () => ticks.forEach(clearTimeout)
   }, [duel?.status, duelPath, duelId])
-
-  // ── Auto-start countdown once both players are present ───────────────────
-  useEffect(() => {
-    if (!playersPresent || !duel || duelPath === 'duels' || duel.status !== 'waiting') return
-
-    setStartCountdown(3)
-    const t1 = setTimeout(() => setStartCountdown(2), 1000)
-    const t2 = setTimeout(() => setStartCountdown(1), 2000)
-    const t3 = setTimeout(async () => {
-      setStartCountdown(0)
-      try {
-        await runTransaction(rtdbRef(rtdb, `${duelPath}/${duelId}`), current => {
-          if (!current || current.status !== 'waiting') return undefined
-          return {
-            ...current,
-            status:              'playing',
-            question_started_at: Date.now() + serverOffsetRef.current,
-          }
-        })
-      } catch (e) { console.error('auto-start error:', e) }
-    }, 3000)
-
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
-  }, [playersPresent, duel?.status, duelPath, duelId])
 
   // ── Subscribe to duel ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -504,7 +490,7 @@ export default function DuelGame({
           )}
           <p className="ar text-gray-400 text-sm">
             {startCountdown === null
-              ? 'في انتظار اتصال اللاعبين…'
+              ? 'جارٍ التحضير…'
               : startCountdown > 0
               ? 'تبدأ المباراة خلال…'
               : 'انطلق!'}
