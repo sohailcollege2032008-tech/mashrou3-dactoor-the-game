@@ -16,9 +16,9 @@ import { useAuth } from '../../hooks/useAuth'
 import { computeActualTopCut } from '../../utils/tournamentUtils'
 import {
   Trophy, Users, Play, Loader2, Copy, Check,
-  Settings, ChevronDown, BookOpen, Calendar,
-  AlertTriangle, Trash2
+  Settings, Calendar, AlertTriangle, Trash2
 } from 'lucide-react'
+import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
 
 const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 function genRoomCode() {
@@ -56,10 +56,8 @@ export default function TournamentLobby() {
   const [copied,        setCopied]        = useState(false)
   const [error,         setError]         = useState(null)
 
-  // Round question assignment
-  const [showQMgmt,     setShowQMgmt]     = useState(false)
-  const [assignRound,   setAssignRound]   = useState(null)
-  const [selectedQIdxs, setSelectedQIdxs] = useState([])
+  // Round question assignment panel
+  const [showQPanel, setShowQPanel] = useState(false)
 
   // Scheduled countdown
   const [timeLeft,      setTimeLeft]      = useState(null)  // seconds
@@ -142,18 +140,12 @@ export default function TournamentLobby() {
     })
   }, [tournament?.code])
 
-  const saveAssignment = useCallback(async () => {
-    if (assignRound === null) return
-    const updated = {
-      ...((tournament?.round_questions) || {}),
-      [String(assignRound)]: selectedQIdxs,
-    }
+  const saveAssignment = useCallback(async (newAssignments) => {
     try {
-      await updateDoc(doc(db, 'tournaments', tournamentId), { round_questions: updated })
+      await updateDoc(doc(db, 'tournaments', tournamentId), { round_questions: newAssignments })
     } catch (e) { console.error(e) }
-    setAssignRound(null)
-    setSelectedQIdxs([])
-  }, [assignRound, selectedQIdxs, tournament?.round_questions, tournamentId])
+    setShowQPanel(false)
+  }, [tournamentId])
 
   const cancelTournament = useCallback(async () => {
     if (cancelling) return
@@ -253,92 +245,17 @@ export default function TournamentLobby() {
   return (
     <div className="min-h-screen bg-background text-white p-4 max-w-lg mx-auto" dir="rtl">
 
-      {/* ── Question assignment modal ──────────────────────────────────── */}
-      {assignRound !== null && (
-        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 w-full max-w-md flex flex-col max-h-[85vh]">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="ar font-bold text-white text-base">
-                أسئلة {tentativeRounds ? getRoundName(assignRound, tentativeRounds) : `الجولة ${assignRound}`}
-              </h3>
-              <span className="ar text-xs text-primary font-mono bg-primary/10 px-2 py-0.5 rounded-full">
-                {selectedQIdxs.length} مختار
-              </span>
-            </div>
-            <p className="ar text-xs text-gray-500 mb-3">
-              اختر الأسئلة — اتركها فارغة للاختيار التلقائي من غير المستخدمة
-            </p>
-            <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setSelectedQIdxs(deckQs.map((_, i) => i))}
-                className="ar text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors"
-              >
-                تحديد الكل
-              </button>
-              <button
-                onClick={() => setSelectedQIdxs([])}
-                className="ar text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors"
-              >
-                إلغاء الكل
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-1 mb-4 border border-gray-800 rounded-xl p-2">
-              {deckQs.length === 0 ? (
-                <div className="flex flex-col items-center py-8 gap-2 text-gray-600">
-                  <BookOpen size={28} />
-                  <p className="ar text-sm">لا توجد أسئلة</p>
-                </div>
-              ) : deckQs.map((q, i) => {
-                const isChecked  = selectedQIdxs.includes(i)
-                const usedInRound = Object.entries(tournament.round_questions || {})
-                  .find(([r, idxs]) => Number(r) !== assignRound && idxs.includes(i))
-                return (
-                  <label
-                    key={i}
-                    className={`flex items-start gap-3 p-2.5 rounded-xl cursor-pointer transition-colors ${
-                      isChecked
-                        ? 'bg-primary/10 border border-primary/30'
-                        : 'hover:bg-gray-800 border border-transparent'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={e => setSelectedQIdxs(prev =>
-                        e.target.checked ? [...prev, i] : prev.filter(x => x !== i)
-                      )}
-                      className="mt-0.5 accent-primary flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span className="ar text-sm text-gray-200 leading-snug">{i + 1}. {q.question}</span>
-                      {usedInRound && (
-                        <p className="ar text-[10px] text-yellow-500 mt-0.5">
-                          ⚠ مستخدم في {tentativeRounds
-                            ? getRoundName(Number(usedInRound[0]), tentativeRounds)
-                            : `الجولة ${usedInRound[0]}`}
-                        </p>
-                      )}
-                    </div>
-                  </label>
-                )
-              })}
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setAssignRound(null); setSelectedQIdxs([]) }}
-                className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm ar hover:bg-gray-700 transition-colors"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={saveAssignment}
-                className="flex-1 py-2.5 rounded-xl bg-primary text-background font-bold text-sm ar hover:bg-[#00D4FF] transition-colors"
-              >
-                حفظ التخصيص
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* ── Question assignment full-screen panel ─────────────────────── */}
+      {showQPanel && (
+        <QuestionAssignmentPanel
+          deckQs={deckQs}
+          roundQuestions={tournament.round_questions || {}}
+          totalRounds={tentativeRounds}
+          isAutoMode={!!(tournament.is_auto_top_cut || !tournament.top_cut)}
+          lockedRounds={[]}
+          onSave={saveAssignment}
+          onClose={() => setShowQPanel(false)}
+        />
       )}
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
@@ -424,58 +341,25 @@ export default function TournamentLobby() {
       </div>
 
       {/* ── Round Question Assignment ──────────────────────────────────────── */}
-      <div className="bg-gray-900 rounded-2xl border border-gray-800 mb-5 overflow-hidden">
-        <button
-          onClick={() => setShowQMgmt(v => !v)}
-          className="flex items-center justify-between w-full px-4 py-3.5 hover:bg-gray-800 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <Settings size={15} className="text-primary" />
-            <span className="ar text-sm font-bold text-white">تخصيص أسئلة الجولات</span>
-          </div>
-          <ChevronDown
-            size={16}
-            className={`text-gray-400 transition-transform duration-200 ${showQMgmt ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {showQMgmt && (
-          <div className="border-t border-gray-800 px-4 pb-4 pt-3 space-y-2">
-            {!tentativeRounds ? (
-              <p className="ar text-xs text-gray-500 text-center py-3">
-                يلزم مشاركان على الأقل لمعرفة هيكل الجولات
-              </p>
-            ) : (
-              <>
-                <p className="ar text-xs text-gray-500 mb-3">
-                  اترك الجولة فارغة للاختيار التلقائي من الأسئلة غير المستخدمة
-                </p>
-                {Array.from({ length: tentativeRounds }, (_, i) => i + 1).map(round => {
-                  const assigned = tournament.round_questions?.[String(round)] || []
-                  return (
-                    <div key={round} className="flex items-center gap-3 bg-gray-800 rounded-xl px-3 py-2.5">
-                      <div className="flex-1">
-                        <p className="ar text-sm font-semibold text-white">
-                          {getRoundName(round, tentativeRounds)}
-                        </p>
-                        <p className="ar text-xs text-gray-500 mt-0.5">
-                          {assigned.length > 0 ? `${assigned.length} سؤال مخصص` : 'تلقائي (عشوائي)'}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => { setAssignRound(round); setSelectedQIdxs(assigned) }}
-                        className="flex items-center gap-1 text-xs text-primary hover:text-[#00D4FF] transition-colors font-bold ar"
-                      >
-                        <Settings size={12} />تعديل
-                      </button>
-                    </div>
-                  )
-                })}
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      <button
+        onClick={() => setShowQPanel(true)}
+        className="w-full flex items-center justify-between bg-gray-900 border border-gray-800 hover:border-primary/50 rounded-2xl px-4 py-3.5 mb-5 transition-all group"
+      >
+        <div className="flex items-center gap-2">
+          <Settings size={15} className="text-primary" />
+          <span className="ar text-sm font-bold text-white">تخصيص أسئلة الجولات</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {Object.values(tournament.round_questions || {}).some(a => a.length > 0) ? (
+            <span className="ar text-[11px] text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+              {Object.values(tournament.round_questions).flat().length} سؤال مخصص
+            </span>
+          ) : (
+            <span className="ar text-[11px] text-gray-600">تلقائي</span>
+          )}
+          <span className="text-gray-600 group-hover:text-primary transition-colors text-xs">←</span>
+        </div>
+      </button>
 
       {/* ── Timing summary ────────────────────────────────────────────────── */}
       <div className="bg-gray-900 rounded-xl p-4 mb-5 border border-gray-800 text-xs text-gray-400 space-y-1.5">
