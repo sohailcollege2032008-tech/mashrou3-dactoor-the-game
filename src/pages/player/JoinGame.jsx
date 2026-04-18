@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, Link } from 'react-router-dom'
 import { ref, get, set, update } from 'firebase/database'
@@ -16,7 +16,7 @@ export default function JoinGame() {
   const [previewStatus, setPreviewStatus] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
-  const notifPanelRef = useRef(null)
+
   const navigate = useNavigate()
 
   // Subscribe to player notifications
@@ -33,14 +33,7 @@ export default function JoinGame() {
     return () => unsub()
   }, [session?.uid])
 
-  useEffect(() => {
-    const handler = (e) => {
-      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target))
-        setShowNotifications(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  // Outside-click handled by portal backdrop div — no document listener needed
 
   const markAllRead = async () => {
     if (!session?.uid) return
@@ -146,7 +139,7 @@ export default function JoinGame() {
       <div className="w-full max-w-md bg-gray-900/50 p-8 rounded-2xl border border-gray-800 shadow-xl text-center backdrop-blur-sm">
 
         {/* Notification bell */}
-        <div className="flex justify-end mb-4" ref={notifPanelRef}>
+        <div className="flex justify-end mb-4">
           <div className="relative">
             <button
               onClick={() => { setShowNotifications(v => !v); if (!showNotifications) markAllRead() }}

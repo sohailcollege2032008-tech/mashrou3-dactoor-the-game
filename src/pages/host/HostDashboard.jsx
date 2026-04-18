@@ -23,7 +23,7 @@ export default function HostDashboard() {
   const [activeTournament, setActiveTournament] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
-  const notifPanelRef = useRef(null)
+
 
   useEffect(() => {
     if (profile) fetchBanks()
@@ -78,16 +78,7 @@ export default function HostDashboard() {
     return () => unsub()
   }, [session?.uid])
 
-  // Close notification panel when clicking outside
-  useEffect(() => {
-    const handler = (e) => {
-      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target)) {
-        setShowNotifications(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  // Outside-click is handled by the portal backdrop div — no document listener needed
 
   const markAllRead = async () => {
     if (!session?.uid) return
@@ -209,7 +200,7 @@ export default function HostDashboard() {
           </div>
           <div className="flex items-center gap-3">
             {/* Notification Bell */}
-            <div ref={notifPanelRef}>
+            <div>
               <button
                 onClick={() => { setShowNotifications(v => !v); if (!showNotifications) markAllRead() }}
                 className="relative p-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-gray-600 transition-colors"
