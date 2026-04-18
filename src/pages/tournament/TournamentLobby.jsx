@@ -184,12 +184,23 @@ export default function TournamentLobby() {
       const roomCode = genRoomCode()
       const timerSeconds = Math.round(tournament.ffa_question_duration / 1000)
 
+      // Use FFA-assigned questions if host specified them, otherwise full deck
+      const ffaIdxs = tournament.round_questions?.ffa
+      let roomQuestions = deckData.questions
+      if (ffaIdxs?.length > 0) {
+        const allQs = deckData.questions?.questions || []
+        roomQuestions = {
+          ...deckData.questions,
+          questions: ffaIdxs.map(i => allQs[i]).filter(Boolean),
+        }
+      }
+
       await set(rtdbRef(rtdb, `rooms/${roomCode}`), {
         code:                   roomCode,
         host_id:                session.uid,
         question_set_id:        tournament.deck_id,
         title:                  tournament.title + ' — FFA',
-        questions:              deckData.questions,
+        questions:              roomQuestions,
         force_rtl:              deckData.force_rtl || false,
         tournament_id:          tournamentId,
         status:                 'lobby',

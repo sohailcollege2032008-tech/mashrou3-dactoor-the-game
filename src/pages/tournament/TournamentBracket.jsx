@@ -257,6 +257,7 @@ export default function TournamentBracket() {
           totalRounds={totalRounds}
           isAutoMode={false}
           lockedRounds={Array.from({ length: currentRound - 1 }, (_, i) => i + 1)}
+          ffaLocked={true}
           onSave={saveAssignment}
           onClose={() => setShowQPanel(false)}
         />
