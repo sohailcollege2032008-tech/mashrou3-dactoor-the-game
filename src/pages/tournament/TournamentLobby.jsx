@@ -195,6 +195,18 @@ export default function TournamentLobby() {
         }
       }
 
+      // Pre-populate ALL registered players so they can enter the game
+      // directly without going through the normal join-request flow.
+      const playersObj = {}
+      for (const reg of registrations) {
+        playersObj[reg.uid] = {
+          user_id:    reg.uid,
+          nickname:   reg.nickname,
+          avatar_url: reg.avatar_url || null,
+          score:      0,
+        }
+      }
+
       await set(rtdbRef(rtdb, `rooms/${roomCode}`), {
         code:                   roomCode,
         host_id:                session.uid,
@@ -207,6 +219,7 @@ export default function TournamentLobby() {
         current_question_index: 0,
         question_started_at:    null,
         reveal_data:            null,
+        players:                playersObj,
         config: {
           scoring_mode:         'ranked',
           first_correct_points: 3,
