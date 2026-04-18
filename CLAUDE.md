@@ -306,11 +306,33 @@ Main branch (`main`) is stable — do NOT push breaking changes there.
 
 ## 🔒 Security Rules Summary
 
+### Firestore (`firestore.rules`)
 - `profiles/{uid}`: read by any auth user, write by owner only
 - `profiles/{uid}/played_questions/{deckId}`: read by any auth (opponent needs it), write by owner only
 - `profiles/{uid}/game_history/{entryId}`: read by any auth, write by owner only
 - `question_sets/{setId}`: read + write by any auth user
 - `authorized_hosts/{docId}`: read by any auth, write by owner email only
+- `tournaments/{id}`: read + write by any auth user
+- `tournaments/{id}/registrations/{uid}`: read by any auth, write by owner uid only
+- `tournaments/{id}/ffa_results/{uid}`: read + write by any auth
+- `tournaments/{id}/bracket_matches/{matchId}`: read + write by any auth
+
+### RTDB (`database.rules.json`)
+- `rooms/{code}`: read + write by any auth (answers/reveal_locks restricted per-user)
+- `host_rooms/{hostId}`: read + write by owner uid only
+- `duels/{duelId}`: read + write by any auth
+- `duel_queue/`: read + write by any auth
+- `duel_presence/{duelId}/{uid}`: read by any auth, write by owner uid only
+- `tournament_registrations/{tournamentId}`: read + write by any auth
+- `tournament_duels/{tournamentId}/{duelId}`: read + write by any auth
+- `tournament_presence/{tournamentId}/{uid}`: read by any auth, write by owner uid only
+- `tournament_meta/{tournamentId}`: read + write by any auth
+
+### Deploy commands
+```bash
+firebase deploy --only firestore:rules   # Firestore rules
+firebase deploy --only database          # RTDB rules
+```
 
 ---
 
@@ -329,6 +351,7 @@ Used in: `UploadQuestionsModal.jsx` (AI tab)
 ## ⚠️ Known Constraints & Rules
 
 1. **Never push breaking changes to `main`** — it's the stable branch connected to Vercel production.
+0. **Security rules checklist (MANDATORY before every commit):** Any new Firestore collection/subcollection or new RTDB path needs a matching rule in `firestore.rules` or `database.rules.json`. After adding rules, run `firebase deploy --only firestore:rules` and/or `firebase deploy --only database` BEFORE pushing the code that uses the new path. A missing rule causes a silent `PERMISSION_DENIED` at runtime that is hard to debug.
 2. **No mock database** — always use real Firebase (Firestore + RTDB).
 3. **No hardcoded secrets** — all via `import.meta.env.VITE_*`.
 4. **Question images** go to Firebase Storage under `question_images/{bankId}/q{index}_{timestamp}`.

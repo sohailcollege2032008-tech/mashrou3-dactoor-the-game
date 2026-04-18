@@ -48,6 +48,34 @@
           ".write": "auth != null && auth.uid == $uid"
         }
       }
+    },
+    "tournament_registrations": {
+      "$tournamentId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "tournament_duels": {
+      "$tournamentId": {
+        "$duelId": {
+          ".read":  "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
+    "tournament_presence": {
+      "$tournamentId": {
+        "$uid": {
+          ".read":  "auth != null",
+          ".write": "auth != null && auth.uid == $uid"
+        }
+      }
+    },
+    "tournament_meta": {
+      "$tournamentId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
     }
   }
 }
