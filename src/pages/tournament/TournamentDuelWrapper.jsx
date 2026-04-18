@@ -57,8 +57,21 @@ export default function TournamentDuelWrapper() {
     load()
   }, [tournamentId, matchId])
 
+  // uid of the currently logged-in user
+  const uid = session?.uid
+  // Is this user one of the two players in this match (not an observer/host)?
+  const isPlayerInMatch = ready && match &&
+    (match.player_a_uid === uid || match.player_b_uid === uid)
+
   // Called by DuelGame when the duel finishes
   const handleFinished = useCallback(async () => {
+    // Host-observer: go back to bracket without writing results.
+    // The two actual players will each run handleFinished and write the result.
+    if (!isPlayerInMatch) {
+      navigate(`/tournament/${tournamentId}/bracket`, { replace: true })
+      return
+    }
+
     if (!match || !duelId || !tournament) {
       navigate(`/tournament/${tournamentId}/wait`, { replace: true })
       return
@@ -79,19 +92,17 @@ export default function TournamentDuelWrapper() {
       let winnerUid, loserUid, tieBreaker
 
       if (duelData.forfeit_by) {
-        // Forfeit — the other player wins
-        loserUid  = duelData.forfeit_by
-        winnerUid = playerUids.find(u => u !== loserUid)
+        loserUid   = duelData.forfeit_by
+        winnerUid  = playerUids.find(u => u !== loserUid)
         tieBreaker = null
       } else if (scoreA === scoreB) {
-        // Tie — use resolution logic
         const result = resolveMatchTie(duelData, playerUids)
         winnerUid  = result.winnerUid
         loserUid   = result.loserUid
         tieBreaker = result.tieBreaker
       } else {
-        winnerUid = scoreA > scoreB ? uidA : uidB
-        loserUid  = winnerUid === uidA ? uidB : uidA
+        winnerUid  = scoreA > scoreB ? uidA : uidB
+        loserUid   = winnerUid === uidA ? uidB : uidA
         tieBreaker = null
       }
 
@@ -113,16 +124,16 @@ export default function TournamentDuelWrapper() {
         const nextSnap = await getDoc(nextRef)
         if (nextSnap.exists()) {
           const nextMatch = nextSnap.data()
-          const winnerName = match.winner_uid === match.player_a_uid
+          // ✅ Fixed: use computed winnerUid (not stale match.winner_uid which is null)
+          const winnerName = winnerUid === match.player_a_uid
             ? match.player_a_name : match.player_b_name
-          // Fill whichever slot is empty
           const updates = !nextMatch.player_a_uid
             ? { player_a_uid: winnerUid, player_a_name: winnerName }
             : { player_b_uid: winnerUid, player_b_name: winnerName }
           await updateDoc(nextRef, updates)
         }
       } else {
-        // This was the final — update tournament winner
+        // Final match — mark tournament finished
         await updateDoc(doc(db, 'tournaments', tournamentId), {
           winner_uid: winnerUid,
           status:     'finished',
@@ -133,7 +144,7 @@ export default function TournamentDuelWrapper() {
     }
 
     navigate(`/tournament/${tournamentId}/wait`, { replace: true })
-  }, [match, duelId, tournament, tournamentId, matchId, navigate])
+  }, [isPlayerInMatch, match, duelId, tournament, tournamentId, matchId, navigate])
 
   if (error) {
     return (
@@ -159,8 +170,8 @@ export default function TournamentDuelWrapper() {
       duelPath={`tournament_duels/${tournamentId}`}
       questionDurationMs={tournament?.duel_question_duration || 30000}
       onFinished={handleFinished}
-      // Override duelId via prop instead of URL param
       duelIdOverride={duelId}
+      isObserver={!isPlayerInMatch}
     />
   )
 }

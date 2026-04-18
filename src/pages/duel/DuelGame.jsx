@@ -59,12 +59,14 @@ function TimerBar({ pct }) {
  *   questionDurationMs {number} override for question timer — default 30000
  *   onFinished        {fn}      called on game end instead of navigating to /duel/results
  *   duelIdOverride    {string}  use this duelId instead of the URL param
+ *   isObserver        {bool}    true = host watching; skips presence write, disables answers
  */
 export default function DuelGame({
   duelPath          = 'duels',
   questionDurationMs: propDurationMs,
   onFinished,
   duelIdOverride,
+  isObserver        = false,
 } = {}) {
   const { duelId: duelIdParam } = useParams()
   const duelId  = duelIdOverride || duelIdParam
@@ -91,7 +93,9 @@ export default function DuelGame({
   const [actionLoading, setActionLoading] = useState(false)
 
   // Tournament-duel start countdown (null → 3 → 2 → 1 → 0)
-  const [startCountdown, setStartCountdown] = useState(null)
+  const [startCountdown,  setStartCountdown]  = useState(null)
+  // Becomes true once BOTH actual player UIDs appear in duel_presence as connected
+  const [playersPresent,  setPlayersPresent]  = useState(false)
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const duelRef             = useRef(null)
@@ -116,15 +120,15 @@ export default function DuelGame({
   // Keep duelRef current
   useEffect(() => { duelRef.current = duel }, [duel])
 
-  // ── Own presence + activeDuelId ───────────────────────────────────────────
+  // ── Own presence + activeDuelId (skipped for observers) ──────────────────
   useEffect(() => {
-    if (!duelId || !uid) return
+    if (!duelId || !uid || isObserver) return
     const presRef = rtdbRef(rtdb, `duel_presence/${duelId}/${uid}`)
     set(presRef, { connected: true })
     onDisconnect(presRef).set({ connected: false })
     localStorage.setItem('activeDuelId', duelId)
     return () => { set(presRef, { connected: false }) }
-  }, [duelId, uid])
+  }, [duelId, uid, isObserver])
 
   // ── Watch opponent presence ───────────────────────────────────────────────
   useEffect(() => {
@@ -189,14 +193,28 @@ export default function DuelGame({
     }
   }, [duel?.current_question_index])
 
-  // ── Auto-start for tournament duels (duelPath !== 'duels') ──────────────────
-  // When both players are in duel.players and status is still 'waiting', count
-  // down 3 s then fire a transaction to flip it to 'playing'.
+  // ── Watch real player presence (tournament duels only) ───────────────────
+  // Subscribes to duel_presence for BOTH actual player UIDs (from duel.players).
+  // When both are connected, sets playersPresent=true to trigger the countdown.
+  // Observers skip presence write so they can't accidentally trigger this.
   useEffect(() => {
-    if (!duel || duelPath === 'duels') return
-    if (duel.status !== 'waiting') return
-    const playerCount = Object.keys(duel.players || {}).length
-    if (playerCount < 2) { setStartCountdown(null); return }
+    if (!duel || duelPath === 'duels' || duel.status !== 'waiting') return
+    const playerUids = Object.keys(duel.players || {})
+    if (playerUids.length < 2) return
+
+    const connected = {}
+    const unsubs = playerUids.map(pUid =>
+      onValue(rtdbRef(rtdb, `duel_presence/${duelId}/${pUid}`), snap => {
+        connected[pUid] = snap.val()?.connected === true
+        if (playerUids.every(u => connected[u])) setPlayersPresent(true)
+      })
+    )
+    return () => unsubs.forEach(u => u())
+  }, [duel?.status, duelPath, duelId])
+
+  // ── Auto-start countdown once both players are present ───────────────────
+  useEffect(() => {
+    if (!playersPresent || !duel || duelPath === 'duels' || duel.status !== 'waiting') return
 
     setStartCountdown(3)
     const t1 = setTimeout(() => setStartCountdown(2), 1000)
@@ -208,15 +226,15 @@ export default function DuelGame({
           if (!current || current.status !== 'waiting') return undefined
           return {
             ...current,
-            status:               'playing',
-            question_started_at:  Date.now() + serverOffsetRef.current,
+            status:              'playing',
+            question_started_at: Date.now() + serverOffsetRef.current,
           }
         })
       } catch (e) { console.error('auto-start error:', e) }
     }, 3000)
 
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
-  }, [duel?.status, duel?.players, duelPath, duelId])
+  }, [playersPresent, duel?.status, duelPath, duelId])
 
   // ── Subscribe to duel ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -393,7 +411,7 @@ export default function DuelGame({
 
   // ── Answer submission ─────────────────────────────────────────────────────
   const submitAnswer = useCallback(async (choiceIndex) => {
-    if (hasAnswered || !duel || duel.status !== 'playing' || !uid) return
+    if (isObserver || hasAnswered || !duel || duel.status !== 'playing' || !uid) return
     if (!duel.question_started_at) return
 
     const reactionTimeMs = serverNow() - duel.question_started_at
@@ -457,6 +475,13 @@ export default function DuelGame({
   if (duelPath !== 'duels' && duel.status === 'waiting') {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-10 p-6" dir="rtl">
+        {/* Observer badge */}
+        {isObserver && (
+          <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-3 py-1 rounded-full font-bold">
+            👁 وضع المشاهدة
+          </span>
+        )}
+
         {/* VS header */}
         <div className="flex items-center gap-8">
           <PlayerPill player={myPlayer}       score={0} align="right" />
@@ -464,13 +489,13 @@ export default function DuelGame({
           <PlayerPill player={opponentPlayer} score={0} align="left" />
         </div>
 
-        {/* Countdown */}
+        {/* Countdown / waiting message */}
         <div className="text-center space-y-3">
           {startCountdown !== null ? (
             <p
               key={startCountdown}
               className="text-8xl font-black tabular-nums"
-              style={{ color: startCountdown === 0 ? '#00B8D9' : '#ffffff', transition: 'color .2s' }}
+              style={{ color: startCountdown === 0 ? '#00B8D9' : '#ffffff' }}
             >
               {startCountdown === 0 ? '🚀' : startCountdown}
             </p>
@@ -479,7 +504,7 @@ export default function DuelGame({
           )}
           <p className="ar text-gray-400 text-sm">
             {startCountdown === null
-              ? 'في انتظار الخصم…'
+              ? 'في انتظار اتصال اللاعبين…'
               : startCountdown > 0
               ? 'تبدأ المباراة خلال…'
               : 'انطلق!'}
@@ -514,8 +539,15 @@ export default function DuelGame({
   return (
     <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl">
 
+      {/* Observer banner */}
+      {isObserver && (
+        <div className="mx-4 mt-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-3 py-1.5 text-center">
+          <span className="text-yellow-400 text-xs font-bold ar">👁 وضع المشاهدة — لا يمكنك الإجابة</span>
+        </div>
+      )}
+
       {/* Disconnect banner */}
-      {!opponentConnected && disconnectCountdown !== null && (
+      {!isObserver && !opponentConnected && disconnectCountdown !== null && (
         <div className="mx-4 mt-3 z-50">
           <div className="bg-yellow-500/10 border border-yellow-500/40 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -637,26 +669,28 @@ export default function DuelGame({
         )}
       </div>
 
-      {/* Exit / Surrender bar */}
-      <div className="flex items-center justify-center gap-4 px-4 pb-4 pt-1">
-        <button
-          onClick={() => setConfirmAction('surrender')}
-          disabled={actionLoading}
-          className="flex items-center gap-1.5 text-gray-600 hover:text-yellow-400 transition-colors text-xs font-bold disabled:opacity-40"
-        >
-          <Flag size={13} />
-          استسلام (تعادل)
-        </button>
-        <span className="w-px h-4 bg-gray-800" />
-        <button
-          onClick={() => setConfirmAction('forfeit')}
-          disabled={actionLoading}
-          className="flex items-center gap-1.5 text-gray-600 hover:text-red-400 transition-colors text-xs font-bold disabled:opacity-40"
-        >
-          <LogOut size={13} />
-          الخروج (خسارة)
-        </button>
-      </div>
+      {/* Exit / Surrender bar — hidden for observers */}
+      {!isObserver && (
+        <div className="flex items-center justify-center gap-4 px-4 pb-4 pt-1">
+          <button
+            onClick={() => setConfirmAction('surrender')}
+            disabled={actionLoading}
+            className="flex items-center gap-1.5 text-gray-600 hover:text-yellow-400 transition-colors text-xs font-bold disabled:opacity-40"
+          >
+            <Flag size={13} />
+            استسلام (تعادل)
+          </button>
+          <span className="w-px h-4 bg-gray-800" />
+          <button
+            onClick={() => setConfirmAction('forfeit')}
+            disabled={actionLoading}
+            className="flex items-center gap-1.5 text-gray-600 hover:text-red-400 transition-colors text-xs font-bold disabled:opacity-40"
+          >
+            <LogOut size={13} />
+            الخروج (خسارة)
+          </button>
+        </div>
+      )}
 
       {/* Confirm overlay */}
       {confirmAction && (
