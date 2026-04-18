@@ -1004,8 +1004,11 @@ export default function HostGameRoom() {
       })
       await batch.commit()
 
-      // Transition tournament to bracket phase
-      await updateDoc(doc(db, 'tournaments', tournamentId), { status: 'transition' })
+      // Transition tournament to bracket phase (skip 'transition' — go directly to 'bracket')
+      await updateDoc(doc(db, 'tournaments', tournamentId), {
+        status:        'bracket',
+        current_round: 1,
+      })
     } catch (err) {
       console.error('[Tournament] Failed to write FFA results:', err)
     }

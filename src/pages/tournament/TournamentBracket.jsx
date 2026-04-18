@@ -92,17 +92,9 @@ export default function TournamentBracket() {
   // Generate bracket when we have FFA results and no matches yet
   useEffect(() => {
     if (!tournament || matches.length > 0 || ffaResults.length < 2 || generating) return
-    if (!['transition', 'bracket'].includes(tournament.status)) return
+    if (tournament.status !== 'bracket') return
     generateBracket()
   }, [tournament, matches.length, ffaResults.length])
-
-  // Show phase-transition countdown
-  useEffect(() => {
-    if (!tournament || tournament.status !== 'transition') return
-    setCountdownLabel('يبدأ الـ Bracket بعد…')
-    setCountdownMs(tournament.phase_transition_wait || 60000)
-    setShowCountdown(true)
-  }, [tournament?.status])
 
   const generateBracket = useCallback(async () => {
     if (generating || ffaResults.length < 2) return
@@ -126,12 +118,9 @@ export default function TournamentBracket() {
     }
   }, [generating, ffaResults, tournament, tournamentId])
 
-  const handleCountdownComplete = useCallback(async () => {
+  const handleCountdownComplete = useCallback(() => {
     setShowCountdown(false)
-    if (tournament?.status === 'transition') {
-      await updateDoc(doc(db, 'tournaments', tournamentId), { status: 'bracket', current_round: 1 })
-    }
-  }, [tournament?.status, tournamentId])
+  }, [])
 
   // Export bracket as image
   const exportImage = useCallback(async () => {
