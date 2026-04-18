@@ -90,6 +90,9 @@ export default function DuelGame({
   const [confirmAction, setConfirmAction] = useState(null) // 'forfeit' | 'surrender'
   const [actionLoading, setActionLoading] = useState(false)
 
+  // Tournament-duel start countdown (null → 3 → 2 → 1 → 0)
+  const [startCountdown, setStartCountdown] = useState(null)
+
   // ── Refs ─────────────────────────────────────────────────────────────────
   const duelRef             = useRef(null)
   const serverOffsetRef     = useRef(0)          // Firebase server clock offset (ms)
@@ -185,6 +188,35 @@ export default function DuelGame({
       nextInProgressRef.current   = false
     }
   }, [duel?.current_question_index])
+
+  // ── Auto-start for tournament duels (duelPath !== 'duels') ──────────────────
+  // When both players are in duel.players and status is still 'waiting', count
+  // down 3 s then fire a transaction to flip it to 'playing'.
+  useEffect(() => {
+    if (!duel || duelPath === 'duels') return
+    if (duel.status !== 'waiting') return
+    const playerCount = Object.keys(duel.players || {}).length
+    if (playerCount < 2) { setStartCountdown(null); return }
+
+    setStartCountdown(3)
+    const t1 = setTimeout(() => setStartCountdown(2), 1000)
+    const t2 = setTimeout(() => setStartCountdown(1), 2000)
+    const t3 = setTimeout(async () => {
+      setStartCountdown(0)
+      try {
+        await runTransaction(rtdbRef(rtdb, `${duelPath}/${duelId}`), current => {
+          if (!current || current.status !== 'waiting') return undefined
+          return {
+            ...current,
+            status:               'playing',
+            question_started_at:  Date.now() + serverOffsetRef.current,
+          }
+        })
+      } catch (e) { console.error('auto-start error:', e) }
+    }, 3000)
+
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [duel?.status, duel?.players, duelPath, duelId])
 
   // ── Subscribe to duel ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -413,13 +445,49 @@ export default function DuelGame({
     )
   }
 
-  const qi          = duel.current_question_index ?? 0
-  const question    = duel.questions?.[qi]
-  const players     = duel.players || {}
-  const playerUids  = Object.keys(players)
-  const myPlayer    = players[uid]
-  const opponentUid = playerUids.find(p => p !== uid)
+  const qi             = duel.current_question_index ?? 0
+  const question       = duel.questions?.[qi]
+  const players        = duel.players || {}
+  const playerUids     = Object.keys(players)
+  const myPlayer       = players[uid]
+  const opponentUid    = playerUids.find(p => p !== uid)
   const opponentPlayer = opponentUid ? players[opponentUid] : null
+
+  // ── Tournament duel "about to start" waiting screen ─────────────────────
+  if (duelPath !== 'duels' && duel.status === 'waiting') {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-10 p-6" dir="rtl">
+        {/* VS header */}
+        <div className="flex items-center gap-8">
+          <PlayerPill player={myPlayer}       score={0} align="right" />
+          <span className="text-3xl font-black text-primary select-none">VS</span>
+          <PlayerPill player={opponentPlayer} score={0} align="left" />
+        </div>
+
+        {/* Countdown */}
+        <div className="text-center space-y-3">
+          {startCountdown !== null ? (
+            <p
+              key={startCountdown}
+              className="text-8xl font-black tabular-nums"
+              style={{ color: startCountdown === 0 ? '#00B8D9' : '#ffffff', transition: 'color .2s' }}
+            >
+              {startCountdown === 0 ? '🚀' : startCountdown}
+            </p>
+          ) : (
+            <Loader2 size={40} className="text-primary animate-spin mx-auto" />
+          )}
+          <p className="ar text-gray-400 text-sm">
+            {startCountdown === null
+              ? 'في انتظار الخصم…'
+              : startCountdown > 0
+              ? 'تبدأ المباراة خلال…'
+              : 'انطلق!'}
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const isRevealing    = duel.status === 'revealing'
   const currentAnswers = duel.answers?.[qi] || {}

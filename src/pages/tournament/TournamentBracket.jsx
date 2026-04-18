@@ -53,6 +53,8 @@ export default function TournamentBracket() {
   // End tournament confirmation
   const [showEndConfirm,  setShowEndConfirm]  = useState(false)
   const [ending,          setEnding]          = useState(false)
+  // Live scores for active bracket duels: { [duelId]: { [uid]: { score, nickname } } }
+  const [liveDuels,       setLiveDuels]       = useState({})
 
   // Subscribe to tournament
   useEffect(() => {
@@ -88,6 +90,22 @@ export default function TournamentBracket() {
       .then(d => setDeckQs(d.data()?.questions?.questions || []))
       .catch(console.error)
   }, [tournament?.deck_id])
+
+  // Subscribe to live player scores for active matches in current round
+  useEffect(() => {
+    const activeMatches = matches.filter(
+      m => m.status === 'active' && m.duel_id &&
+           m.round === (tournament?.current_round || 1)
+    )
+    if (!activeMatches.length) { setLiveDuels({}); return }
+
+    const unsubs = activeMatches.map(m =>
+      onValue(rtdbRef(rtdb, `tournament_duels/${tournamentId}/${m.duel_id}/players`), snap => {
+        setLiveDuels(prev => ({ ...prev, [m.duel_id]: snap.val() || {} }))
+      })
+    )
+    return () => unsubs.forEach(u => u())
+  }, [matches, tournament?.current_round, tournamentId])
 
   // Generate bracket when we have FFA results and no matches yet
   useEffect(() => {
@@ -326,7 +344,7 @@ export default function TournamentBracket() {
         )}
 
         {/* Round Question Management */}
-        {['transition', 'bracket'].includes(tournament.status) && totalRounds > 0 && (
+        {tournament.status === 'bracket' && totalRounds > 0 && (
           <button
             onClick={() => setShowQPanel(true)}
             className="w-full flex items-center justify-between bg-gray-900 border border-gray-800 hover:border-primary/50 rounded-2xl px-5 py-4 mb-4 transition-all group"
@@ -403,34 +421,58 @@ export default function TournamentBracket() {
             <h2 className="ar font-bold text-white">مباريات {getRoundName(currentRound, totalRounds)}</h2>
 
             <div className="space-y-2">
-              {roundMatches.map(match => (
-                <div key={match.match_id} className="flex items-center gap-3 bg-gray-800 rounded-xl p-3">
-                  <div className="flex-1 text-sm">
-                    <span className="font-semibold text-white">{match.player_a_name}</span>
-                    <span className="text-gray-500 mx-2">vs</span>
-                    <span className="font-semibold text-white">{match.player_b_name}</span>
+              {roundMatches.map(match => {
+                const live = match.duel_id ? (liveDuels[match.duel_id] || {}) : {}
+                const liveA = live[match.player_a_uid]
+                const liveB = live[match.player_b_uid]
+                const hasLive = match.status === 'active' && (liveA || liveB)
+
+                return (
+                  <div key={match.match_id} className="bg-gray-800 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-3 px-3 py-2.5">
+                      {/* Player names + live scores */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-white text-sm truncate">{match.player_a_name || 'TBD'}</span>
+                          {hasLive && (
+                            <span className="font-mono text-xs font-black text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded-lg tabular-nums">
+                              {liveA?.score ?? 0}
+                            </span>
+                          )}
+                          <span className="text-gray-600 text-xs">vs</span>
+                          {hasLive && (
+                            <span className="font-mono text-xs font-black text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded-lg tabular-nums">
+                              {liveB?.score ?? 0}
+                            </span>
+                          )}
+                          <span className="font-semibold text-white text-sm truncate">{match.player_b_name || 'TBD'}</span>
+                        </div>
+                      </div>
+
+                      <StatusBadge status={match.status} winnerName={
+                        match.winner_uid === match.player_a_uid ? match.player_a_name : match.player_b_name
+                      } />
+
+                      {match.status === 'pending' && match.player_a_uid && match.player_b_uid && (
+                        <button
+                          onClick={() => launchMatch(match)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 text-primary border border-primary/40 text-xs font-bold hover:bg-primary/30 transition-colors ar"
+                        >
+                          <Play size={12} /> ابدأ
+                        </button>
+                      )}
+                      {match.status === 'active' && match.duel_id && (
+                        <button
+                          onClick={() => navigate(`/tournament/${tournamentId}/duel/${match.match_id}`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 text-xs font-bold ar"
+                        >
+                          <ChevronRight size={12} /> شاهد
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <StatusBadge status={match.status} winnerName={
-                    match.winner_uid === match.player_a_uid ? match.player_a_name : match.player_b_name
-                  } />
-                  {match.status === 'pending' && match.player_a_uid && match.player_b_uid && (
-                    <button
-                      onClick={() => launchMatch(match)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 text-primary border border-primary/40 text-xs font-bold hover:bg-primary/30 transition-colors ar"
-                    >
-                      <Play size={12} /> ابدأ
-                    </button>
-                  )}
-                  {match.status === 'active' && match.duel_id && (
-                    <button
-                      onClick={() => navigate(`/tournament/${tournamentId}/duel/${match.match_id}`)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 text-xs font-bold ar"
-                    >
-                      <ChevronRight size={12} /> متابعة
-                    </button>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Advance to next round */}
@@ -451,15 +493,21 @@ export default function TournamentBracket() {
               </button>
             )}
 
-            {allRoundDone && currentRound === totalRounds && (
-              <div className="text-center py-4">
-                <Trophy size={40} className="text-yellow-400 mx-auto mb-2" />
-                <p className="ar text-xl font-black text-yellow-400">
-                  🏆 {matches.find(m => m.round === totalRounds)?.player_a_name || 'البطل'}
-                </p>
-                <p className="ar text-gray-400 text-sm">انتهت البطولة!</p>
-              </div>
-            )}
+            {allRoundDone && currentRound === totalRounds && (() => {
+              const finalMatch = matches.find(m => m.round === totalRounds && m.status === 'finished')
+              const winnerName = finalMatch
+                ? (finalMatch.winner_uid === finalMatch.player_a_uid
+                    ? finalMatch.player_a_name
+                    : finalMatch.player_b_name)
+                : 'البطل'
+              return (
+                <div className="text-center py-4">
+                  <Trophy size={40} className="text-yellow-400 mx-auto mb-2" />
+                  <p className="ar text-xl font-black text-yellow-400">🏆 {winnerName}</p>
+                  <p className="ar text-gray-400 text-sm mt-1">انتهت البطولة!</p>
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>
