@@ -1,4 +1,17 @@
 {
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "runtime": "python311",
+      "ignore": [
+        "venv",
+        ".git",
+        "*.pyc",
+        "__pycache__"
+      ]
+    }
+  ],
   "database": {
     "rules": "database.rules.json"
   },

@@ -401,8 +401,12 @@ export default function DuelGame({
   }, [duel?.status, duel?.question_started_at, triggerReveal, serverNow, activeDurationMs])
 
   // ── Watch answers: both answered → reveal early ───────────────────────────
+  // For tournament duels (duelPath !== 'duels'), the Cloud Function
+  // on_tournament_answer_written handles early reveal server-side.
+  // We keep this effect only for regular duels (no CF coverage).
   useEffect(() => {
     if (!duel || duel.status !== 'playing') return
+    if (duelPath !== 'duels') return  // Cloud Function handles tournament duels
     const qi         = duel.current_question_index
     const answers    = duel.answers?.[qi] || {}
     const playerUids = Object.keys(duel.players || {})
@@ -411,7 +415,7 @@ export default function DuelGame({
     if (playerUids.length >= 2 && validAnswerCount >= playerUids.length) {
       triggerReveal()
     }
-  }, [duel?.answers, duel?.status, duel?.current_question_index, triggerReveal])
+  }, [duel?.answers, duel?.status, duel?.current_question_index, duelPath, triggerReveal])
 
   // ── Timer: reveal countdown (3s) ─────────────────────────────────────────
   useEffect(() => {
