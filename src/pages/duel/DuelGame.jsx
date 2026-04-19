@@ -142,6 +142,7 @@ export default function DuelGame({
 
   // ── Disconnect countdown → auto-forfeit ──────────────────────────────────
   useEffect(() => {
+    if (isObserver) return
     if (opponentConnected) {
       if (countdownIntervalRef.current) {
         clearInterval(countdownIntervalRef.current)
@@ -231,7 +232,7 @@ export default function DuelGame({
       const data = snap.val()
       setDuel(data)
       setLoading(false)
-      if (data?.players && uid) {
+      if (!isObserver && data?.players && uid) {
         const oppUid = Object.keys(data.players).find(p => p !== uid)
         if (oppUid) setWatchOpponentUid(prev => prev ?? oppUid)
       }
