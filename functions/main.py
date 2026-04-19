@@ -29,8 +29,10 @@ logger = logging.getLogger(__name__)
 
 initialize_app()
 
-REVEAL_DURATION_MS = 3_000
-BASE_PATH          = "tournament_duels"
+REVEAL_DURATION_MS    = 3_000
+BASE_PATH             = "tournament_duels"
+MIN_REACTION_MS       = 50        # below this = suspiciously fast / clock error
+MAX_REACTION_MS       = 65_000    # above this = question expired already
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -139,14 +141,23 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
     question  = questions[current_qi] if current_qi < len(questions) else None
     correct_c = question.get("correct") if isinstance(question, dict) else None
 
-    # Sort correct answers by ascending reaction_time_ms (first = rank 0 = 2 pts)
+    # Sort correct answers by ascending reaction_time_ms (first = rank 0 = 2 pts).
+    # Clamp reaction_time_ms to a valid range so forged ultra-fast times don't
+    # steal the first-correct slot; anything outside the bounds is treated as
+    # the worst possible time (MAX_REACTION_MS) for ranking purposes.
+    def _safe_reaction(ans: dict) -> int:
+        ms = ans.get("reaction_time_ms")
+        if not isinstance(ms, (int, float)) or ms < MIN_REACTION_MS:
+            return MAX_REACTION_MS    # invalid → push to the back
+        return min(int(ms), MAX_REACTION_MS)
+
     correct_list = [
         (uid, ans) for uid, ans in answers_qi.items()
         if uid in player_uids
         and isinstance(ans, dict)
         and ans.get("selected_choice") == correct_c
     ]
-    correct_list.sort(key=lambda x: x[1].get("reaction_time_ms", 0))
+    correct_list.sort(key=lambda x: _safe_reaction(x[1]))
     rank_map = {uid: i for i, (uid, _) in enumerate(correct_list)}
 
     updates: dict = {}

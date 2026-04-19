@@ -34,7 +34,30 @@
     "duels": {
       "$duelId": {
         ".read":  "auth != null",
-        ".write": "auth != null"
+        ".write": "auth != null",
+        "answers": {
+          "$qIdx": {
+            "$userId": {
+              ".write": "auth != null",
+              "selected_choice": {
+                ".validate": "!data.exists() ? (newData.isNumber() && auth.uid == $userId) : newData.val() == data.val()"
+              },
+              "reaction_time_ms": {
+                ".validate": "!data.exists() ? (newData.isNumber() && newData.val() >= 50 && newData.val() <= 65000 && auth.uid == $userId) : newData.val() == data.val()"
+              },
+              "uid": {
+                ".validate": "newData.isString() && newData.val() == auth.uid"
+              }
+            }
+          }
+        },
+        "players": {
+          "$uid": {
+            "score": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= (data.exists() ? data.val() + 2 : 2)"
+            }
+          }
+        }
       }
     },
     "duel_queue": {
@@ -59,7 +82,36 @@
       "$tournamentId": {
         "$duelId": {
           ".read":  "auth != null",
-          ".write": "auth != null"
+          ".write": "auth != null",
+          "answers": {
+            "$qIdx": {
+              "$userId": {
+                ".write": "auth != null",
+                "selected_choice": {
+                  ".validate": "!data.exists() ? (newData.isNumber() && auth.uid == $userId) : newData.val() == data.val()"
+                },
+                "reaction_time_ms": {
+                  ".validate": "!data.exists() ? (newData.isNumber() && newData.val() >= 50 && newData.val() <= 65000 && auth.uid == $userId) : newData.val() == data.val()"
+                },
+                "uid": {
+                  ".validate": "newData.isString() && newData.val() == auth.uid"
+                }
+              }
+            }
+          },
+          "players": {
+            "$uid": {
+              "score": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= (data.exists() ? data.val() + 2 : 2)"
+              }
+            }
+          },
+          "forfeit_by": {
+            ".validate": "newData.isString() && newData.val() == auth.uid"
+          },
+          "surrender_by": {
+            ".validate": "newData.isString() && newData.val() == auth.uid"
+          }
         }
       }
     },
