@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Service account key (test credentials — never commit)
+functions/sa-key.json
+functions/venv/

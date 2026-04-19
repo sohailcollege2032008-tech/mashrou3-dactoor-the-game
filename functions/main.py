@@ -49,6 +49,23 @@ def _to_list(value: object) -> list:
     return []
 
 
+def _answers_for_qi(duel_data: dict, qi: int) -> dict:
+    """
+    Extract the per-player answers dict for question index `qi`.
+
+    Firebase RTDB returns integer-keyed objects as Python lists when keys are
+    sequential integers (0, 1, 2 …).  Handle both list and dict safely.
+    """
+    raw = duel_data.get("answers")
+    if raw is None:
+        return {}
+    if isinstance(raw, list):
+        val = raw[qi] if qi < len(raw) else None
+    else:
+        val = raw.get(str(qi))
+    return val if isinstance(val, dict) else {}
+
+
 def _now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -90,9 +107,7 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
     if len(player_uids) < 2:
         return
 
-    answers_qi = ((duel.get("answers") or {}).get(str(current_qi))) or {}
-    if not isinstance(answers_qi, dict):
-        return
+    answers_qi = _answers_for_qi(duel, current_qi)
 
     if not all(p in answers_qi for p in player_uids):
         return  # someone hasn't answered yet
