@@ -503,9 +503,25 @@ export default function TournamentBracket() {
                   setCountdownLabel(`استراحة قبل الجولة ${currentRound + 1}`)
                   setCountdownMs(tournament.round_break_time || 30000)
                   setShowCountdown(true)
-                  await updateDoc(doc(db, 'tournaments', tournamentId), {
-                    current_round: currentRound + 1,
-                  })
+
+                  // Propagate each round winner into the correct slot of the next-round match.
+                  // Odd-numbered match → player_a slot; even-numbered → player_b slot.
+                  // This is deterministic (no race condition) because the host triggers it
+                  // after ALL matches in the round are confirmed finished.
+                  const batch = writeBatch(db)
+                  for (const m of roundMatches) {
+                    if (m.status !== 'finished' || !m.winner_uid || !m.next_match_id) continue
+                    const winnerName = m.winner_uid === m.player_a_uid
+                      ? m.player_a_name : m.player_b_name
+                    const nextRef = doc(db, 'tournaments', tournamentId, 'bracket_matches', m.next_match_id)
+                    const isOdd = m.match_number % 2 === 1
+                    batch.update(nextRef, isOdd
+                      ? { player_a_uid: m.winner_uid, player_a_name: winnerName }
+                      : { player_b_uid: m.winner_uid, player_b_name: winnerName }
+                    )
+                  }
+                  batch.update(doc(db, 'tournaments', tournamentId), { current_round: currentRound + 1 })
+                  await batch.commit()
                 }}
                 className="w-full py-3 rounded-xl bg-primary text-background font-black ar flex items-center justify-center gap-2 hover:bg-[#00D4FF] active:scale-95 transition-all"
               >
