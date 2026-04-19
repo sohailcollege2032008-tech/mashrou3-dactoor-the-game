@@ -181,27 +181,52 @@ export default function PlayerGameView() {
 
           ;(async () => {
             try {
-              const [deckSnap, hostSnap] = await Promise.all([
+              const isTournament = !!data.tournament_id
+              const [deckSnap, hostSnap, tournSnap] = await Promise.all([
                 getDoc(doc(db, 'question_sets', qSetId)),
                 hostUid ? getDoc(doc(db, 'profiles', hostUid)) : Promise.resolve(null),
+                isTournament ? getDoc(doc(db, 'tournaments', data.tournament_id)) : Promise.resolve(null),
               ])
-              const deckData = deckSnap.data() || {}
-              const hostName = hostSnap?.data()?.display_name || 'دكتور'
-              const myScore  = data.players?.[uid]?.score ?? 0
+              const deckData       = deckSnap.data() || {}
+              const hostName       = hostSnap?.data()?.display_name || 'دكتور'
+              const tournamentTitle = tournSnap?.data()?.title || ''
+              const myScore        = data.players?.[uid]?.score ?? 0
 
               // ── Write game history entry ────────────────────────────────
-              await setDoc(doc(db, 'profiles', uid, 'game_history', roomId), {
-                type:            'competition',
-                deck_id:         qSetId,
-                deck_title:      deckData.title || qSetId,
-                deck_is_global:  deckData.is_global || false,
-                played_at:       serverTimestamp(),
-                host_uid:        hostUid || null,
-                host_name:       hostName,
-                score:           myScore,
-                total_questions: deckData.questions?.questions?.length || 0,
-                room_code:       roomId,
-              })
+              // Tournament FFA games get their own doc ID + type so they
+              // show as "بطولة X" in the player's history, not just a room.
+              const historyDocId = isTournament
+                ? `t_${data.tournament_id}_ffa_${roomId}`
+                : roomId
+
+              const historyEntry = isTournament
+                ? {
+                    type:             'tournament_ffa',
+                    tournament_id:    data.tournament_id,
+                    tournament_title: tournamentTitle,
+                    deck_id:          qSetId,
+                    deck_title:       deckData.title || qSetId,
+                    played_at:        serverTimestamp(),
+                    host_uid:         hostUid || null,
+                    host_name:        hostName,
+                    score:            myScore,
+                    total_questions:  deckData.questions?.questions?.length || 0,
+                    room_code:        roomId,
+                  }
+                : {
+                    type:            'competition',
+                    deck_id:         qSetId,
+                    deck_title:      deckData.title || qSetId,
+                    deck_is_global:  deckData.is_global || false,
+                    played_at:       serverTimestamp(),
+                    host_uid:        hostUid || null,
+                    host_name:       hostName,
+                    score:           myScore,
+                    total_questions: deckData.questions?.questions?.length || 0,
+                    room_code:       roomId,
+                  }
+
+              await setDoc(doc(db, 'profiles', uid, 'game_history', historyDocId), historyEntry)
 
               // Track that this host has hosted us (for phone visibility)
               if (hostUid) {

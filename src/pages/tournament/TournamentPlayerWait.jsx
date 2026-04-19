@@ -176,12 +176,18 @@ export default function TournamentPlayerWait() {
         )}
 
         {isFinished && !isEliminated && (
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-5">
-            <p className="ar text-xl font-black text-yellow-400 mb-1">🏆 انتهت البطولة!</p>
-            <p className="ar text-sm text-gray-400">تحقق من النتائج النهائية</p>
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-5 space-y-2">
+            <p className="ar text-xl font-black text-yellow-400">🏆 انتهت البطولة!</p>
+            {tournament.winner_uid === uid ? (
+              <p className="ar text-lg font-black text-yellow-300">أنت البطل! 🎉🎉🎉</p>
+            ) : tournament.winner_name ? (
+              <p className="ar text-sm text-gray-300">
+                البطل: <span className="font-bold text-yellow-400">{tournament.winner_name}</span>
+              </p>
+            ) : null}
             <button
               onClick={() => navigate('/player/dashboard')}
-              className="ar mt-4 px-6 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 transition-colors"
+              className="ar mt-2 w-full py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 transition-colors"
             >
               عودة للرئيسية
             </button>

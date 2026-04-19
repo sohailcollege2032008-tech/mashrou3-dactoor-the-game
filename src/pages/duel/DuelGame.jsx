@@ -60,6 +60,7 @@ function TimerBar({ pct }) {
  *   onFinished        {fn}      called on game end instead of navigating to /duel/results
  *   duelIdOverride    {string}  use this duelId instead of the URL param
  *   isObserver        {bool}    true = host watching; skips presence write, disables answers
+ *   tournamentBadge   {string}  e.g. "بطولة X — النهائي"; shown as header badge in tournament duels
  */
 export default function DuelGame({
   duelPath          = 'duels',
@@ -67,6 +68,7 @@ export default function DuelGame({
   onFinished,
   duelIdOverride,
   isObserver        = false,
+  tournamentBadge   = null,
 } = {}) {
   const { duelId: duelIdParam } = useParams()
   const duelId  = duelIdOverride || duelIdParam
@@ -468,6 +470,13 @@ export default function DuelGame({
           </span>
         )}
 
+        {/* Tournament badge */}
+        {tournamentBadge && (
+          <span className="text-xs font-bold ar text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 px-3 py-1 rounded-full">
+            🏆 {tournamentBadge}
+          </span>
+        )}
+
         {/* VS header */}
         <div className="flex items-center gap-8">
           <PlayerPill player={myPlayer}       score={0} align="right" />
@@ -525,9 +534,16 @@ export default function DuelGame({
   return (
     <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl">
 
+      {/* Tournament badge */}
+      {tournamentBadge && (
+        <div className="mx-4 mt-3 flex items-center justify-center gap-1.5 py-1.5">
+          <span className="text-xs font-bold ar text-yellow-400">🏆 {tournamentBadge}</span>
+        </div>
+      )}
+
       {/* Observer banner */}
       {isObserver && (
-        <div className="mx-4 mt-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-3 py-1.5 text-center">
+        <div className="mx-4 mt-1 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-3 py-1.5 text-center">
           <span className="text-yellow-400 text-xs font-bold ar">👁 وضع المشاهدة — لا يمكنك الإجابة</span>
         </div>
       )}
