@@ -19,6 +19,7 @@ import {
   generateBracketMatches, getQuestionsForRound,
   sortPlayers, resolveMatchTie
 } from '../../utils/tournamentUtils'
+import { stripCorrectForRtdb } from '../../utils/duelUtils'
 import BracketTree from '../../components/tournament/BracketTree'
 import TournamentCountdown from '../../components/tournament/TournamentCountdown'
 import { Trophy, Download, Play, Loader2, ChevronRight, Settings, Flag, AlertTriangle } from 'lucide-react'
@@ -171,22 +172,30 @@ export default function TournamentBracket() {
     if (!match.player_a_uid || !match.player_b_uid) return setError('لاعب غير محدد في هذه المباراة')
 
     try {
-      const questions = getQuestionsForRound(
-        match.round, tournament, deckQs, 5
-      )
+      // Fetch deck questions fresh at launch time — don't rely on deckQs state
+      // which may be stale or unpopulated (race between useEffect and button click).
+      const deckSnap  = await getDoc(doc(db, 'question_sets', tournament.deck_id))
+      const freshDeckQs = deckSnap.data()?.questions?.questions || []
+      if (freshDeckQs.length === 0) throw new Error('لا توجد أسئلة في الـ Deck')
+
+      const questions = getQuestionsForRound(match.round, tournament, freshDeckQs, 5)
       if (questions.length === 0) throw new Error('لا توجد أسئلة لهذه الجولة')
 
-      // Reserve tiebreaker questions: up to 3 extra questions not used in main set.
-      // These are appended on-the-fly by DuelGame if a tie occurs at the end.
+      // Reserve tiebreaker questions: prefer questions not in the main set.
+      // If the deck is too small to spare any, fall back to re-using deck questions
+      // so the array is never empty (an empty array prevents tiebreaker from firing).
       const usedTexts = new Set(questions.map(q => q?.question).filter(Boolean))
-      const tiebreakerQuestions = (deckQs || [])
-        .filter(q => q && !usedTexts.has(q.question))
+      const unusedQs  = freshDeckQs.filter(q => q && !usedTexts.has(q.question))
         .sort(() => Math.random() - 0.5)
-        .slice(0, 3)
+      const tiebreakerQuestions = unusedQs.length > 0
+        ? unusedQs.slice(0, 3)
+        : [...freshDeckQs].sort(() => Math.random() - 0.5).slice(0, 3)
 
-      // Create duel in RTDB under tournament_duels/
+      // Strip correct index before writing to RTDB (same as regular duels)
       const newDuelRef = push(rtdbRef(rtdb, `tournament_duels/${tournamentId}`))
       const duelId = newDuelRef.key
+      const safeQuestions    = await stripCorrectForRtdb(questions, duelId)
+      const safeTiebreakers  = await stripCorrectForRtdb(tiebreakerQuestions, duelId)
 
       await set(newDuelRef, {
         tournament_id:        tournamentId,
@@ -196,13 +205,13 @@ export default function TournamentBracket() {
         creator_uid:          match.player_a_uid,
         deck_id:              tournament.deck_id,
         deck_title:           tournament.deck_title,
-        questions,
-        total_questions:      questions.length,
-        // Tiebreaker reserve — used by DuelGame when equal non-zero scores at end
-        tiebreaker_questions: tiebreakerQuestions,
+        questions:            safeQuestions,
+        total_questions:      safeQuestions.length,
+        // Tiebreaker reserve — guaranteed non-empty; appended by DuelGame on tied scores
+        tiebreaker_questions: safeTiebreakers,
         tiebreaker_used:      0,
         is_tiebreaker:        false,
-        config:               { questionCount: questions.length, shuffleQuestions: false, shuffleAnswers: false },
+        config:               { questionCount: safeQuestions.length, shuffleQuestions: false, shuffleAnswers: false },
         force_rtl:            false,
         status:               'waiting',
         current_question_index: 0,
@@ -236,7 +245,7 @@ export default function TournamentBracket() {
       console.error(e)
       setError(e.message || 'فشل إطلاق المباراة')
     }
-  }, [tournament, deckQs, tournamentId, ffaResults])
+  }, [tournament, tournamentId, ffaResults])
 
   // End tournament manually
   const endTournament = useCallback(async () => {

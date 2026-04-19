@@ -407,7 +407,13 @@ export default function DuelGame({
       setTimerPct(pct)
       if (pct <= 0) {
         clearInterval(timerIntervalRef.current)
-        triggerReveal()
+        // Tournament duels: the Cloud Function owns timeout-based reveal.
+        // Calling triggerReveal() here races with the CF and causes double-scoring
+        // (both execute increment(pts) simultaneously → player gets 2× the points).
+        // For regular duels there is no CF, so the client must handle it.
+        if (duelPath === 'duels') {
+          triggerReveal()
+        }
       }
     }
     tick()
