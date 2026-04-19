@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../lib/firebase'
+import { hashCorrectForDuel } from './crypto'
 
 // ── Fetch played question texts for a given user + deck from Firestore ─────────
 export async function fetchPlayedQuestions(uid, deckId) {
@@ -63,4 +64,19 @@ export function applyDuelConfig(rawQuestions, config = {}, playedTexts = []) {
   }
 
   return questions
+}
+
+// ── Strip correct index before writing to RTDB ────────────────────────────────
+// Replaces q.correct with q.correct_hash so the answer can't be read from the
+// Network tab. The hash is deterministic: sha256("duel:{duelId}:{qi}:{index}").
+// During the transition period, old duels already in RTDB keep their plain
+// `correct` field — DuelGame falls back to it if correct_hash is absent.
+export async function stripCorrectForRtdb(questions, duelId) {
+  return Promise.all(
+    questions.map(async (q, qi) => {
+      if (q.correct == null) return q
+      const { correct, ...rest } = q
+      return { ...rest, correct_hash: await hashCorrectForDuel(duelId, qi, correct) }
+    })
+  )
 }

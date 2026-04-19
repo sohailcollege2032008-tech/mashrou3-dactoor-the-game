@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ref as rtdbRef, onValue, update, remove } from 'firebase/database'
 import { doc, getDoc } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
-import { fetchPlayedQuestions, applyDuelConfig } from '../../utils/duelUtils'
+import { fetchPlayedQuestions, applyDuelConfig, stripCorrectForRtdb } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
 import { Loader2, Copy, Check, Swords, Users, LogOut, Lock } from 'lucide-react'
 
@@ -81,6 +81,10 @@ export default function DuelLobby() {
 
       if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
 
+      // Strip correct index before writing — replaced with correct_hash so it can't
+      // be read from the Network tab. DuelGame resolves it back at reveal time.
+      const safeQuestions = await stripCorrectForRtdb(questions, duelId)
+
       await update(rtdbRef(rtdb, `duels/${duelId}`), {
         [`players/${uid}`]: {
           uid,
@@ -88,8 +92,8 @@ export default function DuelLobby() {
           avatar_url: profile?.avatar_url || '',
           score: 0,
         },
-        questions,
-        total_questions: questions.length,
+        questions: safeQuestions,
+        total_questions: safeQuestions.length,
         status: 'playing',
         question_started_at: Date.now(),
       })

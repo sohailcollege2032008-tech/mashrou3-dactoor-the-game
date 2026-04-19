@@ -122,6 +122,37 @@ export async function verifyAnswerHash(selectedChoice, correctHash, questionId, 
   return selectedHash === correctHash
 }
 
+// ── Duel question hashing ─────────────────────────────────────────────────────
+// Hides the correct answer index from RTDB. Salt = "duel:{duelId}:{qi}:{index}",
+// which is unguessable because duelId is a random push-key / UUID.
+// No extra secret needed — the duelId IS the secret.
+
+/**
+ * Compute the correct-answer hash for a single question in a duel.
+ * @param {string} duelId  — RTDB duel key (e.g. "-NxAbc123")
+ * @param {number} qi      — question index (0-based)
+ * @param {number} correctIndex — plain correct-answer index (0-3)
+ * @returns {Promise<string>} Hex SHA-256 hash
+ */
+export function hashCorrectForDuel(duelId, qi, correctIndex) {
+  return sha256(`duel:${duelId}:${qi}:${correctIndex}`)
+}
+
+/**
+ * Recover the correct-answer index by brute-forcing all choices (max 4 ops).
+ * @param {string} duelId
+ * @param {number} qi
+ * @param {number} choicesLength  — usually 4
+ * @param {string} correctHash    — the stored hash
+ * @returns {Promise<number|null>} correct index, or null if no match
+ */
+export async function findCorrectForDuel(duelId, qi, choicesLength, correctHash) {
+  for (let i = 0; i < choicesLength; i++) {
+    if (await sha256(`duel:${duelId}:${qi}:${i}`) === correctHash) return i
+  }
+  return null
+}
+
 /**
  * Generate a random secret key for a game session
  * Used for signing answers and hashing correct answers

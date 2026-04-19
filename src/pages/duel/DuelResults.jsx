@@ -34,7 +34,10 @@ function ReviewModal({ duel, uid, onClose }) {
             const answers = duel.answers?.[qi] || {}
             const myAnswer = answers[uid]
             const opponentAnswer = opponentUid ? answers[opponentUid] : null
-            const correctChoice = question.choices?.[question.correct]
+            // correct_reveal is written by the reveal winner at scoring time.
+            // Fall back to plain question.correct for old in-progress duels.
+            const correctIdx = answers.correct_reveal ?? question.correct
+            const correctChoice = question.choices?.[correctIdx]
 
             return (
               <div key={qi} className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 space-y-3">

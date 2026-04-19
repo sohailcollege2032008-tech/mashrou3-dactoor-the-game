@@ -19,6 +19,7 @@ Function 2  on_tournament_reveal_started
             of finishing.
 """
 
+import hashlib
 import time
 import logging
 
@@ -70,6 +71,32 @@ def _answers_for_qi(duel_data: dict, qi: int) -> dict:
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def _find_correct_c(duel_id: str, qi: int, question: object) -> object:
+    """
+    Return the correct-choice index for a question.
+
+    New duels store ``correct_hash`` (SHA-256 of "duel:{duelId}:{qi}:{index}").
+    Legacy duels still carry the plain ``correct`` integer — accepted as fallback.
+    Returns None if neither field is present or the hash cannot be matched.
+    """
+    if not isinstance(question, dict):
+        return None
+    # Legacy format: plain integer
+    if question.get("correct") is not None:
+        return question["correct"]
+    # New format: brute-force 4 choices against the stored hash
+    correct_hash = question.get("correct_hash")
+    if not correct_hash:
+        return None
+    choices = question.get("choices") or []
+    for i in range(len(choices)):
+        h = hashlib.sha256(f"duel:{duel_id}:{qi}:{i}".encode()).hexdigest()
+        if h == correct_hash:
+            return i
+    logger.warning("[CF] correct_hash mismatch — duel=%s qi=%d", duel_id, qi)
+    return None
 
 
 # ── Function 1 ─────────────────────────────────────────────────────────────────
@@ -139,7 +166,7 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
     pre_duel  = captured["duel"]
     questions = _to_list(pre_duel.get("questions"))
     question  = questions[current_qi] if current_qi < len(questions) else None
-    correct_c = question.get("correct") if isinstance(question, dict) else None
+    correct_c = _find_correct_c(duel_id, current_qi, question)
 
     # Sort correct answers by ascending reaction_time_ms (first = rank 0 = 2 pts).
     # Clamp reaction_time_ms to a valid range so forged ultra-fast times don't
@@ -161,6 +188,10 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
     rank_map = {uid: i for i, (uid, _) in enumerate(correct_list)}
 
     updates: dict = {}
+    # Reveal the resolved correct index so clients can highlight without plain `correct`
+    if correct_c is not None:
+        updates[f"answers/{current_qi}/correct_reveal"] = correct_c
+
     for p_uid in player_uids:
         ans = answers_qi.get(p_uid)
         if not isinstance(ans, dict):

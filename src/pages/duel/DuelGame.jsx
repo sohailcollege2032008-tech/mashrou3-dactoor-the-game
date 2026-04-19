@@ -13,6 +13,7 @@ import {
 } from 'firebase/database'
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
+import { findCorrectForDuel } from '../../utils/crypto'
 import { Loader2, Timer, WifiOff, LogOut, Flag } from 'lucide-react'
 
 const QUESTION_DURATION_MS = 30_000
@@ -277,16 +278,29 @@ export default function DuelGame({
       )
       const scoreUpdates = {}
 
+      // ── Resolve the correct answer index ─────────────────────────────────
+      // New duels store correct_hash (no plain `correct`).
+      // Old in-progress duels still have plain `correct` — use as fallback.
+      let correctC = question?.correct ?? null
+      if (correctC == null && question?.correct_hash) {
+        correctC = await findCorrectForDuel(
+          duelId, qi, question.choices?.length ?? 4, question.correct_hash
+        )
+      }
+
+      // Reveal the correct index in the DB so UI can highlight without plain `correct`
+      if (correctC != null) scoreUpdates[`answers/${qi}/correct_reveal`] = correctC
+
       // Hybrid scoring: regular duels cap repeated questions at 1pt; tournament = pure race
       const isRegularDuel = duelPath === 'duels'
       const correctAnswers = Object.entries(answers)
-        .filter(([, a]) => a.selected_choice === question?.correct)
+        .filter(([, a]) => a.selected_choice === correctC)
         .sort((a, b) => (a[1].reaction_time_ms ?? 0) - (b[1].reaction_time_ms ?? 0))
       const arrivalRank = {}
       correctAnswers.forEach(([aUid], i) => { arrivalRank[aUid] = i })
 
       for (const [aUid, answer] of Object.entries(answers)) {
-        const isCorrect = answer.selected_choice === question?.correct
+        const isCorrect = answer.selected_choice === correctC
         let pointsEarned = 0
         if (isCorrect) {
           const rank = arrivalRank[aUid] ?? 99
@@ -549,6 +563,11 @@ export default function DuelGame({
   const myAnswer       = currentAnswers[uid]
   const opponentAnswer = opponentUid ? currentAnswers[opponentUid] : null
 
+  // Resolve which choice to highlight during reveal.
+  // New duels: correct_reveal is written to answers by the reveal winner.
+  // Old duels (transition): fall back to plain question.correct.
+  const correctReveal = currentAnswers.correct_reveal ?? question?.correct ?? null
+
   const timeLeftSec = Math.ceil(timerPct * (activeDurationMs / 1000))
 
   function choiceStyle(i) {
@@ -559,7 +578,7 @@ export default function DuelGame({
       if (i === selectedChoice) return 'bg-primary/15 border border-primary/50 text-primary'
       return 'bg-gray-900 border border-gray-800 text-gray-600'
     }
-    const isCorrect  = i === question?.correct
+    const isCorrect   = i === correctReveal
     const wasMyChoice = i === myAnswer?.selected_choice
     if (isCorrect) return 'bg-green-500/15 border border-green-500/60 text-green-300 font-bold'
     if (wasMyChoice && !isCorrect) return 'bg-red-500/15 border border-red-500/60 text-red-400'
@@ -697,7 +716,7 @@ export default function DuelGame({
               <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="flex-1 text-sm font-medium leading-snug">
                 <MathText text={choice} dir={duel.force_rtl ? 'rtl' : 'auto'} />
               </span>
-              {isRevealing && i === question?.correct && (
+              {isRevealing && i === correctReveal && (
                 <span className="text-green-500 font-bold flex-shrink-0">✓</span>
               )}
             </button>
