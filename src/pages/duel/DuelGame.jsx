@@ -325,17 +325,47 @@ export default function DuelGame({
         current => {
           if (!current || current.status !== 'revealing') return // abort
 
-          const nextQi    = (current.current_question_index ?? 0) + 1
-          const isFinished = nextQi >= current.total_questions
+          const nextQi  = (current.current_question_index ?? 0) + 1
+          const atEnd   = nextQi >= (current.total_questions ?? 0)
 
-          if (isFinished) {
+          // ── Tournament tiebreaker extension ────────────────────────────
+          // When a tournament duel (duelPath !== 'duels') reaches the last
+          // question with equal NON-ZERO scores, append one reserve question
+          // instead of finishing.  Repeats until reserve is exhausted.
+          if (atEnd && duelPath !== 'duels') {
+            const uids   = Object.keys(current.players || {})
+            const scores = uids.map(u => current.players?.[u]?.score ?? 0)
+            const tied   = uids.length === 2 && scores[0] === scores[1] && scores[0] > 0
+
+            if (tied) {
+              const tbPool = current.tiebreaker_questions || []
+              const tbUsed = current.tiebreaker_used || 0
+              if (tbUsed < tbPool.length) {
+                // Append the next tiebreaker question and keep playing
+                return {
+                  ...current,
+                  questions:        [...(current.questions || []), tbPool[tbUsed]],
+                  total_questions:  (current.total_questions ?? 0) + 1,
+                  tiebreaker_used:  tbUsed + 1,
+                  is_tiebreaker:    true,
+                  status:           'playing',
+                  current_question_index: nextQi,
+                  question_started_at:    serverNow(),
+                  reveal_started_at:      null,
+                }
+              }
+              // Reserve exhausted → fall through to finish (speed tiebreaker in handleFinished)
+            }
+          }
+
+          if (atEnd) {
             return { ...current, status: 'finished', reveal_started_at: null }
           }
           return {
             ...current,
             status: 'playing',
             current_question_index: nextQi,
-            question_started_at: serverNow(),  // server-calibrated timestamp
+            question_started_at: serverNow(),
             reveal_started_at: null,
           }
         }
@@ -538,6 +568,13 @@ export default function DuelGame({
       {tournamentBadge && (
         <div className="mx-4 mt-3 flex items-center justify-center gap-1.5 py-1.5">
           <span className="text-xs font-bold ar text-yellow-400">🏆 {tournamentBadge}</span>
+        </div>
+      )}
+
+      {/* Tiebreaker banner */}
+      {duel.is_tiebreaker && (
+        <div className="mx-4 mt-1 bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-1.5 text-center">
+          <span className="text-orange-400 text-xs font-bold ar">⚡ سؤال فاصل!</span>
         </div>
       )}
 

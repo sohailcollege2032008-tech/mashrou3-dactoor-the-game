@@ -123,10 +123,25 @@ export default function TournamentDuelWrapper() {
         winnerUid  = playerUids.find(u => u !== loserUid)
         tieBreaker = null
       } else if (scoreA === scoreB) {
-        const result = resolveMatchTie(duelData, playerUids)
-        winnerUid  = result.winnerUid
-        loserUid   = result.loserUid
-        tieBreaker = result.tieBreaker
+        if (scoreA === 0) {
+          // Both zero → use FFA rank (lower rank number = better seeding)
+          // This is the last-resort fallback after all tiebreaker questions were used
+          const [ffaA, ffaB] = await Promise.all([
+            getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uidA)),
+            getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uidB)),
+          ])
+          const rankA = ffaA.data()?.rank ?? Infinity
+          const rankB = ffaB.data()?.rank ?? Infinity
+          winnerUid  = rankA <= rankB ? uidA : uidB
+          loserUid   = winnerUid === uidA ? uidB : uidA
+          tieBreaker = 'ffa_rank'
+        } else {
+          // Equal non-zero scores after tiebreaker questions exhausted → speed
+          const result = resolveMatchTie(duelData, playerUids)
+          winnerUid  = result.winnerUid
+          loserUid   = result.loserUid
+          tieBreaker = result.tieBreaker
+        }
       } else {
         winnerUid  = scoreA > scoreB ? uidA : uidB
         loserUid   = winnerUid === uidA ? uidB : uidA
@@ -200,13 +215,14 @@ export default function TournamentDuelWrapper() {
 
       // ── Show results screen instead of immediate navigation ─────────────────
       setMatchResult({
-        isWinner:     winnerUid === uid,
+        isWinner:      winnerUid === uid,
         myScore,
         opponentScore,
         opponentName,
-        round:        match.round,
-        isFinal:      !match.next_match_id,
+        round:         match.round,
+        isFinal:       !match.next_match_id,
         tieBreaker,
+        hadTiebreaker: duelData.is_tiebreaker === true,
       })
       setAutoNavSeconds(8)
 
@@ -269,10 +285,17 @@ export default function TournamentDuelWrapper() {
                 : (isWinner ? 'تأهلت للجولة القادمة! ✅' : 'خرجت من البطولة ❌')
               }
             </p>
-            {matchResult.tieBreaker && (
-              <p className="text-xs text-gray-400 ar">
-                {matchResult.tieBreaker === 'speed' ? '⚡ فاز بالسرعة' : '🎲 فاز بالقرعة'}
-              </p>
+            {matchResult.hadTiebreaker && !matchResult.tieBreaker && (
+              <p className="text-xs text-orange-400 ar">⚡ تم البت بسؤال فاصل</p>
+            )}
+            {matchResult.tieBreaker === 'speed' && (
+              <p className="text-xs text-gray-400 ar">⚡ فاز بالسرعة</p>
+            )}
+            {matchResult.tieBreaker === 'ffa_rank' && (
+              <p className="text-xs text-gray-400 ar">🏅 فاز بترتيب مرحلة التصفيات</p>
+            )}
+            {matchResult.tieBreaker === 'random' && (
+              <p className="text-xs text-gray-400 ar">🎲 فاز بالقرعة</p>
             )}
           </div>
 

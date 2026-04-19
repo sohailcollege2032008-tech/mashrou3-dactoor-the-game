@@ -176,6 +176,14 @@ export default function TournamentBracket() {
       )
       if (questions.length === 0) throw new Error('لا توجد أسئلة لهذه الجولة')
 
+      // Reserve tiebreaker questions: up to 3 extra questions not used in main set.
+      // These are appended on-the-fly by DuelGame if a tie occurs at the end.
+      const usedTexts = new Set(questions.map(q => q?.question).filter(Boolean))
+      const tiebreakerQuestions = (deckQs || [])
+        .filter(q => q && !usedTexts.has(q.question))
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3)
+
       // Create duel in RTDB under tournament_duels/
       const newDuelRef = push(rtdbRef(rtdb, `tournament_duels/${tournamentId}`))
       const duelId = newDuelRef.key
@@ -190,6 +198,10 @@ export default function TournamentBracket() {
         deck_title:           tournament.deck_title,
         questions,
         total_questions:      questions.length,
+        // Tiebreaker reserve — used by DuelGame when equal non-zero scores at end
+        tiebreaker_questions: tiebreakerQuestions,
+        tiebreaker_used:      0,
+        is_tiebreaker:        false,
         config:               { questionCount: questions.length, shuffleQuestions: false, shuffleAnswers: false },
         force_rtl:            false,
         status:               'waiting',
