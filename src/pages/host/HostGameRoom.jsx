@@ -984,8 +984,36 @@ export default function HostGameRoom() {
       const topCutSnap = await getDoc(doc(db, 'tournaments', tournamentId))
       const actualTopCut = topCutSnap.data()?.actual_top_cut || 8
 
+      // ── Resolve boundary ties with random shuffling ─────────────────────
+      // If players at positions [actualTopCut-1] and [actualTopCut] have
+      // identical (score, correct_count, total_reaction_ms), they are in a
+      // genuine tie spanning the cut line.  Randomly shuffle just the tied
+      // group so the selection of who advances is fair.
+      const hasSameStats = (a, b) =>
+        a.score === b.score &&
+        (a.correct_count    ?? 0) === (b.correct_count    ?? 0) &&
+        (a.total_reaction_ms ?? 0) === (b.total_reaction_ms ?? 0)
+
+      let finalOrder = sorted
+      if (sorted.length > actualTopCut) {
+        const cutPlayer  = sorted[actualTopCut - 1]   // last to advance
+        const nextPlayer = sorted[actualTopCut]        // first NOT to advance
+        if (hasSameStats(cutPlayer, nextPlayer)) {
+          // Find all players sharing the exact same stats as the boundary pair
+          const firstTiedIdx = sorted.findIndex(p => hasSameStats(p, cutPlayer))
+          const tiedGroup    = sorted.filter(p => hasSameStats(p, cutPlayer))
+          // Shuffle the tied group — random fair split at the cut
+          const shuffledTied = [...tiedGroup].sort(() => Math.random() - 0.5)
+          finalOrder = [...sorted.slice(0, firstTiedIdx), ...shuffledTied]
+          console.log(
+            `[Tournament FFA] Random tie-break at cut ${actualTopCut}: ` +
+            `${tiedGroup.length} tied players shuffled`
+          )
+        }
+      }
+
       const batch = writeBatch(db)
-      sorted.forEach((p, i) => {
+      finalOrder.forEach((p, i) => {
         const rank     = i + 1
         const advanced = rank <= actualTopCut
         batch.set(

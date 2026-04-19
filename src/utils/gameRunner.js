@@ -96,17 +96,25 @@ export async function performReveal(roomId, room, players) {
   })
 
   // ── Track correct_count and total_reaction_ms for 3-key tie-breaking ─────
+  // total_reaction_ms accumulates reaction time for ALL submitted answers
+  // (correct AND wrong), not just correct ones.  This guarantees that even
+  // two players who got 0 correct answers will have different totals (they
+  // answered at different millisecond offsets), making genuine ties impossible.
   const correctCountDelta   = {}
   const totalReactionDelta  = {}
   players.forEach(p => {
     correctCountDelta[p.user_id]  = p.correct_count   ?? 0
     totalReactionDelta[p.user_id] = p.total_reaction_ms ?? 0
   })
-  correct.forEach(a => {
-    correctCountDelta[a.user_id]  = (correctCountDelta[a.user_id]  ?? 0) + 1
+  // Add reaction time for every answered question (correct or not)
+  allAnswers.forEach(a => {
     totalReactionDelta[a.user_id] = (totalReactionDelta[a.user_id] ?? 0) + (a.reaction_time_ms ?? 0)
-    scoreUpdates[`rooms/${roomId}/players/${a.user_id}/correct_count`]    = increment(1)
     scoreUpdates[`rooms/${roomId}/players/${a.user_id}/total_reaction_ms`] = increment(a.reaction_time_ms ?? 0)
+  })
+  // Separately track correct_count (only correct answers)
+  correct.forEach(a => {
+    correctCountDelta[a.user_id] = (correctCountDelta[a.user_id] ?? 0) + 1
+    scoreUpdates[`rooms/${roomId}/players/${a.user_id}/correct_count`] = increment(1)
   })
 
   // ── Build leaderboard ────────────────────────────────────────────────────
