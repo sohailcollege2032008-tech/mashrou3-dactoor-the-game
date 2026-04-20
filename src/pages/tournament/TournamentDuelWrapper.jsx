@@ -13,7 +13,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  doc, getDoc, updateDoc, setDoc, serverTimestamp
+  doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocs, collection
 } from 'firebase/firestore'
 import { ref as rtdbRef, get } from 'firebase/database'
 import { rtdb, db } from '../../lib/firebase'
@@ -211,6 +211,78 @@ export default function TournamentDuelWrapper() {
         )
       } catch (e) {
         console.error('Failed to write tournament match history:', e)
+      }
+
+      // ── Write tournament_summary for players whose journey is now over ───────
+      // Loser's journey always ends here. Winner's ends only at the final.
+      const shouldWriteSummary = (uid === loserUid) || (!match.next_match_id && uid === winnerUid)
+      if (shouldWriteSummary) {
+        try {
+          // Collect all this player's finished bracket matches for this tournament
+          const allMatchesSnap = await getDocs(
+            collection(db, 'tournaments', tournamentId, 'bracket_matches')
+          )
+          const myMatches = allMatchesSnap.docs
+            .map(d => d.data())
+            .filter(m =>
+              m.status === 'finished' &&
+              (m.player_a_uid === uid || m.player_b_uid === uid)
+            )
+            .sort((a, b) => a.round - b.round)
+
+          const bracketMatchList = myMatches.map(m => {
+            const isA = m.player_a_uid === uid
+            return {
+              round:          m.round,
+              round_label:    getRoundLabel(m.round, tournament.total_rounds),
+              opponent_uid:   isA ? m.player_b_uid  : m.player_a_uid,
+              opponent_name:  isA ? m.player_b_name : m.player_a_name,
+              my_score:       isA ? (m.player_a_score ?? 0) : (m.player_b_score ?? 0),
+              opponent_score: isA ? (m.player_b_score ?? 0) : (m.player_a_score ?? 0),
+              outcome:        m.winner_uid === uid ? 'win' : 'lose',
+              tie_broken_by:  m.tie_broken_by ?? null,
+            }
+          })
+
+          // FFA rank + score
+          const ffaSnap = await getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uid))
+          const ffaData = ffaSnap.exists() ? ffaSnap.data() : {}
+          const ffaAll  = await getDocs(collection(db, 'tournaments', tournamentId, 'ffa_results'))
+
+          const tRounds     = tournament.total_rounds || Math.log2(tournament.actual_top_cut || 2)
+          const highestRound = myMatches.length > 0 ? Math.max(...myMatches.map(m => m.round)) : null
+
+          let finalResult
+          if (!match.next_match_id && uid === winnerUid) {
+            finalResult = 'champion'
+          } else if (match.round === tRounds) {
+            finalResult = 'finalist'
+          } else if (match.round === tRounds - 1) {
+            finalResult = 'semi_finalist'
+          } else {
+            finalResult = 'eliminated_bracket'
+          }
+
+          await setDoc(
+            doc(db, 'profiles', uid, 'game_history', `t_${tournamentId}_summary`),
+            {
+              type:              'tournament_summary',
+              tournament_id:     tournamentId,
+              tournament_title:  tournament.title,
+              played_at:         serverTimestamp(),
+              ffa_rank:          ffaData.rank  ?? null,
+              ffa_score:         ffaData.score ?? 0,
+              ffa_total_players: ffaAll.size,
+              advanced_from_ffa: true,
+              bracket_matches:   bracketMatchList,
+              final_result:      finalResult,
+              reached_round:     highestRound,
+              total_rounds:      tRounds,
+            }
+          )
+        } catch (e) {
+          console.error('Failed to write tournament summary:', e)
+        }
       }
 
       // ── Show results screen instead of immediate navigation ─────────────────

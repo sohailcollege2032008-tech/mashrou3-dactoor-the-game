@@ -8,7 +8,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useAuthStore } from '../../stores/authStore'
 import {
   ArrowRight, User, Phone, Edit2, Check, X, Loader2, CheckCircle2,
-  Swords, Gamepad2, Eye, EyeOff, ChevronLeft,
+  Swords, Gamepad2, Eye, EyeOff, ChevronLeft, Trophy, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 // ── Toggle ────────────────────────────────────────────────────────────────────
@@ -190,6 +190,127 @@ function HistoryCard({ entry, navigate }) {
   )
 }
 
+// ── Tournament Summary Card ───────────────────────────────────────────────────
+function TournamentSummaryCard({ entry }) {
+  const [expanded, setExpanded] = useState(false)
+
+  const isChampion = entry.final_result === 'champion'
+
+  const depthLabel = {
+    champion:           '🏆 بطل البطولة',
+    finalist:           'وصل للنهائي',
+    semi_finalist:      'وصل لنصف النهائي',
+    eliminated_bracket: entry.reached_round ? `وصل للجولة ${entry.reached_round}` : 'خرج من البراكيت',
+    eliminated_ffa:     'خرج في التصفيات',
+  }[entry.final_result] ?? ''
+
+  const date = entry.played_at?.toDate?.()
+    ? entry.played_at.toDate().toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })
+    : ''
+
+  const tieLabel = { speed: '⚡', ffa_rank: '🏅', random: '🎲' }
+
+  return (
+    <div
+      className={`rounded-2xl border transition-colors ${
+        isChampion
+          ? 'bg-yellow-500/5 border-yellow-500/20'
+          : 'bg-gray-900/60 border-gray-800'
+      }`}
+    >
+      {/* ── Collapsed header (always visible) ── */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full text-right p-4 flex items-start gap-3"
+      >
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${
+          isChampion ? 'bg-yellow-500/20' : 'bg-primary/10'
+        }`}>
+          <Trophy size={16} className={isChampion ? 'text-yellow-400' : 'text-primary'} />
+        </div>
+
+        <div className="flex-1 min-w-0 space-y-1">
+          <p className={`font-bold text-sm leading-snug truncate ${isChampion ? 'text-yellow-300' : 'text-white'}`}>
+            {entry.tournament_title || 'بطولة'}
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {entry.ffa_rank && (
+              <span className="text-xs text-gray-400 font-mono">
+                التصفيات: #{entry.ffa_rank}
+                {entry.ffa_total_players ? ` من ${entry.ffa_total_players}` : ''}
+              </span>
+            )}
+            {entry.ffa_rank && depthLabel && (
+              <span className="text-gray-700 text-xs">·</span>
+            )}
+            <span className={`text-xs font-bold ${isChampion ? 'text-yellow-400' : 'text-primary'}`}>
+              {depthLabel}
+            </span>
+          </div>
+          <p className="text-gray-600 text-xs font-mono">{date}</p>
+        </div>
+
+        <div className="text-gray-600 flex-shrink-0 mt-1">
+          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </div>
+      </button>
+
+      {/* ── Expanded detail ── */}
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3 border-t border-gray-800/60 pt-3">
+          {/* FFA section */}
+          <div className="bg-gray-800/40 rounded-xl px-3 py-2.5 space-y-1">
+            <p className="text-xs font-bold text-gray-400">مرحلة التصفيات (FFA)</p>
+            <div className="flex items-center gap-3 text-sm flex-wrap">
+              <span className="text-white font-bold font-mono">
+                المركز #{entry.ffa_rank ?? '—'}
+                {entry.ffa_total_players ? ` / ${entry.ffa_total_players}` : ''}
+              </span>
+              <span className="text-gray-600 text-xs">النقاط: <span className="text-primary font-mono">{entry.ffa_score ?? 0}</span></span>
+              {entry.advanced_from_ffa
+                ? <span className="text-green-400 text-xs">✓ تأهل للبراكيت</span>
+                : <span className="text-red-400 text-xs">✗ لم يتأهل</span>
+              }
+            </div>
+          </div>
+
+          {/* Bracket matches */}
+          {entry.bracket_matches?.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-bold text-gray-400">مباريات البراكيت</p>
+              {entry.bracket_matches.map((m, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs ${
+                    m.outcome === 'win'
+                      ? 'bg-green-500/10 border border-green-500/20'
+                      : 'bg-red-500/10 border border-red-500/20'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`font-bold flex-shrink-0 ${m.outcome === 'win' ? 'text-green-400' : 'text-red-400'}`}>
+                      {m.outcome === 'win' ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-300 font-bold">{m.round_label}</span>
+                    <span className="text-gray-600">ضد</span>
+                    <span className="text-white font-bold truncate max-w-[80px]">{m.opponent_name}</span>
+                    {m.tie_broken_by && (
+                      <span className="flex-shrink-0">{tieLabel[m.tie_broken_by] ?? ''}</span>
+                    )}
+                  </div>
+                  <span className="font-mono text-gray-300 flex-shrink-0 tabular-nums">
+                    {m.my_score} - {m.opponent_score}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function PlayerProfile() {
   const { profile, session } = useAuth()
@@ -356,9 +477,26 @@ export default function PlayerProfile() {
             </div>
           ) : (
             <div className="space-y-2">
-              {history.map(entry => (
-                <HistoryCard key={entry.id} entry={entry} navigate={navigate} />
-              ))}
+              {(() => {
+                // Suppress individual tournament_ffa / tournament_match entries
+                // when a tournament_summary already exists for the same tournament.
+                const summaryIds = new Set(
+                  history
+                    .filter(e => e.type === 'tournament_summary')
+                    .map(e => e.tournament_id)
+                )
+                return history
+                  .filter(e => {
+                    if ((e.type === 'tournament_ffa' || e.type === 'tournament_match') &&
+                        summaryIds.has(e.tournament_id)) return false
+                    return true
+                  })
+                  .map(entry =>
+                    entry.type === 'tournament_summary'
+                      ? <TournamentSummaryCard key={entry.id} entry={entry} />
+                      : <HistoryCard key={entry.id} entry={entry} navigate={navigate} />
+                  )
+              })()}
             </div>
           )}
         </div>
