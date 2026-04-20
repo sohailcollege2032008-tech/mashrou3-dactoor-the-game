@@ -118,6 +118,9 @@ export default function PlayerGameView() {
   const [hostOnline, setHostOnline]         = useState(true)
   const [top5, setTop5]                     = useState([])
 
+  // Auto-navigate countdown for tournament FFA finish
+  const [autoNavCountdown, setAutoNavCountdown] = useState(null)
+
   // Nickname editing
   const [editingName, setEditingName]   = useState(false)
   const [nameInput, setNameInput]       = useState('')
@@ -172,6 +175,9 @@ export default function PlayerGameView() {
         confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 } })
         const qSetId  = data.question_set_id
         const hostUid = data.host_id
+
+        // Auto-navigate to tournament wait page after 5 seconds
+        if (data.tournament_id) setAutoNavCountdown(5)
 
         if (qSetId && uid) {
           // Increment played count
@@ -326,6 +332,17 @@ export default function PlayerGameView() {
   // When unattended_mode is on, this client acts as a backup runner so the
   // game advances even if the host closes their browser.
   useUnattendedGameRunner({ roomId, room, session })
+
+  // ── Tournament FFA auto-navigate countdown ───────────────────────────────
+  useEffect(() => {
+    if (autoNavCountdown === null || !room?.tournament_id) return
+    if (autoNavCountdown <= 0) {
+      navigate(`/tournament/${room.tournament_id}/wait`, { replace: true })
+      return
+    }
+    const t = setTimeout(() => setAutoNavCountdown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [autoNavCountdown, room?.tournament_id, navigate])
 
   // ── Rejoin: load existing answer ──────────────────────────────────────────
   useEffect(() => {
@@ -906,14 +923,21 @@ export default function PlayerGameView() {
                 </div>
               )}
               <div className="flex gap-3 justify-center flex-wrap">
-                {/* Tournament FFA redirect */}
+                {/* Tournament FFA redirect — auto-navigates after countdown */}
                 {room.tournament_id && (
-                  <button
-                    onClick={() => navigate(`/tournament/${room.tournament_id}/wait`)}
-                    className="ar flex items-center gap-2 bg-primary text-background font-bold py-3 px-6 rounded-xl hover:bg-[#00D4FF] transition-colors"
-                  >
-                    <Trophy size={15} /> متابعة البطولة
-                  </button>
+                  <div className="flex flex-col items-center gap-1">
+                    <button
+                      onClick={() => navigate(`/tournament/${room.tournament_id}/wait`, { replace: true })}
+                      className="ar flex items-center gap-2 bg-primary text-background font-bold py-3 px-6 rounded-xl hover:bg-[#00D4FF] transition-colors"
+                    >
+                      <Trophy size={15} />
+                      متابعة البطولة
+                      {autoNavCountdown !== null && ` (${autoNavCountdown}ث)`}
+                    </button>
+                    {autoNavCountdown !== null && (
+                      <p className="ar text-xs text-gray-500">سيتم الانتقال تلقائياً…</p>
+                    )}
+                  </div>
                 )}
                 <button
                   onClick={downloadLogs}

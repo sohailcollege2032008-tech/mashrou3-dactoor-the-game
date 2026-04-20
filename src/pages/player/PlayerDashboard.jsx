@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
-import { Gamepad2, User, LogOut, Swords, RotateCcw, Trophy, Zap, X } from 'lucide-react'
+import { Gamepad2, User, LogOut, Swords, RotateCcw, Trophy, Zap, X, Bell, CheckCheck } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useAuthStore } from '../../stores/authStore'
 import { ref as rtdbRef, get as rtdbGet } from 'firebase/database'
-import { doc, onSnapshot } from 'firebase/firestore'
+import {
+  doc, onSnapshot, getDoc, collection, query, orderBy, limit, updateDoc,
+} from 'firebase/firestore'
 import { db, rtdb } from '../../lib/firebase'
 
 export default function PlayerDashboard() {
@@ -12,8 +15,22 @@ export default function PlayerDashboard() {
   const navigate = useNavigate()
   const uid = session?.uid
 
-  const [activeDuel,       setActiveDuel]       = useState(null)
-  const [activeTournament, setActiveTournament] = useState(null)
+  const [activeDuel,           setActiveDuel]           = useState(null)
+  const [activeTournament,     setActiveTournament]     = useState(null)
+  const [tournamentEliminated, setTournamentEliminated] = useState(false)
+
+  // Notifications
+  const [notifications,      setNotifications]      = useState([])
+  const [showNotifications,  setShowNotifications]  = useState(false)
+
+  const markAllRead = async () => {
+    if (!uid) return
+    await Promise.all(
+      notifications.filter(n => !n.read).map(n =>
+        updateDoc(doc(db, 'notifications', uid, 'items', n.id), { read: true })
+      )
+    )
+  }
 
   // ── Check for an active duel to rejoin ───────────────────────────────────
   useEffect(() => {
@@ -54,6 +71,36 @@ export default function PlayerDashboard() {
     return () => unsub()
   }, [])
 
+  // ── Check if player was eliminated from their active tournament ────────────
+  useEffect(() => {
+    if (!activeTournament || !uid) return
+    if (!['bracket', 'finished'].includes(activeTournament.status)) return
+
+    getDoc(doc(db, 'tournaments', activeTournament.id, 'ffa_results', uid))
+      .then(snap => {
+        if (snap.exists() && snap.data().advanced === false) {
+          setTournamentEliminated(true)
+          // Clear the banner — player is done
+          localStorage.removeItem('activeTournamentId')
+        }
+      })
+      .catch(() => {})
+  }, [activeTournament?.status, activeTournament?.id, uid])
+
+  // ── Subscribe to notifications ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!uid) return
+    const q = query(
+      collection(db, 'notifications', uid, 'items'),
+      orderBy('created_at', 'desc'),
+      limit(20)
+    )
+    const unsub = onSnapshot(q, snap => {
+      setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, () => {})
+    return () => unsub()
+  }, [uid])
+
   const tournamentDest = activeTournament
     ? activeTournament.status === 'ffa' && activeTournament.ffa_room_id
       ? `/player/game/${activeTournament.ffa_room_id}`
@@ -88,6 +135,81 @@ export default function PlayerDashboard() {
           </p>
         </div>
 
+        {/* Notification bell */}
+        <div className="relative">
+          <button
+            onClick={() => { setShowNotifications(v => !v); if (!showNotifications) markAllRead() }}
+            className="relative p-2 rounded-xl bg-gray-800 border border-gray-700 hover:border-gray-600 transition-colors mr-2"
+          >
+            <Bell size={16} className="text-gray-300" />
+            {notifications.filter(n => !n.read).length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-background text-[9px] font-bold rounded-full flex items-center justify-center">
+                {notifications.filter(n => !n.read).length}
+              </span>
+            )}
+          </button>
+          {showNotifications && createPortal(
+            <>
+              <div className="fixed inset-0 z-[49998]" onClick={() => setShowNotifications(false)} />
+              <div className="fixed top-20 right-4 w-72 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[49999] overflow-hidden text-right">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                  <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white"><X size={14} /></button>
+                  <span className="font-bold text-sm text-white ar">الإشعارات</span>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <p className="text-gray-500 text-sm text-center py-8 ar">لا توجد إشعارات</p>
+                  ) : notifications.map(n => (
+                    <div key={n.id} className={`px-4 py-3 border-b border-gray-800/60 ${!n.read ? 'bg-primary/5' : ''}`}>
+                      {n.type === 'game_finished' && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-end gap-2">
+                            {!n.read && <span className="w-1.5 h-1.5 bg-primary rounded-full" />}
+                            <span className="text-white font-bold text-sm ar truncate">{n.room_title}</span>
+                            <Trophy size={13} className="text-primary flex-shrink-0" />
+                          </div>
+                          <p className="text-gray-400 text-xs ar">
+                            مرتبتك: <span className="text-white font-bold">#{n.my_rank}</span>
+                            {' '}· نقاطك: <span className="text-primary font-bold">{n.my_score}</span>
+                            {' '}من {n.total_players} لاعب
+                          </p>
+                          {n.full_leaderboard?.length > 0 && (
+                            <div className="mt-2 space-y-0.5">
+                              {n.full_leaderboard.slice(0, 5).map(p => (
+                                <div key={p.user_id} className={`flex items-center justify-between text-xs px-2 py-0.5 rounded ${p.user_id === uid ? 'bg-primary/20 text-primary' : 'text-gray-400'}`}>
+                                  <span className="font-mono">#{p.rank}</span>
+                                  <span className="flex-1 text-right mx-2 truncate">{p.nickname}</span>
+                                  <span className="font-mono font-bold">{p.score}</span>
+                                </div>
+                              ))}
+                              {n.full_leaderboard.length > 5 && (
+                                <p className="text-gray-600 text-[10px] text-center">+{n.full_leaderboard.length - 5} آخرين</p>
+                              )}
+                            </div>
+                          )}
+                          {n.created_at?.seconds && (
+                            <p className="text-gray-600 text-[10px] font-mono mt-1">
+                              {new Date(n.created_at.seconds * 1000).toLocaleString('ar-EG')}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {notifications.length > 0 && (
+                  <div className="px-4 py-2 border-t border-gray-800">
+                    <button onClick={markAllRead} className="flex items-center justify-end gap-1.5 w-full text-xs text-gray-500 hover:text-gray-300 transition-colors ar">
+                      <CheckCheck size={12} /> تحديد الكل كمقروء
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>,
+            document.body
+          )}
+        </div>
+
         {/* Profile avatar button */}
         <Link to="/player/profile" className="relative group">
           {profile?.avatar_url ? (
@@ -108,8 +230,8 @@ export default function PlayerDashboard() {
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center px-5 gap-4 -mt-10">
 
-        {/* Active tournament banner */}
-        {activeTournament && tournamentDest && (
+        {/* Active tournament banner — hidden if player was eliminated from FFA */}
+        {activeTournament && tournamentDest && !tournamentEliminated && (
           <div
             className={`w-full max-w-xs rounded-2xl border-2 p-4 transition-all ${
               activeTournament.status === 'ffa'

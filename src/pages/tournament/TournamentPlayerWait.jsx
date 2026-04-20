@@ -8,7 +8,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   doc, onSnapshot, collection, getDoc, getDocs, setDoc, serverTimestamp,
 } from 'firebase/firestore'
-import { ref as rtdbRef, get as rtdbGet } from 'firebase/database'
+import { ref as rtdbRef, get as rtdbGet, set as rtdbSet } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { Trophy, Loader2, Swords, CheckCircle, XCircle } from 'lucide-react'
@@ -34,6 +34,14 @@ export default function TournamentPlayerWait() {
   const uid = session?.uid
   // Track if we already checked FFA result to avoid repeat fetches
   const ffaCheckedRef = useRef(false)
+
+  // Write presence to RTDB so TournamentBracket can show "X players in waiting room"
+  useEffect(() => {
+    if (!tournamentId || !uid) return
+    const presRef = rtdbRef(rtdb, `tournament_presence/${tournamentId}/${uid}`)
+    rtdbSet(presRef, { connected: true, joined_at: Date.now() }).catch(() => {})
+    return () => rtdbSet(presRef, { connected: false }).catch(() => {})
+  }, [tournamentId, uid])
 
   // Subscribe to tournament doc
   useEffect(() => {
@@ -98,14 +106,16 @@ export default function TournamentPlayerWait() {
         )
         setMyMatch(mine || null)
 
-        // Check if I've been eliminated (lost in a previous bracket round)
-        const pastMatches = all.filter(m =>
-          m.round < currentRound &&
+        // Check if I've been eliminated — include current round so the
+        // exit button appears immediately when match finishes (not only after
+        // the host advances to the next round).
+        const myFinishedMatches = all.filter(m =>
+          m.round <= currentRound &&
           (m.player_a_uid === uid || m.player_b_uid === uid) &&
           m.status === 'finished'
         )
-        if (pastMatches.length > 0) {
-          const lastMatch = pastMatches[pastMatches.length - 1]
+        if (myFinishedMatches.length > 0) {
+          const lastMatch = myFinishedMatches[myFinishedMatches.length - 1]
           setMyResult(lastMatch.winner_uid === uid ? 'advanced' : 'eliminated')
         }
       }

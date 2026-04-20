@@ -647,8 +647,12 @@ export default function DuelGame({
         <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
           <p className="text-xs text-gray-500 font-mono">{qi + 1}/{duel.total_questions}</p>
           <div className="flex items-center gap-1">
-            <Timer size={12} className="text-primary" />
-            <span className={`text-lg font-bold font-mono tabular-nums ${timeLeftSec <= 5 ? 'text-red-400' : 'text-white'}`}>
+            <Timer size={12} className={isObserver ? 'text-gray-600' : 'text-primary'} />
+            <span className={`font-mono tabular-nums ${
+              isObserver
+                ? 'text-sm text-gray-500'
+                : `text-lg font-bold ${timeLeftSec <= 5 ? 'text-red-400' : 'text-white'}`
+            }`}>
               {duel.status === 'revealing' ? '✓' : timeLeftSec}
             </span>
           </div>
@@ -657,8 +661,8 @@ export default function DuelGame({
         <PlayerPill player={opponentPlayer} score={opponentPlayer?.score} align="left" />
       </div>
 
-      {/* Timer bar */}
-      <TimerBar pct={duel.status === 'revealing' ? 0 : timerPct} />
+      {/* Timer bar — full bar for players; observer sees only the compact number above */}
+      {!isObserver && <TimerBar pct={duel.status === 'revealing' ? 0 : timerPct} />}
 
       {/* Question */}
       <div dir={duel.force_rtl ? 'rtl' : 'ltr'} className="flex-1 flex flex-col px-4 pt-4 pb-4 gap-4 overflow-y-auto">

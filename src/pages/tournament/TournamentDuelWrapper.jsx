@@ -15,12 +15,161 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocs, collection
 } from 'firebase/firestore'
-import { ref as rtdbRef, get } from 'firebase/database'
+import { ref as rtdbRef, get, onValue } from 'firebase/database'
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { resolveMatchTie } from '../../utils/tournamentUtils'
 import DuelGame from '../duel/DuelGame'
-import { Loader2, Trophy, XCircle } from 'lucide-react'
+import { Loader2, Trophy, XCircle, Timer, ArrowRight } from 'lucide-react'
+
+// ── Host split-screen spectator view ─────────────────────────────────────────
+function HostSpectatorView({ tournamentId, duelId, match, tournament, onBack }) {
+  const [duel, setDuel] = useState(null)
+
+  useEffect(() => {
+    if (!tournamentId || !duelId) return
+    const unsub = onValue(
+      rtdbRef(rtdb, `tournament_duels/${tournamentId}/${duelId}`),
+      snap => { if (snap.exists()) setDuel(snap.val()) }
+    )
+    return () => unsub()
+  }, [tournamentId, duelId])
+
+  if (!duel) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 size={28} className="text-primary animate-spin" />
+      </div>
+    )
+  }
+
+  const qi             = duel.current_question_index ?? 0
+  const question       = duel.questions?.[qi]
+  const answers        = duel.answers?.[qi] || {}
+  const correctReveal  = answers.correct_reveal ?? null
+  const isRevealing    = duel.status === 'revealing'
+  const isFinished     = duel.status === 'finished'
+  const playerUids     = Object.keys(duel.players || {})
+  // Respect match order: player_a on the right, player_b on the left
+  const uidA = match?.player_a_uid || playerUids[0]
+  const uidB = match?.player_b_uid || playerUids[1]
+  const playerA = duel.players?.[uidA]
+  const playerB = duel.players?.[uidB]
+  const ansA = answers[uidA]
+  const ansB = answers[uidB]
+
+  const renderPanel = (player, answer) => {
+    if (!player) return <div className="flex-1" />
+    const hasAnswered = answer?.selected_choice !== undefined && answer?.selected_choice !== null
+    return (
+      <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+        {/* Player header */}
+        <div className="flex items-center justify-center gap-2 px-2 py-1.5 bg-gray-800 rounded-xl">
+          {player.avatar_url && (
+            <img src={player.avatar_url} className="w-6 h-6 rounded-full flex-shrink-0" alt="" />
+          )}
+          <span className="ar font-bold text-white text-xs truncate">{player.nickname}</span>
+          <span className="font-mono font-black text-primary text-sm tabular-nums flex-shrink-0">
+            {player.score ?? 0}
+          </span>
+        </div>
+        {/* Choices */}
+        <div className="space-y-1">
+          {question?.choices?.map((choice, idx) => {
+            const isSelected = hasAnswered && answer.selected_choice === idx
+            const isCorrect  = isRevealing && idx === correctReveal
+            const isWrong    = isRevealing && isSelected && !isCorrect
+            return (
+              <div key={idx} className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl border text-xs transition-all ${
+                isCorrect  ? 'bg-green-500/20 border-green-500/50 text-green-300 font-bold' :
+                isWrong    ? 'bg-red-500/20 border-red-500/50 text-red-400' :
+                isSelected ? 'bg-primary/15 border-primary/40 text-primary font-bold' :
+                'bg-gray-800/60 border-gray-700/40 text-gray-500'
+              }`}>
+                <span className={`w-5 h-5 rounded-md text-[10px] font-black flex items-center justify-center flex-shrink-0 ${
+                  isCorrect ? 'bg-green-500 text-black' :
+                  isWrong   ? 'bg-red-500 text-white' :
+                  isSelected ? 'bg-primary text-background' :
+                  'bg-gray-700 text-gray-400'
+                }`}>
+                  {String.fromCharCode(65 + idx)}
+                </span>
+                <span className="leading-tight truncate">{choice}</span>
+              </div>
+            )
+          })}
+        </div>
+        {/* Status line */}
+        <div className={`text-center text-[10px] font-bold py-1 rounded-lg ${
+          hasAnswered
+            ? isRevealing
+              ? (ansA && uidA === Object.keys(duel.players)[playerUids.indexOf(uidA)]
+                  ? (answers[uidA]?.selected_choice === correctReveal ? 'text-green-400' : 'text-red-400')
+                  : 'text-gray-500')
+              : 'text-primary'
+            : 'text-gray-600 animate-pulse'
+        }`}>
+          {isFinished ? '🏁' : hasAnswered ? '✓ أجاب' : 'ينتظر…'}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900/80">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-gray-400 hover:text-white text-xs font-bold transition-colors"
+        >
+          <ArrowRight size={14} />
+          <span className="ar">الـ Bracket</span>
+        </button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-yellow-400 font-bold ar">👁 مشاهدة المباراة</span>
+          <span className="text-xs text-gray-600 font-mono">{qi + 1}/{duel.total_questions}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Timer size={12} className="text-gray-500" />
+          <span className="text-xs text-gray-500 font-mono">
+            {isRevealing ? '✓' : isFinished ? '🏁' : duel.status === 'waiting' ? '…' : ''}
+          </span>
+        </div>
+      </div>
+
+      {/* Question */}
+      <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/40">
+        <p className="ar text-white font-bold text-sm text-center leading-relaxed">
+          {question?.question || '—'}
+        </p>
+        {question?.image_url && (
+          <img
+            src={question.image_url}
+            alt=""
+            className="mt-2 w-full max-h-32 object-contain rounded-xl border border-gray-700"
+          />
+        )}
+      </div>
+
+      {/* Split panels */}
+      <div className="flex-1 flex gap-2 p-3 overflow-y-auto">
+        {renderPanel(playerA, ansA)}
+        <div className="w-px bg-gray-800 self-stretch mx-1" />
+        {renderPanel(playerB, ansB)}
+      </div>
+
+      {/* Score footer */}
+      <div className="flex items-center justify-between px-6 py-3 border-t border-gray-800 bg-gray-900/80">
+        <span className="font-mono font-black text-2xl text-primary tabular-nums">{playerA?.score ?? 0}</span>
+        <span className="text-gray-600 font-bold text-sm">
+          {isFinished ? '🏁 انتهت' : isRevealing ? '🔍 الإجابة' : '⚔️ جارية'}
+        </span>
+        <span className="font-mono font-black text-2xl text-primary tabular-nums">{playerB?.score ?? 0}</span>
+      </div>
+    </div>
+  )
+}
 
 // ── Round label helper ────────────────────────────────────────────────────────
 function getRoundLabel(round, totalRounds) {
@@ -410,7 +559,20 @@ export default function TournamentDuelWrapper() {
     )
   }
 
-  // ── Game ──────────────────────────────────────────────────────────────────
+  // ── Host spectator: split-screen showing both players in real time ─────────
+  if (!isPlayerInMatch) {
+    return (
+      <HostSpectatorView
+        tournamentId={tournamentId}
+        duelId={duelId}
+        match={match}
+        tournament={tournament}
+        onBack={() => navigate(`/tournament/${tournamentId}/bracket`, { replace: true })}
+      />
+    )
+  }
+
+  // ── Game (player view) ────────────────────────────────────────────────────
   const roundLabel = getRoundLabel(match?.round, tournament?.total_rounds)
   const badge = tournament ? `${tournament.title} — ${roundLabel}` : null
 
@@ -420,7 +582,7 @@ export default function TournamentDuelWrapper() {
       questionDurationMs={tournament?.duel_question_duration || 30000}
       onFinished={handleFinished}
       duelIdOverride={duelId}
-      isObserver={!isPlayerInMatch}
+      isObserver={false}
       tournamentBadge={badge}
     />
   )

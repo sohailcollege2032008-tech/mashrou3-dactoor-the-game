@@ -56,6 +56,13 @@ export default function TournamentBracket() {
   const [ending,          setEnding]          = useState(false)
   // Live scores for active bracket duels: { [duelId]: { [uid]: { score, nickname } } }
   const [liveDuels,       setLiveDuels]       = useState({})
+  // Player presence in waiting room
+  const [waitingPresence, setWaitingPresence] = useState({})
+
+  // Auto-pilot refs (prevent double-firing)
+  const autoLaunchedRef   = useRef(new Set())   // match IDs already auto-launched
+  const autoAdvancedRef   = useRef(null)         // round number already auto-advanced
+  const autoFinishedRef   = useRef(false)        // whether we auto-finished the tournament
 
   // Subscribe to tournament
   useEffect(() => {
@@ -73,6 +80,15 @@ export default function TournamentBracket() {
       collection(db, 'tournaments', tournamentId, 'bracket_matches'),
       snap => setMatches(snap.docs.map(d => ({ match_id: d.id, ...d.data() })))
     )
+    return () => unsub()
+  }, [tournamentId])
+
+  // Subscribe to player presence in waiting room
+  useEffect(() => {
+    if (!tournamentId) return
+    const unsub = onValue(rtdbRef(rtdb, `tournament_presence/${tournamentId}`), snap => {
+      setWaitingPresence(snap.val() || {})
+    })
     return () => unsub()
   }, [tournamentId])
 
@@ -115,6 +131,80 @@ export default function TournamentBracket() {
     generateBracket()
   }, [tournament, matches.length, ffaResults.length])
 
+  // ── Auto-start: launch any pending match that has both players filled ────────
+  const launchablePendingKey = matches
+    .filter(m => m.status === 'pending' && m.player_a_uid && m.player_b_uid)
+    .map(m => m.match_id).sort().join(',')
+
+  useEffect(() => {
+    if (!launchablePendingKey || !tournament || tournament.status !== 'bracket') return
+    const toAutoLaunch = matches.filter(m =>
+      m.status === 'pending' &&
+      m.player_a_uid &&
+      m.player_b_uid &&
+      !autoLaunchedRef.current.has(m.match_id)
+    )
+    if (!toAutoLaunch.length) return
+
+    const t = setTimeout(() => {
+      toAutoLaunch.forEach(m => {
+        autoLaunchedRef.current.add(m.match_id)
+        launchMatch(m)
+      })
+    }, 1500)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [launchablePendingKey, tournament?.status])
+
+  // ── Auto-advance: start break countdown when a round completes ───────────────
+  useEffect(() => {
+    if (!tournament || tournament.status !== 'bracket') return
+    const tRounds    = tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)
+    const cRound     = tournament.current_round || 1
+    const rMatches   = matches.filter(m => m.round === cRound)
+    const allDone    = rMatches.length > 0 && rMatches.every(m => m.status === 'finished')
+
+    if (!allDone || cRound >= tRounds) return
+    if (autoAdvancedRef.current === cRound) return  // already started for this round
+    if (showCountdown) return                        // countdown already running
+
+    autoAdvancedRef.current = cRound
+    setCountdownLabel(`استراحة قبل الجولة ${cRound + 1}`)
+    setCountdownMs(tournament.round_break_time || 30000)
+    setShowCountdown(true)
+  }, [
+    matches.map(m => m.match_id + m.status).join(','),
+    tournament?.current_round,
+    tournament?.status,
+    showCountdown,
+  ])
+
+  // ── Auto-finish: mark tournament done when final match is over ──────────────
+  useEffect(() => {
+    if (!tournament || tournament.status !== 'bracket') return
+    if (tournament.winner_uid) return  // already resolved
+    const tRounds  = tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)
+    const cRound   = tournament.current_round || 1
+    if (cRound !== tRounds) return
+    const finalMatch = matches.find(m => m.round === tRounds && m.status === 'finished')
+    if (!finalMatch?.winner_uid) return
+    if (autoFinishedRef.current) return
+
+    autoFinishedRef.current = true
+    const winnerName = finalMatch.winner_uid === finalMatch.player_a_uid
+      ? finalMatch.player_a_name : finalMatch.player_b_name
+    updateDoc(doc(db, 'tournaments', tournamentId), {
+      status:      'finished',
+      winner_uid:  finalMatch.winner_uid,
+      winner_name: winnerName,
+    }).catch(console.error)
+  }, [
+    matches.map(m => m.match_id + m.status + (m.winner_uid || '')).join(','),
+    tournament?.current_round,
+    tournament?.status,
+    tournament?.winner_uid,
+  ])
+
   const generateBracket = useCallback(async () => {
     if (generating || ffaResults.length < 2) return
     setGenerating(true)
@@ -137,9 +227,35 @@ export default function TournamentBracket() {
     }
   }, [generating, ffaResults, tournament, tournamentId])
 
+  // Extracted advance-round logic reused by both the manual button and auto-advance
+  const doAdvanceRound = useCallback(async (currentRnd, roundMatchList) => {
+    const batch = writeBatch(db)
+    for (const m of roundMatchList) {
+      if (m.status !== 'finished' || !m.winner_uid || !m.next_match_id) continue
+      const winnerName = m.winner_uid === m.player_a_uid
+        ? m.player_a_name : m.player_b_name
+      const nextRef = doc(db, 'tournaments', tournamentId, 'bracket_matches', m.next_match_id)
+      const isOdd = m.match_number % 2 === 1
+      batch.update(nextRef, isOdd
+        ? { player_a_uid: m.winner_uid, player_a_name: winnerName }
+        : { player_b_uid: m.winner_uid, player_b_name: winnerName }
+      )
+    }
+    batch.update(doc(db, 'tournaments', tournamentId), { current_round: currentRnd + 1 })
+    await batch.commit()
+  }, [tournamentId])
+
+  // Called when the break countdown finishes — auto-advance if triggered by automation
   const handleCountdownComplete = useCallback(() => {
     setShowCountdown(false)
-  }, [])
+    // If we set autoAdvancedRef to the current round, advance now
+    if (autoAdvancedRef.current !== null) {
+      const rnd = autoAdvancedRef.current
+      // Snapshot current roundMatches at callback time via closure
+      doAdvanceRound(rnd, matches.filter(m => m.round === rnd))
+        .catch(console.error)
+    }
+  }, [doAdvanceRound, matches])
 
   // Export bracket as image
   const exportImage = useCallback(async () => {
@@ -496,32 +612,27 @@ export default function TournamentBracket() {
               })}
             </div>
 
-            {/* Advance to next round */}
-            {allRoundDone && currentRound < totalRounds && (
+            {/* Player presence indicator */}
+            {(() => {
+              const connected = Object.values(waitingPresence).filter(p => p.connected).length
+              const expected  = tournament.actual_top_cut || 0
+              if (!connected) return null
+              return (
+                <div className="flex items-center justify-center gap-2 text-xs text-gray-500 py-1">
+                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                  <span className="ar">{connected} {expected ? `/ ${expected}` : ''} لاعب في غرفة الانتظار</span>
+                </div>
+              )
+            })()}
+
+            {/* Advance to next round — auto-triggered via useEffect; button is manual fallback */}
+            {allRoundDone && currentRound < totalRounds && !showCountdown && (
               <button
-                onClick={async () => {
+                onClick={() => {
+                  autoAdvancedRef.current = currentRound
                   setCountdownLabel(`استراحة قبل الجولة ${currentRound + 1}`)
                   setCountdownMs(tournament.round_break_time || 30000)
                   setShowCountdown(true)
-
-                  // Propagate each round winner into the correct slot of the next-round match.
-                  // Odd-numbered match → player_a slot; even-numbered → player_b slot.
-                  // This is deterministic (no race condition) because the host triggers it
-                  // after ALL matches in the round are confirmed finished.
-                  const batch = writeBatch(db)
-                  for (const m of roundMatches) {
-                    if (m.status !== 'finished' || !m.winner_uid || !m.next_match_id) continue
-                    const winnerName = m.winner_uid === m.player_a_uid
-                      ? m.player_a_name : m.player_b_name
-                    const nextRef = doc(db, 'tournaments', tournamentId, 'bracket_matches', m.next_match_id)
-                    const isOdd = m.match_number % 2 === 1
-                    batch.update(nextRef, isOdd
-                      ? { player_a_uid: m.winner_uid, player_a_name: winnerName }
-                      : { player_b_uid: m.winner_uid, player_b_name: winnerName }
-                    )
-                  }
-                  batch.update(doc(db, 'tournaments', tournamentId), { current_round: currentRound + 1 })
-                  await batch.commit()
                 }}
                 className="w-full py-3 rounded-xl bg-primary text-background font-black ar flex items-center justify-center gap-2 hover:bg-[#00D4FF] active:scale-95 transition-all"
               >
@@ -541,7 +652,9 @@ export default function TournamentBracket() {
                 <div className="text-center py-4">
                   <Trophy size={40} className="text-yellow-400 mx-auto mb-2" />
                   <p className="ar text-xl font-black text-yellow-400">🏆 {winnerName}</p>
-                  <p className="ar text-gray-400 text-sm mt-1">انتهت البطولة!</p>
+                  <p className="ar text-gray-400 text-sm mt-1">
+                    {tournament.status === 'finished' ? 'انتهت البطولة!' : 'جاري إنهاء البطولة…'}
+                  </p>
                 </div>
               )
             })()}

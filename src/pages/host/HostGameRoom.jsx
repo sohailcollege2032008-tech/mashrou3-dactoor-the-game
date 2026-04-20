@@ -1583,13 +1583,13 @@ export default function HostGameRoom() {
                   <div className="mb-4 bg-primary/10 border border-primary/40 rounded-2xl p-4 flex items-center justify-between gap-4">
                     <div>
                       <p className="ar font-bold text-primary text-sm">انتهت مرحلة FFA 🏆</p>
-                      <p className="ar text-xs text-gray-400">جاري تحضير نتائج التأهل…</p>
+                      <p className="ar text-xs text-gray-400">تحقق من النتائج أدناه، ثم انتقل للـ Bracket من لوحة التحكم.</p>
                     </div>
                     <button
-                      onClick={() => navigate(`/tournament/${room.tournament_id}/bracket`)}
-                      className="ar flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-background font-bold text-sm hover:bg-[#00D4FF] transition-colors whitespace-nowrap"
+                      onClick={() => navigate('/host/dashboard')}
+                      className="ar flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-700 text-white font-bold text-sm hover:bg-gray-600 transition-colors whitespace-nowrap"
                     >
-                      <Trophy size={16} /> عرض الـ Bracket
+                      عودة للرئيسية
                     </button>
                   </div>
                 )}
