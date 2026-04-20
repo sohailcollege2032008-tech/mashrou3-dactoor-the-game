@@ -407,12 +407,19 @@ export default function DuelGame({
       setTimerPct(pct)
       if (pct <= 0) {
         clearInterval(timerIntervalRef.current)
-        // Tournament duels: the Cloud Function owns timeout-based reveal.
-        // Calling triggerReveal() here races with the CF and causes double-scoring
-        // (both execute increment(pts) simultaneously → player gets 2× the points).
-        // For regular duels there is no CF, so the client must handle it.
         if (duelPath === 'duels') {
+          // Regular duel: client owns the reveal (no CF).
           triggerReveal()
+        } else if (!hasAnswered && !isObserver && uid) {
+          // Tournament duel: CF owns scoring, but it only fires when an answer is written.
+          // If this player didn't answer in time, write a timeout marker so the CF
+          // sees "all players accounted for" and can advance the game.
+          // No selected_choice → CF scores 0 pts (correct behaviour for timeout).
+          const qi = duelRef.current?.current_question_index ?? 0
+          update(
+            rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}/${uid}`),
+            { uid, timed_out: true }
+          ).catch(console.error)
         }
       }
     }
