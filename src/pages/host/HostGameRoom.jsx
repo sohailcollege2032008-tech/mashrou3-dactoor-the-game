@@ -1033,31 +1033,13 @@ export default function HostGameRoom() {
       await batch.commit()
 
       // Transition tournament to bracket phase (skip 'transition' — go directly to 'bracket')
-      const tournamentTitle = topCutSnap.data()?.title || ''
       await updateDoc(doc(db, 'tournaments', tournamentId), {
         status:        'bracket',
         current_round: 1,
       })
-
-      // Write tournament_summary for players who did NOT advance — their journey ends here.
-      // Advancing players' summaries are written in TournamentDuelWrapper after their last match.
-      const nonAdvancers = finalOrder.filter(p => !p.advanced)
-      await Promise.all(nonAdvancers.map(p =>
-        setDoc(doc(db, 'profiles', p.user_id, 'game_history', `t_${tournamentId}_summary`), {
-          type:              'tournament_summary',
-          tournament_id:     tournamentId,
-          tournament_title:  tournamentTitle,
-          played_at:         serverTimestamp(),
-          ffa_rank:          p.rank ?? null,
-          ffa_score:         p.score ?? 0,
-          ffa_total_players: finalOrder.length,
-          advanced_from_ffa: false,
-          bracket_matches:   [],
-          final_result:      'eliminated_ffa',
-          reached_round:     null,
-          total_rounds:      null,
-        })
-      ))
+      // Note: tournament_summary for non-advancing players is written by each player's
+      // own client in TournamentPlayerWait.jsx — the host cannot write to other players'
+      // game_history subcollections (Firestore rule: write requires auth.uid == userId).
     } catch (err) {
       console.error('[Tournament] Failed to write FFA results:', err)
     }

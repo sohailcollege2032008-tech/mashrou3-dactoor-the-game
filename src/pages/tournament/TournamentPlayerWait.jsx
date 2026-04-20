@@ -6,7 +6,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  doc, onSnapshot, collection, getDoc,
+  doc, onSnapshot, collection, getDoc, getDocs, setDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { ref as rtdbRef, get as rtdbGet } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
@@ -53,9 +53,32 @@ export default function TournamentPlayerWait() {
     ffaCheckedRef.current = true
     getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uid))
       .then(snap => {
-        if (snap.exists()) {
-          const data = snap.data()
-          if (data.advanced === false) setFfaEliminated(true)
+        if (!snap.exists()) return
+        const data = snap.data()
+        if (data.advanced === false) {
+          setFfaEliminated(true)
+          // Write tournament_summary for this non-advancer (player writes their own doc)
+          getDocs(collection(db, 'tournaments', tournamentId, 'ffa_results'))
+            .then(allSnap =>
+              setDoc(
+                doc(db, 'profiles', uid, 'game_history', `t_${tournamentId}_summary`),
+                {
+                  type:              'tournament_summary',
+                  tournament_id:     tournamentId,
+                  tournament_title:  tournament?.title || '',
+                  played_at:         serverTimestamp(),
+                  ffa_rank:          data.rank          ?? null,
+                  ffa_score:         data.score         ?? 0,
+                  ffa_total_players: allSnap.size,
+                  advanced_from_ffa: false,
+                  bracket_matches:   [],
+                  final_result:      'eliminated_ffa',
+                  reached_round:     null,
+                  total_rounds:      tournament?.total_rounds ?? null,
+                }
+              )
+            )
+            .catch(e => console.error('[TournamentWait] Failed to write non-advancer summary:', e))
         }
       })
       .catch(console.error)

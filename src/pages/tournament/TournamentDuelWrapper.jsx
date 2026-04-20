@@ -163,24 +163,38 @@ export default function TournamentDuelWrapper() {
       const winnerName = winnerUid === match.player_a_uid
         ? match.player_a_name : match.player_b_name
 
-      // Advance winner to next match (if one exists)
+      // Advance winner to next match — best-effort (bracket host button also handles this).
+      // Players lack permission to update the next match until they're listed in it,
+      // so permission errors here are expected and non-critical.
       if (match.next_match_id) {
-        const nextRef  = doc(db, 'tournaments', tournamentId, 'bracket_matches', match.next_match_id)
-        const nextSnap = await getDoc(nextRef)
-        if (nextSnap.exists()) {
-          const nextMatch = nextSnap.data()
-          const updates = !nextMatch.player_a_uid
-            ? { player_a_uid: winnerUid, player_a_name: winnerName }
-            : { player_b_uid: winnerUid, player_b_name: winnerName }
-          await updateDoc(nextRef, updates)
+        try {
+          const nextRef  = doc(db, 'tournaments', tournamentId, 'bracket_matches', match.next_match_id)
+          const nextSnap = await getDoc(nextRef)
+          if (nextSnap.exists()) {
+            const nextMatch = nextSnap.data()
+            const updates = !nextMatch.player_a_uid
+              ? { player_a_uid: winnerUid, player_a_name: winnerName }
+              : { player_b_uid: winnerUid, player_b_name: winnerName }
+            await updateDoc(nextRef, updates)
+          }
+        } catch (e) {
+          // Expected: player not yet listed in next match → no write permission.
+          // TournamentBracket "advance round" button propagates winners authoritatively.
+          console.warn('[Bracket] Could not advance winner client-side:', e.code || e.message)
         }
       } else {
-        // Final match — mark tournament finished (store winner_name for player wait page)
-        await updateDoc(doc(db, 'tournaments', tournamentId), {
-          winner_uid:  winnerUid,
-          winner_name: winnerName,
-          status:      'finished',
-        })
+        // Final match — try to mark tournament finished.
+        // Players lack update permission on the tournament doc; host's TournamentBracket
+        // button is the authoritative path for status: 'finished'.
+        try {
+          await updateDoc(doc(db, 'tournaments', tournamentId), {
+            winner_uid:  winnerUid,
+            winner_name: winnerName,
+            status:      'finished',
+          })
+        } catch (e) {
+          console.warn('[Bracket] Could not update tournament status client-side:', e.code || e.message)
+        }
       }
 
       // ── Write tournament game history for the current player ────────────────
