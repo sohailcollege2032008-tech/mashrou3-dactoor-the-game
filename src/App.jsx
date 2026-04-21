@@ -7,6 +7,7 @@ import AuthCallback from './pages/AuthCallback'
 import NotAuthorized from './pages/NotAuthorized'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import OwnerDashboard from './pages/owner/OwnerDashboard'
+import OwnerLogs from './pages/owner/OwnerLogs'
 import HostDashboard from './pages/host/HostDashboard'
 import HostGameRoom from './pages/host/HostGameRoom'
 import JoinGame from './pages/player/JoinGame'
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/not-authorized" element={<NotAuthorized />} />
         
         <Route path="/owner/dashboard" element={<ProtectedRoute allowedRoles={['owner']}><OwnerDashboard /></ProtectedRoute>} />
+        <Route path="/owner/logs" element={<ProtectedRoute allowedRoles={['owner']}><OwnerLogs /></ProtectedRoute>} />
         <Route path="/host/dashboard" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostDashboard /></ProtectedRoute>} />
         <Route path="/host/game/:roomId" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostGameRoom /></ProtectedRoute>} />
         <Route path="/player/dashboard" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerDashboard /></ProtectedRoute>} />

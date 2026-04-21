@@ -68,6 +68,9 @@ export default function OwnerDashboard() {
             <p className="text-gray-400 mt-2 font-sans">Manage Authorized Hosts</p>
           </div>
           <div className="flex items-center gap-4">
+            <Link to="/owner/logs" className="px-4 py-2 rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/20 font-bold transition-all">
+              Activity Logs
+            </Link>
             <Link to="/host/dashboard" className="px-4 py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 font-bold transition-all">
               Go to Host Dashboard
             </Link>

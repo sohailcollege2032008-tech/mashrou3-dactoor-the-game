@@ -1,6 +1,7 @@
 {
   "rules": {
     "rooms": {
+      ".read": "auth != null && auth.token.email == 'sohailcollege2032008@gmail.com'",
       "$roomCode": {
         ".read":  "auth != null",
         ".write": "auth != null",
@@ -32,6 +33,7 @@
       }
     },
     "duels": {
+      ".read": "auth != null && auth.token.email == 'sohailcollege2032008@gmail.com'",
       "$duelId": {
         ".read":  "auth != null",
         ".write": "auth != null",
