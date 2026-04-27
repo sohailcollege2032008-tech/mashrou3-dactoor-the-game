@@ -18,10 +18,10 @@ function MRMonogram({ size = 64, color = 'var(--ink)', bg = 'transparent', fille
       {filled && (
         <defs>
           <pattern id={patternId} x="0" y="0" width="25" height="25" patternUnits="userSpaceOnUse">
-            <rect x="0" y="0" width="12.5" height="12.5" fill="#0A0A0A"/>
-            <rect x="12.5" y="12.5" width="12.5" height="12.5" fill="#0A0A0A"/>
-            <rect x="12.5" y="0" width="12.5" height="12.5" fill="#141414"/>
-            <rect x="0" y="12.5" width="12.5" height="12.5" fill="#141414"/>
+            <rect x="0" y="0" width="12.5" height="12.5" fill="#050505"/>
+            <rect x="12.5" y="12.5" width="12.5" height="12.5" fill="#050505"/>
+            <rect x="12.5" y="0" width="12.5" height="12.5" fill="#1A1A1A"/>
+            <rect x="0" y="12.5" width="12.5" height="12.5" fill="#1A1A1A"/>
           </pattern>
         </defs>
       )}
