@@ -5,13 +5,12 @@ import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 
 export default function WaitingRoom() {
-  const { roomId } = useParams()   // roomId = room code
+  const { roomId } = useParams()
   const { session } = useAuth()
-  const navigate = useNavigate()
-  const [status, setStatus] = useState('pending')
+  const navigate    = useNavigate()
+  const [status,     setStatus]     = useState('pending')
   const [roomStatus, setRoomStatus] = useState('lobby')
 
-  // Watch room status to detect if game started while waiting
   useEffect(() => {
     const unsub = onValue(ref(rtdb, `rooms/${roomId}/status`), snap => {
       if (snap.exists()) setRoomStatus(snap.val())
@@ -23,7 +22,6 @@ export default function WaitingRoom() {
     if (!session) return
     const userId = session.uid
 
-    // Initial check
     get(ref(rtdb, `rooms/${roomId}/join_requests/${userId}`)).then(snap => {
       if (snap.exists()) {
         const data = snap.val()
@@ -32,56 +30,119 @@ export default function WaitingRoom() {
       }
     })
 
-    // Listen for status changes
-    const reqRef = ref(rtdb, `rooms/${roomId}/join_requests/${userId}/status`)
-    const unsubscribe = onValue(reqRef, (snap) => {
+    const unsub = onValue(ref(rtdb, `rooms/${roomId}/join_requests/${userId}/status`), snap => {
       if (!snap.exists()) return
-      const newStatus = snap.val()
-      setStatus(newStatus)
-      if (newStatus === 'approved') {
-        navigate(`/player/game/${roomId}`)
-      }
+      const val = snap.val()
+      setStatus(val)
+      if (val === 'approved') navigate(`/player/game/${roomId}`)
     })
-
-    return () => unsubscribe()
+    return () => unsub()
   }, [roomId, session, navigate])
 
   const gameInProgress = roomStatus === 'playing' || roomStatus === 'revealing'
+  const isRejected     = status === 'rejected'
 
   return (
-    <div className="flex h-screen items-center justify-center bg-background text-center p-6">
-      <div className="space-y-6 max-w-sm w-full">
-        {status === 'pending' && (
-          <div className="w-24 h-24 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-        )}
-        <h1 className="text-3xl font-display font-bold text-white">
-          {status === 'pending'
-            ? 'في انتظار موافقة الهوست...'
-            : status === 'rejected'
-            ? 'تم رفض الطلب'
-            : 'جاري الدخول...'}
-        </h1>
+    <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
 
-        {status === 'pending' && gameInProgress && (
-          <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl px-5 py-4 text-sm text-orange-300 space-y-1">
-            <p className="font-bold">الجيم بدأ فعلاً!</p>
-            <p className="text-orange-300/70">لو الهوست قبلك هتدخل وتحل الأسئلة الباقية.</p>
+      {/* ── Masthead ───────────────────────────────────────────────────── */}
+      <header style={{
+        borderBottom: '3px double var(--rule-strong)',
+        padding: '13px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span className="folio" style={{ flex: 1 }}>Waiting</span>
+
+        <svg width={28} height={28} viewBox="0 0 100 100" fill="none" aria-label="Med Royale">
+          <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
+          <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+
+        <span className="folio" style={{ flex: 1, textAlign: 'right' }}>Room · {roomId}</span>
+      </header>
+
+      {/* ── Main ───────────────────────────────────────────────────────── */}
+      <main style={{
+        flex: 1, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '40px 20px', textAlign: 'center',
+      }}>
+
+        {/* Pulsing monogram (pending state only) */}
+        {!isRejected && (
+          <div style={{ position: 'relative', width: 104, height: 104, marginBottom: 40 }}>
+            <svg width="104" height="104" viewBox="0 0 100 100" fill="none"
+              style={{ animation: 'mr-spin-slow 10s linear infinite' }}>
+              <circle cx="50" cy="50" r="46" stroke="var(--rule)" strokeWidth="1" />
+              <circle cx="50" cy="50" r="36" stroke="var(--ink)" strokeWidth="1.5" />
+              <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+                fontFamily="Fraunces, Georgia, serif" fontSize="26" fontWeight="500" fill="var(--ink)">MR</text>
+            </svg>
+            <div style={{
+              position: 'absolute', inset: -14,
+              border: '1px solid var(--rule)', borderRadius: '50%',
+              animation: 'mr-ring-pulse 2.6s ease-in-out infinite',
+            }} />
+            <style>{`
+              @keyframes mr-spin-slow  { to { transform: rotate(360deg); } }
+              @keyframes mr-ring-pulse { 0%,100%{transform:scale(1);opacity:0.6} 50%{transform:scale(1.1);opacity:0.15} }
+            `}</style>
           </div>
         )}
 
-        {status === 'pending' && !gameInProgress && (
-          <p className="text-lg text-gray-400 font-sans">
+        {/* Chapter label */}
+        <p className="folio" style={{ marginBottom: 14, letterSpacing: '0.28em' }}>
+          ROOM Nº {roomId} · {isRejected ? 'REJECTED' : 'PENDING'}
+        </p>
+
+        {/* Headline */}
+        <h1 style={{
+          fontFamily: 'var(--serif)', fontWeight: 400,
+          fontSize: 'clamp(34px, 8vw, 60px)', lineHeight: 1.0,
+          letterSpacing: '-0.025em', margin: '0 0 24px', color: 'var(--ink)',
+        }}>
+          {isRejected ? (
+            <>Request<br /><em style={{ fontWeight: 300, color: 'var(--alert)' }}>rejected.</em></>
+          ) : (
+            <>Awaiting<br /><em style={{ fontWeight: 300, color: 'var(--burgundy)' }}>the host.</em></>
+          )}
+        </h1>
+
+        {/* Status messages */}
+        {!isRejected && !gameInProgress && (
+          <p className="ar" style={{ fontSize: 15, color: 'var(--ink-3)', maxWidth: 280, lineHeight: 1.75, margin: 0 }}>
             الهوست لازم يوافق عليك الأول عشان تدخل.
           </p>
         )}
 
-        {status === 'rejected' && (
-          <p className="text-lg text-gray-400 font-sans">
+        {!isRejected && gameInProgress && (
+          <div style={{
+            border: '1px solid var(--gold)', background: 'rgba(176,137,68,0.06)',
+            padding: '16px 20px', maxWidth: 300,
+          }}>
+            <p className="ar" style={{ fontWeight: 600, fontSize: 14, color: 'var(--gold)', margin: 0 }}>الجيم بدأ فعلاً!</p>
+            <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: '6px 0 0' }}>لو الهوست قبلك هتدخل وتحل الأسئلة الباقية.</p>
+          </div>
+        )}
+
+        {isRejected && (
+          <p className="ar" style={{ fontSize: 15, color: 'var(--ink-3)', margin: 0 }}>
             ممكن تقفل الصفحة دي.
           </p>
         )}
 
-      </div>
+      </main>
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <footer style={{
+        borderTop: '1px solid var(--rule)', padding: '12px 20px',
+        display: 'flex', justifyContent: 'center',
+      }}>
+        <span className="folio">Player · Waiting Room</span>
+      </footer>
+
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { fetchPlayedQuestions, applyDuelConfig, stripCorrectForRtdb } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
-import { Loader2, Copy, Check, Swords, Users, LogOut, Lock } from 'lucide-react'
+import { Copy, Check } from 'lucide-react'
 
 export default function DuelLobby() {
   const { duelId } = useParams()
@@ -21,14 +21,12 @@ export default function DuelLobby() {
 
   const uid = session?.uid
 
-  // Subscribe to duel
   useEffect(() => {
     if (!duelId) return
     const unsub = onValue(rtdbRef(rtdb, `duels/${duelId}`), snap => {
       const data = snap.val()
       setDuel(data)
       setLoading(false)
-      // Only redirect active players — visitors see "game in progress" message
       const isPlayer = uid && data?.players && uid in (data?.players || {})
       if (isPlayer && (data?.status === 'playing' || data?.status === 'revealing')) {
         navigate(`/duel/game/${duelId}`, { replace: true })
@@ -53,7 +51,6 @@ export default function DuelLobby() {
     })
   }, [inviteLink])
 
-  // ── Join via invite link (visitor) ───────────────────────────────────────
   const joinDuel = useCallback(async () => {
     if (!duel || joining || !uid) return
     setJoining(true)
@@ -81,8 +78,6 @@ export default function DuelLobby() {
 
       if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
 
-      // Strip correct index before writing — replaced with correct_hash so it can't
-      // be read from the Network tab. DuelGame resolves it back at reveal time.
       const safeQuestions = await stripCorrectForRtdb(questions, duelId)
 
       await update(rtdbRef(rtdb, `duels/${duelId}`), {
@@ -98,7 +93,6 @@ export default function DuelLobby() {
         question_started_at: Date.now(),
       })
       await remove(rtdbRef(rtdb, `duel_queue/${duel.deck_id}/${duel.creator_uid}`))
-      // Navigation happens via onValue listener
     } catch (e) {
       console.error(e)
       setError(e.message || 'فشل الانضمام. حاول مرة أخرى.')
@@ -106,7 +100,6 @@ export default function DuelLobby() {
     }
   }, [duel, joining, uid, duelId, profile])
 
-  // ── Cancel waiting duel (creator only) ───────────────────────────────────
   const cancelDuel = useCallback(async () => {
     if (!duel || cancelling || !uid) return
     setCancelling(true)
@@ -120,23 +113,36 @@ export default function DuelLobby() {
     }
   }, [duel, cancelling, uid, duelId, navigate])
 
+  /* ── Loading ────────────────────────────────────────────────────────────── */
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 size={32} className="animate-spin text-primary" />
+      <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <svg width="48" height="48" viewBox="0 0 100 100" fill="none"
+            style={{ animation: 'mr-spin-slow 10s linear infinite' }}>
+            <circle cx="50" cy="50" r="46" stroke="var(--rule)" strokeWidth="1" />
+            <circle cx="50" cy="50" r="36" stroke="var(--ink)" strokeWidth="1.5" />
+            <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+              fontFamily="Fraunces, Georgia, serif" fontSize="22" fontWeight="500" fill="var(--ink)">MR</text>
+          </svg>
+          <style>{`@keyframes mr-spin-slow { to { transform: rotate(360deg); } }`}</style>
+          <span className="folio">Loading…</span>
+        </div>
       </div>
     )
   }
 
+  /* ── Not found ─────────────────────────────────────────────────────────── */
   if (!duel) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center text-gray-400" dir="rtl">
-        <div className="text-center space-y-3">
-          <p className="text-lg font-bold">الدويل غير موجود</p>
-          <button onClick={() => navigate('/player/decks')} className="text-primary text-sm hover:underline">
-            العودة للـ Decks
-          </button>
-        </div>
+      <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24, textAlign: 'center' }}>
+        <p className="folio" style={{ letterSpacing: '0.28em' }}>DUEL · NOT FOUND</p>
+        <h1 style={{ fontFamily: 'var(--serif)', fontSize: 'clamp(32px, 7vw, 52px)', fontWeight: 400, lineHeight: 1.0, letterSpacing: '-0.025em', margin: 0, color: 'var(--ink)' }}>
+          This duel<br /><em style={{ fontWeight: 300, color: 'var(--alert)' }}>doesn't exist.</em>
+        </h1>
+        <button onClick={() => navigate('/player/decks')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-3)' }}>
+          ← Back to Decks
+        </button>
       </div>
     )
   }
@@ -147,20 +153,29 @@ export default function DuelLobby() {
   const isInDuel   = uid && playerUids.includes(uid)
   const isVisitor  = uid && !isInDuel
 
-  // Visitor arrived after game already started → full-screen block
+  /* ── Visitor arrived after game started ─────────────────────────────────── */
   if (isVisitor && duel.status !== 'waiting') {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center gap-5" dir="rtl">
-        <div className="w-20 h-20 rounded-3xl bg-gray-900 border border-gray-800 flex items-center justify-center">
-          <Lock size={36} className="text-gray-600" />
-        </div>
-        <div className="space-y-2">
-          <h1 className="text-xl font-bold text-white">انتهت صلاحية رابط الدعوة</h1>
-          <p className="text-gray-500 text-sm">المباراة بدأت بالفعل ولا يمكن الانضمام</p>
-        </div>
+      <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24, textAlign: 'center' }}>
+        <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+          <circle cx="50" cy="50" r="46" stroke="var(--rule)" strokeWidth="1.5" />
+          <circle cx="50" cy="50" r="36" stroke="var(--ink)" strokeWidth="1" opacity="0.4" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="26" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+        <p className="folio" style={{ letterSpacing: '0.28em' }}>DUEL · IN PROGRESS</p>
+        <h1 style={{ fontFamily: 'var(--serif)', fontSize: 'clamp(32px, 7vw, 52px)', fontWeight: 400, lineHeight: 1.0, letterSpacing: '-0.025em', margin: 0, color: 'var(--ink)' }}>
+          انتهت<br /><em style={{ fontWeight: 300, color: 'var(--alert)' }}>صلاحية الرابط.</em>
+        </h1>
+        <p className="ar" style={{ fontSize: 14, color: 'var(--ink-3)', margin: 0 }}>
+          المباراة بدأت بالفعل ولا يمكن الانضمام
+        </p>
         <button
           onClick={() => navigate('/player/decks')}
-          className="px-6 py-3 bg-primary/10 border border-primary/30 text-primary font-bold rounded-2xl text-sm hover:bg-primary/20 transition-colors"
+          style={{
+            padding: '12px 24px', background: 'var(--ink)', color: 'var(--paper)',
+            border: '1px solid var(--ink)', fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+          }}
         >
           ابدأ دويل جديد
         </button>
@@ -168,128 +183,248 @@ export default function DuelLobby() {
     )
   }
 
+  /* ── Main lobby ─────────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-background text-white flex flex-col items-center justify-center p-6" dir="rtl">
-      <div className="w-full max-w-sm space-y-6">
+    <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
 
-        {/* Deck info */}
-        <div className="text-center space-y-2">
-          <div className="w-16 h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mx-auto">
-            <Swords size={28} className="text-primary" />
-          </div>
-          <h1 dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-xl font-bold font-display">{duel.deck_title}</h1>
-          <p className="text-gray-400 text-sm font-mono">{duel.total_questions} سؤال · دويل 1v1</p>
-        </div>
+      {/* ── Masthead ───────────────────────────────────────────────────── */}
+      <header style={{
+        borderBottom: '3px double var(--rule-strong)',
+        padding: '13px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <button
+          onClick={() => navigate('/player/decks')}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-3)' }}
+        >
+          ← Back
+        </button>
 
-        {/* Players */}
-        <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 space-y-3">
-          <div className="flex items-center gap-2 text-gray-400 text-sm font-bold">
-            <Users size={14} />
-            اللاعبون
-          </div>
-          {playerUids.length === 0 ? (
-            <p className="text-gray-600 text-sm text-center py-2">لا يوجد لاعبون بعد</p>
-          ) : (
-            playerUids.map(pUid => {
+        <svg width={28} height={28} viewBox="0 0 100 100" fill="none" aria-label="Med Royale">
+          <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
+          <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+
+        <span className="folio" style={{ textAlign: 'right' }}>Duel · Lobby</span>
+      </header>
+
+      {/* ── Main ───────────────────────────────────────────────────────── */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+        <div style={{ width: '100%', maxWidth: 400 }}>
+
+          {/* Chapter label */}
+          <p className="folio" style={{ textAlign: 'center', marginBottom: 16, letterSpacing: '0.28em' }}>— CHAPTER I · DUEL —</p>
+
+          {/* Headline */}
+          <h1 style={{
+            fontFamily: 'var(--serif)', fontWeight: 400,
+            fontSize: 'clamp(30px, 7vw, 52px)', lineHeight: 1.0,
+            letterSpacing: '-0.025em', margin: '0 0 8px', textAlign: 'center',
+            color: 'var(--ink)',
+          }}>
+            Head to<br />
+            <em style={{ fontWeight: 300, color: 'var(--burgundy)' }}>head.</em>
+          </h1>
+
+          {/* Deck title */}
+          <p dir={duel.force_rtl ? 'rtl' : 'auto'} style={{
+            fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--ink-2)',
+            textAlign: 'center', margin: '0 0 36px', lineHeight: 1.5,
+          }}>
+            {duel.deck_title}
+          </p>
+
+          {/* ── Player panels ──────────────────────────────────────────── */}
+          <div style={{ border: '1px solid var(--rule)', borderBottom: 'none', marginBottom: 28 }}>
+
+            {/* Section header */}
+            <div style={{
+              padding: '8px 14px',
+              borderBottom: '1px solid var(--rule)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span className="folio" style={{ letterSpacing: '0.2em' }}>PLAYERS</span>
+              <span className="folio" style={{ color: 'var(--ink-4)' }}>{playerUids.length} / 2</span>
+            </div>
+
+            {/* Player rows */}
+            {playerUids.map(pUid => {
               const p = players[pUid]
               return (
-                <div key={pUid} className="flex items-center gap-3">
-                  {p.avatar_url ? (
-                    <img src={p.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border border-gray-700" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-gray-500 text-sm font-bold">
-                      {(p.nickname || '?')[0]}
-                    </div>
-                  )}
-                  <span className="text-white text-sm font-bold">{p.nickname}</span>
+                <div key={pUid} style={{
+                  padding: '14px',
+                  borderBottom: '1px solid var(--rule)',
+                  display: 'flex', alignItems: 'center', gap: 12,
+                }}>
+                  {/* Avatar */}
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    border: '1px solid var(--ink)',
+                    overflow: 'hidden', flexShrink: 0,
+                    background: 'var(--paper-3)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {p.avatar_url
+                      ? <img src={p.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <span style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>
+                          {(p.nickname || '?')[0]}
+                        </span>
+                    }
+                  </div>
+
+                  <span style={{ fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--ink)', flex: 1 }}>{p.nickname}</span>
+
                   {pUid === duel.creator_uid && (
-                    <span className="text-xs text-primary font-mono bg-primary/10 px-2 py-0.5 rounded-full">مُنشئ</span>
+                    <span className="folio" style={{ color: 'var(--burgundy)', letterSpacing: '0.15em' }}>HOST</span>
                   )}
                 </div>
               )
-            })
-          )}
-          {playerUids.length < 2 && (
-            <div className="flex items-center gap-3 opacity-40">
-              <div className="w-9 h-9 rounded-full bg-gray-800 border border-dashed border-gray-600 flex items-center justify-center">
-                <Loader2 size={14} className="animate-spin text-gray-500" />
-              </div>
-              <span className="text-gray-500 text-sm">في انتظار الخصم...</span>
-            </div>
-          )}
-        </div>
+            })}
 
-        {/* Error */}
-        {error && (
-          <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm text-center">
-            {error}
-          </div>
-        )}
-
-        {/* Visitor join */}
-        {isVisitor && duel.status === 'waiting' && (
-          <button
-            onClick={joinDuel}
-            disabled={joining}
-            className="w-full flex items-center justify-center gap-3 bg-primary text-background font-bold py-4 rounded-2xl text-lg hover:bg-[#00D4FF] transition-colors active:scale-95 disabled:opacity-60"
-          >
-            {joining ? (
-              <><Loader2 size={20} className="animate-spin" /> جاري الانضمام...</>
-            ) : (
-              <><Swords size={20} /> الانضمام للدويل</>
-            )}
-          </button>
-        )}
-
-        {/* Creator waiting */}
-        {isInDuel && duel.status === 'waiting' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-center gap-2 py-3 text-gray-400">
-              <Loader2 size={16} className="animate-spin text-primary" />
-              <span className="text-sm">في انتظار خصم...</span>
-            </div>
-
-            {isCreator && (
-              <div className="space-y-2">
-                <p className="text-xs text-gray-500 text-center">شارك الرابط مع صديقك</p>
-                <div className="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3">
-                  <span className="flex-1 text-xs text-gray-400 font-mono truncate">{inviteLink}</span>
-                  <button
-                    onClick={copyLink}
-                    className={`flex-shrink-0 p-1.5 rounded-lg transition-colors ${copied ? 'text-green-400 bg-green-500/10' : 'text-gray-400 hover:text-primary hover:bg-primary/10'}`}
-                  >
-                    {copied ? <Check size={16} /> : <Copy size={16} />}
-                  </button>
+            {/* Waiting slot */}
+            {playerUids.length < 2 && (
+              <div style={{
+                padding: '14px',
+                borderBottom: '1px solid var(--rule)',
+                display: 'flex', alignItems: 'center', gap: 12,
+                opacity: 0.4,
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: '50%',
+                  border: '1px dashed var(--rule)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 18, color: 'var(--ink-3)' }}>?</span>
                 </div>
-                {copied && <p className="text-xs text-green-400 text-center font-mono">تم النسخ!</p>}
+                <span className="ar" style={{ fontSize: 13, color: 'var(--ink-3)' }}>في انتظار الخصم…</span>
               </div>
             )}
-
-            {/* Cancel / leave lobby */}
-            {isCreator && (
-              <button
-                onClick={cancelDuel}
-                disabled={cancelling}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 text-red-400 font-bold rounded-2xl text-sm transition-colors disabled:opacity-60"
-              >
-                {cancelling ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <LogOut size={16} />
-                )}
-                إلغاء الدويل
-              </button>
-            )}
           </div>
-        )}
 
-        <button
-          onClick={() => navigate('/player/decks')}
-          className="w-full py-3 text-gray-600 hover:text-gray-400 transition-colors text-sm font-bold"
-        >
-          العودة للـ Decks
-        </button>
-      </div>
+          {/* ── Error ──────────────────────────────────────────────────── */}
+          {error && (
+            <div style={{
+              border: '1px solid var(--alert)', background: 'rgba(180,48,57,0.06)',
+              padding: '12px 16px', marginBottom: 16,
+            }}>
+              <p className="ar" style={{ fontSize: 13, color: 'var(--alert)', margin: 0 }}>{error}</p>
+            </div>
+          )}
+
+          {/* ── Visitor: join button ────────────────────────────────────── */}
+          {isVisitor && duel.status === 'waiting' && (
+            <button
+              onClick={joinDuel}
+              disabled={joining}
+              style={{
+                width: '100%', padding: '14px 20px',
+                background: 'var(--ink)', color: 'var(--paper)',
+                border: '1px solid var(--ink)',
+                fontFamily: 'var(--arabic)', fontSize: 16, fontWeight: 600,
+                cursor: joining ? 'not-allowed' : 'pointer',
+                opacity: joining ? 0.5 : 1,
+                marginBottom: 12,
+              }}
+            >
+              {joining ? 'جاري الانضمام…' : 'الانضمام للدويل'}
+            </button>
+          )}
+
+          {/* ── Creator: waiting state ──────────────────────────────────── */}
+          {isInDuel && duel.status === 'waiting' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+              {/* Pulsing waiting indicator */}
+              <div style={{
+                border: '1px solid var(--rule)',
+                padding: '16px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: 'var(--burgundy)',
+                  animation: 'mr-dot-pulse 1.6s ease-in-out infinite',
+                }} />
+                <span className="ar" style={{ fontSize: 13, color: 'var(--ink-3)' }}>في انتظار خصم…</span>
+                <style>{`@keyframes mr-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }`}</style>
+              </div>
+
+              {/* Invite link */}
+              {isCreator && (
+                <div>
+                  <div className="folio" style={{ marginBottom: 8 }}>Invite Link</div>
+                  <div style={{
+                    border: '1px solid var(--rule)', borderBottomWidth: 2, borderColor: 'var(--ink)',
+                    background: 'var(--paper-2)',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px',
+                  }}>
+                    <span style={{ flex: 1, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {inviteLink}
+                    </span>
+                    <button
+                      onClick={copyLink}
+                      title="Copy"
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0,
+                        color: copied ? 'var(--burgundy)' : 'var(--ink-3)',
+                        display: 'flex', alignItems: 'center',
+                      }}
+                    >
+                      {copied ? <Check size={15} /> : <Copy size={15} />}
+                    </button>
+                  </div>
+                  {copied && (
+                    <p className="folio" style={{ marginTop: 6, color: 'var(--burgundy)', letterSpacing: '0.18em' }}>COPIED ✓</p>
+                  )}
+                </div>
+              )}
+
+              {/* Cancel */}
+              {isCreator && (
+                <button
+                  onClick={cancelDuel}
+                  disabled={cancelling}
+                  style={{
+                    width: '100%', padding: '11px 20px',
+                    background: 'transparent', color: 'var(--alert)',
+                    border: '1px solid var(--alert)',
+                    fontFamily: 'var(--arabic)', fontSize: 14,
+                    cursor: cancelling ? 'not-allowed' : 'pointer',
+                    opacity: cancelling ? 0.5 : 1,
+                  }}
+                >
+                  {cancelling ? 'جاري الإلغاء…' : 'إلغاء الدويل'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Back link */}
+          <button
+            onClick={() => navigate('/player/decks')}
+            style={{
+              marginTop: 20, background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: 'var(--ink-4)', display: 'block', width: '100%', textAlign: 'center',
+            }}
+          >
+            ← Back to Decks
+          </button>
+
+        </div>
+      </main>
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <footer style={{
+        borderTop: '1px solid var(--rule)', padding: '12px 20px',
+        display: 'flex', justifyContent: 'center',
+      }}>
+        <span className="folio">Player · Duel Lobby</span>
+      </footer>
+
     </div>
   )
 }

@@ -1,7 +1,4 @@
-/**
- * TournamentJoin.jsx — Player enters a tournament code and registers.
- */
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   collection, query, where, getDocs,
@@ -10,18 +7,18 @@ import {
 import { ref as rtdbRef, set } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { Trophy, Loader2, CheckCircle } from 'lucide-react'
 
 export default function TournamentJoin() {
   const navigate = useNavigate()
   const { session, profile } = useAuth()
+  const inputRef = useRef(null)
 
-  const [code,     setCode]     = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [success,  setSuccess]  = useState(false)
-  const [tournamentId, setTournamentId] = useState(null)
+  const [code,           setCode]           = useState('')
+  const [loading,        setLoading]        = useState(false)
+  const [success,        setSuccess]        = useState(false)
+  const [tournamentId,   setTournamentId]   = useState(null)
   const [tournamentTitle, setTournamentTitle] = useState('')
-  const [error,    setError]    = useState(null)
+  const [error,          setError]          = useState(null)
 
   const handleJoin = async () => {
     const trimmed = code.trim().toUpperCase()
@@ -48,23 +45,20 @@ export default function TournamentJoin() {
       const nickname = profile?.display_name || 'لاعب'
       const avatar   = profile?.avatar_url   || null
 
-      // Write to Firestore registrations subcollection
       await setDoc(doc(db, 'tournaments', tDoc.id, 'registrations', uid), {
         uid,
         nickname,
-        avatar_url:     avatar,
-        registered_at:  serverTimestamp(),
+        avatar_url:    avatar,
+        registered_at: serverTimestamp(),
       })
 
-      // Write to RTDB for real-time lobby display
       await set(rtdbRef(rtdb, `tournament_registrations/${tDoc.id}/${uid}`), {
         uid,
         nickname,
-        avatar_url:   avatar,
+        avatar_url:    avatar,
         registered_at: Date.now(),
       })
 
-      // Remember active tournament so dashboard can show the banner
       localStorage.setItem('activeTournamentId', tDoc.id)
 
       setTournamentId(tDoc.id)
@@ -78,72 +72,200 @@ export default function TournamentJoin() {
     }
   }
 
+  /* ── Success state ──────────────────────────────────────────────────────── */
   if (success) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center" dir="rtl">
-        <div className="space-y-6 max-w-sm w-full">
-          <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto">
-            <CheckCircle size={40} className="text-green-400" />
+      <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
+
+        <header style={{
+          borderBottom: '3px double var(--rule-strong)',
+          padding: '13px 20px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span className="folio" style={{ flex: 1 }}>Tournament</span>
+          <svg width={28} height={28} viewBox="0 0 100 100" fill="none" aria-label="Med Royale">
+            <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
+            <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
+            <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+              fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
+          </svg>
+          <span className="folio" style={{ flex: 1, textAlign: 'right' }}>Registered</span>
+        </header>
+
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', textAlign: 'center' }}>
+          <p className="folio" style={{ marginBottom: 14, letterSpacing: '0.28em' }}>— REGISTERED —</p>
+
+          <h1 style={{
+            fontFamily: 'var(--serif)', fontWeight: 400,
+            fontSize: 'clamp(34px, 8vw, 60px)', lineHeight: 1.0,
+            letterSpacing: '-0.025em', margin: '0 0 24px', color: 'var(--ink)',
+          }}>
+            You're<br /><em style={{ fontWeight: 300, color: 'var(--gold)' }}>enrolled.</em>
+          </h1>
+
+          <div style={{
+            border: '1px solid var(--gold)', background: 'rgba(176,137,68,0.06)',
+            padding: '16px 24px', maxWidth: 320, marginBottom: 36,
+          }}>
+            <p className="ar" style={{ fontWeight: 600, fontSize: 14, color: 'var(--gold)', margin: '0 0 4px' }}>تم التسجيل بنجاح</p>
+            <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: 0 }}>
+              تم تسجيلك في بطولة <strong style={{ color: 'var(--ink)' }}>{tournamentTitle}</strong>
+            </p>
+            <p className="ar" style={{ fontSize: 12, color: 'var(--ink-4)', margin: '6px 0 0' }}>انتظر بدء المرحلة الأولى</p>
           </div>
-          <div>
-            <h2 className="ar text-2xl font-black text-white mb-2">تم التسجيل بنجاح! 🎉</h2>
-            <p className="ar text-gray-400 text-sm">تم تسجيلك في بطولة <span className="text-primary font-bold">{tournamentTitle}</span></p>
-            <p className="ar text-gray-500 text-xs mt-2">انتظر بدء المرحلة الأولى (FFA)</p>
-          </div>
+
           <button
             onClick={() => navigate(`/tournament/${tournamentId}/wait`)}
-            className="w-full py-3 rounded-xl bg-primary text-background font-black ar hover:bg-[#00D4FF] transition-colors"
+            style={{
+              padding: '14px 32px', background: 'var(--ink)', color: 'var(--paper)',
+              border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 15, fontWeight: 600,
+              cursor: 'pointer',
+            }}
           >
             انتقل لصفحة الانتظار
           </button>
-        </div>
+        </main>
+
+        <footer style={{
+          borderTop: '1px solid var(--rule)', padding: '12px 20px',
+          display: 'flex', justifyContent: 'center',
+        }}>
+          <span className="folio">Player · Tournament</span>
+        </footer>
+
       </div>
     )
   }
 
+  /* ── Join form ──────────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6" dir="rtl">
-      <div className="w-full max-w-sm space-y-8">
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="w-16 h-16 bg-primary/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Trophy size={32} className="text-primary" />
+    <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
+
+      {/* ── Masthead ───────────────────────────────────────────────────── */}
+      <header style={{
+        borderBottom: '3px double var(--rule-strong)',
+        padding: '13px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <button
+          onClick={() => navigate('/player/dashboard')}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-3)' }}
+        >
+          ← Back
+        </button>
+
+        <svg width={28} height={28} viewBox="0 0 100 100" fill="none" aria-label="Med Royale">
+          <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
+          <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+
+        <span className="folio">Join · Tournament</span>
+      </header>
+
+      {/* ── Main ───────────────────────────────────────────────────────── */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+        <div style={{ width: '100%', maxWidth: 380 }}>
+
+          {/* Chapter label */}
+          <p className="folio" style={{ textAlign: 'center', marginBottom: 16, letterSpacing: '0.28em' }}>— CHAPTER III · TOURNAMENT —</p>
+
+          {/* Headline */}
+          <h1 style={{
+            fontFamily: 'var(--serif)', fontWeight: 400,
+            fontSize: 'clamp(30px, 7vw, 52px)', lineHeight: 1.0,
+            letterSpacing: '-0.025em', margin: '0 0 40px', textAlign: 'center',
+            color: 'var(--ink)',
+          }}>
+            What is the<br />
+            <em style={{ fontWeight: 300, color: 'var(--gold)' }}>tournament code?</em>
+          </h1>
+
+          {/* ── Character boxes ─────────────────────────────────────────── */}
+          <div
+            style={{ position: 'relative', marginBottom: 12, cursor: 'text' }}
+            onClick={() => inputRef.current?.focus()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 5, pointerEvents: 'none' }}>
+              {[0, 1, 2, null, 3, 4, 5].map((charIdx, i) => {
+                if (charIdx === null) return (
+                  <div key="sep" style={{
+                    width: 14, display: 'flex', alignItems: 'flex-end',
+                    paddingBottom: 14, justifyContent: 'center',
+                    fontFamily: 'var(--mono)', fontSize: 18, color: 'var(--rule)',
+                  }}>—</div>
+                )
+                const ch = code[charIdx] || ''
+                return (
+                  <div key={i} style={{
+                    width: 44, height: 68,
+                    border: '1px solid var(--ink)', borderBottomWidth: 2,
+                    background: ch ? 'var(--paper-2)' : 'var(--paper)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'var(--serif)', fontSize: 30, fontWeight: 500,
+                    color: 'var(--ink)', transition: 'background 120ms',
+                  }}>{ch}</div>
+                )
+              })}
+            </div>
+            <input
+              ref={inputRef}
+              type="text"
+              maxLength={6}
+              value={code}
+              onChange={e => {
+                setCode(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())
+                setError(null)
+              }}
+              onKeyDown={e => e.key === 'Enter' && handleJoin()}
+              style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'text' }}
+              autoComplete="off"
+              autoFocus
+            />
           </div>
-          <h1 className="ar text-2xl font-black text-white">الانضمام لبطولة</h1>
-          <p className="ar text-gray-400 text-sm">أدخل كود البطولة المكوّن من 6 أحرف</p>
-        </div>
 
-        {/* Code input */}
-        <div className="space-y-3">
-          <input
-            value={code}
-            onChange={e => setCode(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === 'Enter' && handleJoin()}
-            placeholder="XXXXXX"
-            maxLength={6}
-            className="w-full bg-gray-900 border border-gray-700 rounded-2xl px-6 py-5 text-center text-3xl font-black text-white tracking-[0.5em] placeholder-gray-700 focus:outline-none focus:border-primary transition-colors"
-          />
+          <p style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink-4)', textAlign: 'center', marginBottom: 28 }}>
+            Ask the tournament organiser for the 6-character code.
+          </p>
 
+          {/* Error */}
           {error && (
-            <p className="ar text-red-400 text-sm text-center">{error}</p>
+            <div style={{
+              border: '1px solid var(--alert)', background: 'rgba(180,48,57,0.06)',
+              padding: '10px 14px', marginBottom: 16,
+            }}>
+              <p className="ar" style={{ fontSize: 13, color: 'var(--alert)', margin: 0 }}>{error}</p>
+            </div>
           )}
 
+          {/* Submit */}
           <button
             onClick={handleJoin}
             disabled={loading || code.trim().length !== 6}
-            className="w-full py-4 rounded-2xl bg-primary text-background font-black text-lg ar flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#00D4FF] active:scale-95 transition-all"
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '14px 20px', background: 'var(--ink)', color: 'var(--paper)',
+              border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 15, fontWeight: 600,
+              cursor: loading || code.trim().length !== 6 ? 'not-allowed' : 'pointer',
+              opacity: loading || code.trim().length !== 6 ? 0.4 : 1,
+              transition: 'opacity 150ms',
+            }}
           >
-            {loading
-              ? <><Loader2 size={20} className="animate-spin" /><span>جاري البحث…</span></>
-              : <><Trophy size={20} /><span>انضم للبطولة</span></>
-            }
+            {loading ? 'جاري البحث…' : 'انضم للبطولة'}
           </button>
-        </div>
 
-        <button onClick={() => navigate('/player/dashboard')} className="ar w-full text-center text-gray-500 text-sm hover:text-gray-300 transition-colors">
-          عودة للرئيسية
-        </button>
-      </div>
+        </div>
+      </main>
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <footer style={{
+        borderTop: '1px solid var(--rule)', padding: '12px 20px',
+        display: 'flex', justifyContent: 'center',
+      }}>
+        <span className="folio">Player · Tournament</span>
+      </footer>
+
     </div>
   )
 }
