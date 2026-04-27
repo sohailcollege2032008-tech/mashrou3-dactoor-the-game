@@ -349,22 +349,22 @@ export default function HostDashboard() {
             borderBottom: '1px solid var(--rule)', padding: '14px 20px',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
           }}>
-            <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 22, color: 'var(--ink)', margin: 0 }}>
+            <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 24, color: 'var(--ink)', margin: 0 }}>
               Question Banks
             </h2>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => navigate('/tournament/create')} style={{
-                padding: '7px 14px', border: '1px solid var(--gold)',
+                padding: '9px 16px', border: '1px solid var(--gold)',
                 background: 'none', cursor: 'pointer',
-                fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.1em',
+                fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
                 textTransform: 'uppercase', color: 'var(--gold)',
               }}>
                 CREATE TOURNAMENT
               </button>
               <button onClick={() => setShowUpload(true)} style={{
-                padding: '7px 16px', border: '1px solid var(--ink)',
+                padding: '9px 18px', border: '1px solid var(--ink)',
                 background: 'var(--ink)', cursor: 'pointer',
-                fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.1em',
+                fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
                 textTransform: 'uppercase', color: 'var(--paper)',
               }}>
                 + UPLOAD BANK
@@ -395,52 +395,52 @@ export default function HostDashboard() {
                 <div key={bank.id} style={{
                   borderRight: '1px solid var(--rule)',
                   borderBottom: '1px solid var(--rule)',
-                  padding: '18px 20px',
-                  display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 14,
+                  padding: '22px 20px',
+                  display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 16,
                 }}>
                   <div>
-                    <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 18, color: 'var(--ink)', margin: '0 0 10px', lineHeight: 1.2 }}>
+                    <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 20, color: 'var(--ink)', margin: '0 0 12px', lineHeight: 1.2 }}>
                       {bank.title}
                     </h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', padding: '2px 8px', border: '1px solid var(--rule)' }}>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)', padding: '3px 10px', border: '1px solid var(--rule)' }}>
                         {bank.question_count} سؤال
                       </span>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', padding: '2px 8px', border: '1px solid var(--rule)', textTransform: 'uppercase' }}>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)', padding: '3px 10px', border: '1px solid var(--rule)', textTransform: 'uppercase' }}>
                         {bank.source_type}
                       </span>
                       {bank.source_file_url && (
                         <a href={bank.source_file_url} target="_blank" rel="noreferrer"
                           onClick={e => e.stopPropagation()} style={{
                             display: 'flex', alignItems: 'center', gap: 4,
-                            fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--navy)',
-                            padding: '2px 8px', border: '1px solid var(--navy)',
+                            fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--navy)',
+                            padding: '3px 10px', border: '1px solid var(--navy)',
                             textDecoration: 'none',
                           }}>
-                          <FileText size={10} /> SOURCE
+                          <FileText size={11} /> SOURCE
                         </a>
                       )}
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)', padding: '2px 8px', border: '1px solid var(--rule)' }}>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-4)', padding: '3px 10px', border: '1px solid var(--rule)' }}>
                         {bank.created_at?.seconds ? new Date(bank.created_at.seconds * 1000).toLocaleDateString('ar-EG') : '—'}
                       </span>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <button onClick={() => handleStartGame(bank)} style={{
-                      padding: '9px 0', border: '1px solid var(--ink)', background: 'var(--ink)',
-                      color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 10,
-                      letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer',
+                      padding: '13px 0', border: '1px solid var(--burgundy)', background: 'var(--burgundy)',
+                      color: '#F4F1EA', fontFamily: 'var(--mono)', fontSize: 12,
+                      letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer',
                     }}>▶ HOST GAME</button>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       <button onClick={() => setSelectedBank(bank)} style={{
-                        padding: '8px 0', border: '1px solid var(--navy)', background: 'none',
-                        fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+                        padding: '11px 0', border: '1px solid var(--navy)', background: 'none',
+                        fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: '0.1em',
                         textTransform: 'uppercase', color: 'var(--navy)', cursor: 'pointer',
                       }}>VIEW / EDIT</button>
                       <button onClick={() => handleDelete(bank.id)} disabled={deletingId === bank.id} style={{
-                        padding: '8px 0', border: '1px solid var(--alert)', background: 'none',
-                        fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+                        padding: '11px 0', border: '1px solid var(--alert)', background: 'none',
+                        fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: '0.1em',
                         textTransform: 'uppercase', color: 'var(--alert)', cursor: deletingId === bank.id ? 'not-allowed' : 'pointer',
                         opacity: deletingId === bank.id ? 0.5 : 1,
                       }}>{deletingId === bank.id ? '…' : 'DELETE'}</button>
