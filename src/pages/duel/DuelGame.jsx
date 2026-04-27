@@ -350,9 +350,9 @@ export default function DuelGame({
           }
         }
       )
-      if (!result.committed) nextInProgressRef.current = false
     } catch (e) {
       console.error('triggerNextOrFinish error:', e)
+    } finally {
       nextInProgressRef.current = false
     }
   }, [duelId, duelPath, serverNow])

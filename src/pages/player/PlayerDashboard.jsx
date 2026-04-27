@@ -344,16 +344,16 @@ export default function PlayerDashboard() {
           <div>
             <div style={{
               fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 300,
-              fontSize: 44, lineHeight: 1, color: 'rgba(244,241,234,0.2)', marginBottom: 10,
+              fontSize: 44, lineHeight: 1, color: 'color-mix(in srgb, var(--paper) 20%, transparent)', marginBottom: 10,
             }}>I.</div>
             <h2 style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--paper)', lineHeight: 1.1 }}>
               Join a Room
             </h2>
-            <p className="ar" style={{ fontSize: 13, color: 'rgba(244,241,234,0.45)', margin: '6px 0 0' }}>
+            <p className="ar" style={{ fontSize: 13, color: 'color-mix(in srgb, var(--paper) 45%, transparent)', margin: '6px 0 0' }}>
               أدخل كود الجيم وانضم
             </p>
           </div>
-          <span className="folio" style={{ color: 'rgba(244,241,234,0.3)', marginTop: 2 }}>ENTER →</span>
+          <span className="folio" style={{ color: 'color-mix(in srgb, var(--paper) 30%, transparent)', marginTop: 2 }}>ENTER →</span>
         </Link>
 
         {/* II · Open a Duel */}
