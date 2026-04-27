@@ -1,25 +1,27 @@
-import React from 'react'
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
+import React, { useState } from 'react'
+import { signInWithRedirect, GoogleAuthProvider } from 'firebase/auth'
 import { auth } from '../../lib/firebase'
 
 const provider = new GoogleAuthProvider()
 
 export default function GoogleSignInButton() {
+  const [loading, setLoading] = useState(false)
+
   const handleSignIn = async () => {
     try {
-      await signInWithPopup(auth, provider)
-      // onAuthStateChanged in authStore handles the rest
+      setLoading(true)
+      await signInWithRedirect(auth, provider)
     } catch (err) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        console.error('Error signing in:', err.message)
-      }
+      console.error('Error signing in:', err.message)
+      setLoading(false)
     }
   }
 
   return (
     <button
       onClick={handleSignIn}
-      className="flex items-center justify-center gap-3 rounded-xl bg-white px-8 py-4 font-bold text-[#0A0E1A] transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+      disabled={loading}
+      className="flex items-center justify-center gap-3 rounded-xl bg-white px-8 py-4 font-bold text-[#0A0E1A] transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.2)] disabled:opacity-60 disabled:cursor-not-allowed"
     >
       <div className="w-6 h-6">
         <svg viewBox="0 0 24 24">
@@ -29,7 +31,7 @@ export default function GoogleSignInButton() {
           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
         </svg>
       </div>
-      <span>Sign in with Google</span>
+      <span>{loading ? 'Redirecting…' : 'Sign in with Google'}</span>
     </button>
   )
 }

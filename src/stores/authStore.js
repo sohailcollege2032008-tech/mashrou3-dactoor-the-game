@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth'
+import { onAuthStateChanged, signOut as firebaseSignOut, getRedirectResult } from 'firebase/auth'
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 
@@ -28,6 +28,11 @@ export const useAuthStore = create((set, get) => ({
 
   initialize: () => {
     if (get().initialized) return
+
+    // Handle redirect result first (fires once after Google redirects back)
+    getRedirectResult(auth).catch((err) => {
+      console.error('[AuthStore] getRedirectResult error:', err)
+    })
 
     // Firebase handles session persistence automatically
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
