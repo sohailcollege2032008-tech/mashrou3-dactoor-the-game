@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
-import { Swords, RotateCcw, Trophy, Zap, X, Bell, CheckCheck } from 'lucide-react'
+import { RotateCcw, Trophy, Zap, X, Bell, CheckCheck } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useAuthStore } from '../../stores/authStore'
 import { ref as rtdbRef, get as rtdbGet } from 'firebase/database'
@@ -10,19 +10,14 @@ import {
 } from 'firebase/firestore'
 import { db, rtdb } from '../../lib/firebase'
 
-/* ── Small brand lockup for top-bar ──────────────────────────────────────── */
-function MRMark({ size = 32 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
-      <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
-      <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
-        fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
-    </svg>
-  )
+function formatDate() {
+  const now = new Date()
+  const days   = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY']
+  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC']
+  return `${days[now.getDay()]} · ${now.getDate()} ${months[now.getMonth()]}`
 }
 
-/* ── Notification panel ───────────────────────────────────────────────────── */
+/* ── Notification Panel ─────────────────────────────────────────────────────── */
 function NotificationPanel({ notifications, uid, onClose, onMarkAllRead }) {
   return createPortal(
     <>
@@ -30,35 +25,28 @@ function NotificationPanel({ notifications, uid, onClose, onMarkAllRead }) {
       <div style={{
         position: 'fixed', top: 64, right: 16, width: 300,
         background: 'var(--paper)', border: '1px solid var(--rule)',
-        borderRadius: 'var(--r-md)', boxShadow: 'var(--shadow-3)',
-        zIndex: 49999, overflow: 'hidden',
+        boxShadow: 'var(--shadow-3)', zIndex: 49999, overflow: 'hidden',
       }}>
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--rule)' }}>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', padding: 4 }}>
             <X size={14} />
           </button>
-          <span className="ar" style={{ fontFamily: 'var(--arabic)', fontWeight: 600, fontSize: 14, color: 'var(--ink)' }}>الإشعارات</span>
+          <span className="ar" style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink)' }}>الإشعارات</span>
         </div>
 
-        {/* Items */}
         <div style={{ maxHeight: 320, overflowY: 'auto' }}>
           {notifications.length === 0 ? (
-            <p className="ar" style={{ color: 'var(--ink-4)', fontSize: 13, textAlign: 'center', padding: '32px 16px', fontFamily: 'var(--arabic)' }}>لا توجد إشعارات</p>
+            <p className="ar" style={{ color: 'var(--ink-4)', fontSize: 13, textAlign: 'center', padding: '32px 16px' }}>لا توجد إشعارات</p>
           ) : notifications.map(n => (
-            <div key={n.id} style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid var(--rule)',
-              background: !n.read ? 'rgba(156,59,46,0.04)' : 'transparent',
-            }}>
+            <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', background: !n.read ? 'rgba(156,59,46,0.04)' : 'transparent' }}>
               {n.type === 'game_finished' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, textAlign: 'right' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                     {!n.read && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--burgundy)', flexShrink: 0 }} />}
-                    <span style={{ fontFamily: 'var(--arabic)', fontWeight: 600, fontSize: 13, color: 'var(--ink)' }} className="ar">{n.room_title}</span>
+                    <span className="ar" style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{n.room_title}</span>
                     <Trophy size={12} style={{ color: 'var(--gold)', flexShrink: 0 }} />
                   </div>
-                  <p className="ar" style={{ fontFamily: 'var(--arabic)', fontSize: 12, color: 'var(--ink-3)' }}>
+                  <p className="ar" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
                     مرتبتك: <strong style={{ color: 'var(--ink)' }}>#{n.my_rank}</strong>
                     {' '}· نقاطك: <strong style={{ color: 'var(--burgundy)' }}>{n.my_score}</strong>
                     {' '}من {n.total_players} لاعب
@@ -68,7 +56,7 @@ function NotificationPanel({ notifications, uid, onClose, onMarkAllRead }) {
                       {n.full_leaderboard.slice(0, 5).map(p => (
                         <div key={p.user_id} style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          fontSize: 11, padding: '2px 6px', borderRadius: 'var(--r-xs)',
+                          fontSize: 11, padding: '2px 6px',
                           background: p.user_id === uid ? 'rgba(156,59,46,0.08)' : 'transparent',
                           color: p.user_id === uid ? 'var(--burgundy)' : 'var(--ink-3)',
                         }}>
@@ -90,7 +78,6 @@ function NotificationPanel({ notifications, uid, onClose, onMarkAllRead }) {
           ))}
         </div>
 
-        {/* Footer */}
         {notifications.length > 0 && (
           <div style={{ padding: '10px 16px', borderTop: '1px solid var(--rule)' }}>
             <button onClick={onMarkAllRead} className="ar" style={{
@@ -108,8 +95,7 @@ function NotificationPanel({ notifications, uid, onClose, onMarkAllRead }) {
   )
 }
 
-/* ── Page ─────────────────────────────────────────────────────────────────── */
-
+/* ── Constants ────────────────────────────────────────────────────────────── */
 const TOURNAMENT_STATUS_AR = {
   registration: 'قيد التسجيل — انتظر البدء',
   ffa:          'FFA جارية — ادخل الآن',
@@ -118,6 +104,7 @@ const TOURNAMENT_STATUS_AR = {
   finished:     'انتهت البطولة',
 }
 
+/* ── Page ─────────────────────────────────────────────────────────────────── */
 export default function PlayerDashboard() {
   const { profile, session } = useAuth()
   const navigate = useNavigate()
@@ -196,8 +183,11 @@ export default function PlayerDashboard() {
     ? activeDuel.status === 'waiting' ? `/duel/lobby/${activeDuel.id}` : `/duel/game/${activeDuel.id}`
     : null
 
-  const unreadCount = notifications.filter(n => !n.read).length
-  const firstName   = profile?.display_name?.split(' ')[0] || 'Scholar'
+  const unreadCount      = notifications.filter(n => !n.read).length
+  const firstName        = profile?.display_name?.split(' ')[0] || 'Scholar'
+  const showTournament   = activeTournament && tournamentDest && !tournamentEliminated
+  const showDuelRejoin   = activeDuel && rejoinPath
+  const hasActiveBanners = showTournament || showDuelRejoin
 
   return (
     <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
@@ -205,37 +195,32 @@ export default function PlayerDashboard() {
       {/* ── Masthead ───────────────────────────────────────────────────── */}
       <header style={{
         borderBottom: '3px double var(--rule-strong)',
-        padding: '14px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
+        padding: '13px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
       }}>
-        {/* Left: MR mark + name */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-          <MRMark size={32} />
-          <div>
-            <p style={{ fontFamily: 'var(--serif)', fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0, lineHeight: 1 }}>
-              {firstName}
-            </p>
-            <p className="folio" style={{ marginTop: 2 }}>Scholar</p>
-          </div>
-        </div>
+        <span className="folio" style={{ flex: 1 }}>Scholar</span>
 
-        {/* Center: folio label */}
-        <span className="folio" style={{ textAlign: 'center' }}>Med Royale</span>
+        {/* Monogram */}
+        <svg width={30} height={30} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Med Royale">
+          <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
+          <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
+          <circle cx="50" cy="6"  r="1.6" fill="var(--ink)" opacity="0.4" />
+          <circle cx="50" cy="94" r="1.6" fill="var(--ink)" opacity="0.4" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
 
-        {/* Right: bell + avatar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'flex-end' }}>
+          {/* Bell */}
           <button
             onClick={() => { setShowNotifications(v => !v); if (!showNotifications) markAllRead() }}
             style={{
               position: 'relative', background: 'none', border: '1px solid var(--rule)',
-              borderRadius: 'var(--r-sm)', padding: '7px 9px', cursor: 'pointer', color: 'var(--ink-3)',
+              padding: '6px 8px', cursor: 'pointer', color: 'var(--ink-3)',
               display: 'flex', alignItems: 'center',
             }}
           >
-            <Bell size={15} />
+            <Bell size={14} />
             {unreadCount > 0 && (
               <span style={{
                 position: 'absolute', top: -5, right: -5,
@@ -247,12 +232,13 @@ export default function PlayerDashboard() {
             )}
           </button>
 
+          {/* Avatar → profile */}
           <Link to="/player/profile" style={{ display: 'block', flexShrink: 0 }}>
             {profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt="" style={{ width: 36, height: 36, borderRadius: '50%', border: '1.5px solid var(--ink)', objectFit: 'cover' }} />
+              <img src={profile.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: '50%', border: '1.5px solid var(--ink)', objectFit: 'cover' }} />
             ) : (
-              <div style={{ width: 36, height: 36, borderRadius: '50%', border: '1.5px solid var(--ink)', background: 'var(--paper-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', border: '1.5px solid var(--ink)', background: 'var(--paper-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontFamily: 'var(--serif)', fontSize: 12, fontWeight: 500, color: 'var(--ink)' }}>
                   {(profile?.display_name || '?').slice(0, 2).toUpperCase()}
                 </span>
               </div>
@@ -270,127 +256,165 @@ export default function PlayerDashboard() {
         />
       )}
 
-      {/* ── Main ───────────────────────────────────────────────────────── */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px 20px', gap: 12, maxWidth: 480, width: '100%', margin: '0 auto' }}>
+      {/* ── Welcome ────────────────────────────────────────────────────── */}
+      <div style={{ padding: '28px 20px 22px', borderBottom: '1px solid var(--rule)' }}>
+        <p className="folio" style={{ marginBottom: 12 }}>{formatDate()}</p>
+        <h1 style={{
+          fontFamily: 'var(--serif)', fontWeight: 400,
+          fontSize: 'clamp(34px, 8vw, 64px)', lineHeight: 1.0,
+          letterSpacing: '-0.025em', margin: 0, color: 'var(--ink)',
+        }}>
+          Welcome back,<br />
+          <em style={{ fontWeight: 300, color: 'var(--burgundy)' }}>{firstName}.</em>
+        </h1>
+      </div>
 
-        {/* Active tournament banner */}
-        {activeTournament && tournamentDest && !tournamentEliminated && (
-          <div style={{
-            background: activeTournament.status === 'ffa' ? 'rgba(176,137,68,0.08)' : 'rgba(156,59,46,0.06)',
-            border: `1px solid ${activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)'}`,
-            borderRadius: 'var(--r-md)',
-            padding: '14px 16px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 'var(--r-sm)', background: activeTournament.status === 'ffa' ? 'rgba(176,137,68,0.15)' : 'rgba(156,59,46,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {activeTournament.status === 'ffa'
-                  ? <Zap size={18} style={{ color: 'var(--gold)' }} />
-                  : <Trophy size={18} style={{ color: 'var(--burgundy)' }} />
-                }
+      {/* ── Active banners ─────────────────────────────────────────────── */}
+      {hasActiveBanners && (
+        <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 8, borderBottom: '1px solid var(--rule)' }}>
+
+          {showTournament && (
+            <div style={{
+              border: `1px solid ${activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)'}`,
+              padding: '12px 14px',
+              background: activeTournament.status === 'ffa' ? 'rgba(176,137,68,0.05)' : 'rgba(156,59,46,0.04)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ color: activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)', flexShrink: 0 }}>
+                  {activeTournament.status === 'ffa' ? <Zap size={15} /> : <Trophy size={15} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p className="ar" style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)', margin: 0 }}>{activeTournament.title}</p>
+                  <p className="ar" style={{ fontSize: 11, margin: '2px 0 0', color: activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)' }}>
+                    {TOURNAMENT_STATUS_AR[activeTournament.status] || activeTournament.status}
+                  </p>
+                </div>
+                {activeTournament.status === 'finished' && (
+                  <button onClick={() => { localStorage.removeItem('activeTournamentId'); setActiveTournament(null) }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 4 }}>
+                    <X size={13} />
+                  </button>
+                )}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p className="ar" style={{ fontFamily: 'var(--arabic)', fontWeight: 600, fontSize: 13, color: 'var(--ink)', margin: 0 }}>{activeTournament.title}</p>
-                <p className="ar" style={{ fontFamily: 'var(--arabic)', fontSize: 11, color: activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)', margin: '2px 0 0' }}>
-                  {TOURNAMENT_STATUS_AR[activeTournament.status] || activeTournament.status}
-                </p>
-              </div>
-              {activeTournament.status === 'finished' && (
-                <button onClick={() => { localStorage.removeItem('activeTournamentId'); setActiveTournament(null) }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 4 }}>
-                  <X size={13} />
+              {activeTournament.status !== 'finished' && (
+                <button onClick={() => navigate(tournamentDest)} className="ar" style={{
+                  width: '100%', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '9px 14px', fontSize: 13, fontWeight: 500, fontFamily: 'var(--arabic)',
+                  background: activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)',
+                  color: 'var(--paper)', border: 'none', cursor: 'pointer',
+                  transition: 'opacity 150ms',
+                }}>
+                  {activeTournament.status === 'ffa' ? 'ادخل FFA الآن' : 'متابعة البطولة'}
                 </button>
               )}
             </div>
-            {activeTournament.status !== 'finished' && (
-              <button onClick={() => navigate(tournamentDest)} className="btn btn-sm ar" style={{
-                width: '100%', marginTop: 10, justifyContent: 'center',
-                background: activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)',
-                color: 'var(--paper)', borderColor: 'transparent',
-                fontFamily: 'var(--arabic)',
-              }}>
-                {activeTournament.status === 'ffa' ? 'ادخل FFA الآن' : 'متابعة البطولة'}
-              </button>
-            )}
-          </div>
-        )}
+          )}
 
-        {/* Active duel rejoin */}
-        {activeDuel && rejoinPath && (
-          <button onClick={() => navigate(rejoinPath)} style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-            background: 'rgba(176,137,68,0.06)', border: '1px solid var(--gold)',
-            borderRadius: 'var(--r-md)', padding: '14px 16px', cursor: 'pointer',
-            transition: 'all 150ms var(--ease-out)',
-          }}>
-            <div style={{ width: 36, height: 36, borderRadius: 'var(--r-sm)', background: 'rgba(176,137,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <RotateCcw size={17} style={{ color: 'var(--gold)' }} />
-            </div>
-            <div style={{ flex: 1, textAlign: 'right' }}>
-              <p className="ar" style={{ fontFamily: 'var(--arabic)', fontWeight: 600, fontSize: 13, color: 'var(--ink)', margin: 0 }}>لديك دويل جارٍ</p>
-              <p className="ar" style={{ fontFamily: 'var(--arabic)', fontSize: 11, color: 'var(--ink-3)', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeDuel.deck_title}</p>
-            </div>
-            <span className="tag tag-gold">انضم</span>
-          </button>
-        )}
-
-        {/* ── Primary action: Join a Room ────────────────────────────── */}
-        <Link to="/player/join" style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
-          background: 'var(--ink)', color: 'var(--paper)',
-          border: '1px solid var(--ink)', borderRadius: 'var(--r-md)',
-          padding: '32px 24px', textDecoration: 'none',
-          transition: 'all 150ms var(--ease-out)',
-        }}>
-          <p style={{ fontFamily: 'var(--serif)', fontSize: 'clamp(28px, 6vw, 40px)', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--paper)', margin: 0, lineHeight: 1 }}>
-            Join a Room
-          </p>
-          <div style={{ width: 40, height: 1, background: 'rgba(244,241,234,0.2)' }} />
-          <p className="ar" style={{ fontFamily: 'var(--arabic)', fontSize: 13, color: 'rgba(244,241,234,0.6)', margin: 0 }}>
-            أدخل كود الجيم وانضم
-          </p>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em', color: 'rgba(244,241,234,0.4)', textTransform: 'uppercase' }}>→ Enter</span>
-        </Link>
-
-        {/* ── Secondary actions ──────────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-
-          {/* Tournament */}
-          <Link to="/tournament/join" style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-            border: '1px solid var(--rule)', borderRadius: 'var(--r-md)',
-            padding: '20px 16px', textDecoration: 'none', background: 'var(--paper)',
-            transition: 'all 150ms var(--ease-out)',
-          }}>
-            <Trophy size={22} style={{ color: 'var(--gold)' }} />
-            <div style={{ textAlign: 'center' }}>
-              <p className="ar" style={{ fontFamily: 'var(--arabic)', fontWeight: 600, fontSize: 14, color: 'var(--ink)', margin: 0 }}>بطولة</p>
-              <p className="folio" style={{ marginTop: 4 }}>انضم بكود</p>
-            </div>
-          </Link>
-
-          {/* Duel */}
-          <Link to="/player/decks" style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-            border: '1px solid var(--rule)', borderRadius: 'var(--r-md)',
-            padding: '20px 16px', textDecoration: 'none', background: 'var(--paper)',
-            transition: 'all 150ms var(--ease-out)',
-          }}>
-            <Swords size={22} style={{ color: 'var(--navy)' }} />
-            <div style={{ textAlign: 'center' }}>
-              <p className="ar" style={{ fontFamily: 'var(--arabic)', fontWeight: 600, fontSize: 14, color: 'var(--ink)', margin: 0 }}>دويل</p>
-              <p className="folio" style={{ marginTop: 4 }}>1v1 مع زميلك</p>
-            </div>
-          </Link>
+          {showDuelRejoin && (
+            <button onClick={() => navigate(rejoinPath)} style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+              background: 'rgba(176,137,68,0.05)', border: '1px solid var(--gold)',
+              padding: '12px 14px', cursor: 'pointer',
+              transition: 'background 150ms var(--ease-out)',
+            }}>
+              <RotateCcw size={14} style={{ color: 'var(--gold)', flexShrink: 0 }} />
+              <div style={{ flex: 1, textAlign: 'right' }}>
+                <p className="ar" style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)', margin: 0 }}>لديك دويل جارٍ</p>
+                <p className="ar" style={{ fontSize: 11, color: 'var(--ink-3)', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeDuel.deck_title}</p>
+              </div>
+              <span className="tag tag-gold" style={{ fontSize: 10 }}>انضم</span>
+            </button>
+          )}
 
         </div>
+      )}
+
+      {/* ── Actions — editorial numbered sections ──────────────────────── */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+
+        {/* Chapter rule */}
+        <div style={{ height: 2, background: 'var(--ink)' }} />
+
+        {/* I · Join a Room */}
+        <Link to="/player/join" style={{
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+          padding: '22px 20px', borderBottom: '1px solid var(--rule)',
+          background: 'var(--ink)', textDecoration: 'none',
+        }}>
+          <div>
+            <div style={{
+              fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 300,
+              fontSize: 44, lineHeight: 1, color: 'rgba(244,241,234,0.2)', marginBottom: 10,
+            }}>I.</div>
+            <h2 style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--paper)', lineHeight: 1.1 }}>
+              Join a Room
+            </h2>
+            <p className="ar" style={{ fontSize: 13, color: 'rgba(244,241,234,0.45)', margin: '6px 0 0' }}>
+              أدخل كود الجيم وانضم
+            </p>
+          </div>
+          <span className="folio" style={{ color: 'rgba(244,241,234,0.3)', marginTop: 2 }}>ENTER →</span>
+        </Link>
+
+        {/* II · Open a Duel */}
+        <Link to="/player/decks" style={{
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+          padding: '22px 20px', borderBottom: '1px solid var(--rule)',
+          background: 'var(--paper)', textDecoration: 'none',
+          transition: 'background 150ms var(--ease-out)',
+        }}>
+          <div>
+            <div style={{
+              fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 300,
+              fontSize: 44, lineHeight: 1, color: 'var(--burgundy)', opacity: 0.35, marginBottom: 10,
+            }}>II.</div>
+            <h2 style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)', lineHeight: 1.1 }}>
+              Open a Duel
+            </h2>
+            <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: '6px 0 0' }}>
+              1v1 مع زميلك
+            </p>
+          </div>
+          <span className="folio" style={{ color: 'var(--burgundy)', opacity: 0.55, marginTop: 2 }}>DUEL →</span>
+        </Link>
+
+        {/* III · Join a Tournament */}
+        <Link to="/tournament/join" style={{
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+          padding: '22px 20px',
+          background: 'var(--paper)', textDecoration: 'none',
+          transition: 'background 150ms var(--ease-out)',
+        }}>
+          <div>
+            <div style={{
+              fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 300,
+              fontSize: 44, lineHeight: 1, color: 'var(--gold)', opacity: 0.35, marginBottom: 10,
+            }}>III.</div>
+            <h2 style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)', lineHeight: 1.1 }}>
+              Join a Tournament
+            </h2>
+            <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: '6px 0 0' }}>
+              انضم بكود البطولة
+            </p>
+          </div>
+          <span className="folio" style={{ color: 'var(--gold)', opacity: 0.55, marginTop: 2 }}>ENTER →</span>
+        </Link>
 
       </main>
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
-      <footer className="rule" style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <footer style={{
+        borderTop: '1px solid var(--rule)',
+        padding: '12px 20px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
         <button
           onClick={() => useAuthStore.getState().signOut()}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-4)' }}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+            textTransform: 'uppercase', color: 'var(--ink-4)',
+          }}
         >
           Sign Out
         </button>
