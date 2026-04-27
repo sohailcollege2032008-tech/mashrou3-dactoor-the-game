@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { signInWithRedirect, GoogleAuthProvider } from 'firebase/auth'
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import { auth } from '../../lib/firebase'
 
 const provider = new GoogleAuthProvider()
@@ -10,7 +10,8 @@ export default function GoogleSignInButton() {
   const handleSignIn = async () => {
     try {
       setLoading(true)
-      await signInWithRedirect(auth, provider)
+      await signInWithPopup(auth, provider)
+      // onAuthStateChanged in authStore will handle the rest
     } catch (err) {
       console.error('Error signing in:', err.message)
       setLoading(false)
