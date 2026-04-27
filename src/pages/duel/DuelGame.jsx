@@ -116,7 +116,8 @@ export default function DuelGame({
 
   useEffect(() => {
     const unsub = onValue(rtdbRef(rtdb, '.info/serverTimeOffset'), snap => {
-      serverOffsetRef.current = snap.val() ?? 0
+      const val = snap.val()
+      serverOffsetRef.current = Number.isFinite(val) ? val : 0
     })
     return () => unsub()
   }, [])
@@ -179,17 +180,12 @@ export default function DuelGame({
     }
   }, [opponentConnected, duelId, duelPath, uid])
 
-  const lastQiRef = useRef(null)
   useEffect(() => {
     if (!duel) return
-    const qi = duel.current_question_index
-    if (qi !== lastQiRef.current) {
-      lastQiRef.current = qi
-      setSelectedChoice(null)
-      setHasAnswered(false)
-      revealInProgressRef.current = false
-      nextInProgressRef.current   = false
-    }
+    setSelectedChoice(null)
+    setHasAnswered(false)
+    revealInProgressRef.current = false
+    nextInProgressRef.current   = false
   }, [duel?.current_question_index])
 
   useEffect(() => {
@@ -363,11 +359,12 @@ export default function DuelGame({
 
   useEffect(() => {
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
-    if (!duel || duel.status !== 'playing' || !duel.question_started_at) {
+    if (!duel || duel.status !== 'playing') {
       setTimerPct(1); return
     }
+    const startedAt = duel.question_started_at || serverNow()
     const tick = () => {
-      const elapsed = serverNow() - duel.question_started_at
+      const elapsed = serverNow() - startedAt
       const pct     = Math.max(0, 1 - elapsed / activeDurationMs)
       setTimerPct(pct)
       if (pct <= 0) {
@@ -407,8 +404,8 @@ export default function DuelGame({
 
   const submitAnswer = useCallback(async (choiceIndex) => {
     if (isObserver || hasAnswered || !duel || duel.status !== 'playing' || !uid) return
-    if (!duel.question_started_at) return
-    const reactionTimeMs = serverNow() - duel.question_started_at
+    const startedAt = duel.question_started_at || serverNow()
+    const reactionTimeMs = serverNow() - startedAt
     setSelectedChoice(choiceIndex)
     setHasAnswered(true)
     const qi = duel.current_question_index
