@@ -5,62 +5,107 @@ import GoogleSignInButton from '../components/auth/GoogleSignInButton'
 
 /* ── Brand Components ─────────────────────────────────────────────────────── */
 
-function MRMonogram({ size = 48, variant = 'outline' }) {
-  const isDark = variant === 'filled'
-  const bg       = isDark ? '#1A1A1A' : 'none'
-  const stroke   = isDark ? '#F4F1EA' : '#1A1A1A'
-  const textFill = isDark ? '#F4F1EA' : '#1A1A1A'
+function MRMonogram({ size = 64, color = 'var(--ink)', bg = 'transparent', filled = false }) {
+  const stroke = Math.max(1.5, size * 0.02);
+  const inner = filled ? 'var(--paper)' : color;
+  const fill = filled ? color : bg;
+  
+  // Unique ID for pattern to avoid collisions
+  const patternId = React.useId().replace(/:/g, '');
+
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="MR monogram">
-      {isDark && <circle cx="50" cy="50" r="50" fill="#1A1A1A" />}
-      <circle cx="50" cy="50" r="46" stroke={stroke} strokeWidth="1.5" fill={bg} />
-      <circle cx="50" cy="50" r="40" stroke={stroke} strokeWidth="0.75" opacity="0.4" />
-      <circle cx="50" cy="6"  r="1.8" fill={stroke} opacity="0.5" />
-      <circle cx="50" cy="94" r="1.8" fill={stroke} opacity="0.5" />
+    <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: 'block', borderRadius: filled ? 'var(--r-sm)' : '0' }}>
+      {filled && (
+        <defs>
+          <pattern id={patternId} x="0" y="0" width="25" height="25" patternUnits="userSpaceOnUse">
+            <rect x="0" y="0" width="12.5" height="12.5" fill="#0A0A0A"/>
+            <rect x="12.5" y="12.5" width="12.5" height="12.5" fill="#0A0A0A"/>
+            <rect x="12.5" y="0" width="12.5" height="12.5" fill="#141414"/>
+            <rect x="0" y="12.5" width="12.5" height="12.5" fill="#141414"/>
+          </pattern>
+        </defs>
+      )}
+      {filled && <rect width="100" height="100" fill={`url(#${patternId})`} />}
+      
+      <circle cx="50" cy="50" r={filled ? 44 : 48} fill={fill} stroke={color} strokeWidth={stroke} />
+      <circle cx="50" cy="50" r={filled ? 38 : 42} fill="none" stroke={color} strokeWidth={stroke * 0.5} opacity={filled ? 0.25 : 0.4} />
       <text
-        x="50" y="50"
+        x="50" y="55"
         textAnchor="middle"
-        dominantBaseline="central"
-        fontFamily="Fraunces, Georgia, serif"
-        fontSize="34"
+        dominantBaseline="middle"
+        fontFamily="var(--serif)"
+        fontSize="38"
         fontWeight="500"
-        fill={textFill}
-      >MR</text>
+        fill={inner}
+        style={{ fontVariationSettings: '"opsz" 144' }}
+      >
+        M<tspan dx="-4" fontStyle="italic" fontWeight="400">R</tspan>
+      </text>
+      <path d={`M 35 16 L 40 20 M 65 16 L 60 20`} stroke={inner} strokeWidth={stroke * 0.7} fill="none" opacity={filled ? 0.6 : 0.8} />
+      <circle cx="50" cy={filled ? 80 : 84} r="1.6" fill={inner} opacity={filled ? 0.6 : 0.8} />
     </svg>
-  )
+  );
 }
 
-function Wordmark({ scale = 1 }) {
+function Wordmark({ size = 'md', color = 'var(--ink)', subtitle = true }) {
+  const scale = { sm: 0.8, md: 1, lg: 1.4, xl: 2 }[size] || 1;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{
-        fontFamily: 'Fraunces, Georgia, serif',
+    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', color, lineHeight: 1 }}>
+      <div style={{
+        fontFamily: 'var(--serif)',
         fontSize: `${22 * scale}px`,
         fontWeight: 500,
         letterSpacing: '0.18em',
-        color: 'var(--ink)',
-        lineHeight: 1,
-        textTransform: 'uppercase',
-      }}>Med Royale</span>
-      <span style={{
-        fontFamily: 'var(--mono)',
-        fontSize: `${8 * scale}px`,
-        letterSpacing: '0.12em',
-        color: 'var(--ink-3)',
-        textTransform: 'uppercase',
-      }}>Quiz Arena · Est. 2025</span>
+        fontVariationSettings: '"opsz" 48, "SOFT" 0',
+      }}>
+        MED<span style={{ margin: `0 ${0.3 * scale}em`, fontStyle: 'italic', fontWeight: 300, letterSpacing: 0 }}>·</span>ROYALE
+      </div>
+      {subtitle && (
+        <div style={{
+          fontFamily: 'var(--mono)',
+          fontSize: `${8 * scale}px`,
+          letterSpacing: '0.28em',
+          color: 'currentColor',
+          opacity: 0.7,
+          marginTop: `${4 * scale}px`,
+          textTransform: 'uppercase',
+        }}>
+          An Academic Quiz Arena · Est. 2025
+        </div>
+      )}
     </div>
-  )
+  );
 }
 
-function Lockup({ monogramSize = 40, scale = 1 }) {
+function Lockup({ size = 'md', color = 'var(--ink)' }) {
+  const mgSize = { sm: 28, md: 36, lg: 48 }[size] || 36;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <MRMonogram size={monogramSize} />
-      <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--ink)', opacity: 0.2, margin: '6px 0' }} />
-      <Wordmark scale={scale} />
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, color }}>
+      <MRMonogram size={mgSize} color={color} />
+      <div style={{ borderLeft: `1px solid ${color}`, opacity: 0.25, height: mgSize * 0.7 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
+        <div style={{
+          fontFamily: 'var(--serif)',
+          fontSize: mgSize * 0.44,
+          fontWeight: 500,
+          letterSpacing: '0.12em',
+          fontVariationSettings: '"opsz" 48',
+        }}>
+          MED ROYALE
+        </div>
+        <div style={{
+          fontFamily: 'var(--mono)',
+          fontSize: mgSize * 0.22,
+          letterSpacing: '0.2em',
+          opacity: 0.6,
+          marginTop: 3,
+          textTransform: 'uppercase',
+        }}>
+          Quiz Arena
+        </div>
+      </div>
     </div>
-  )
+  );
 }
 
 /* ── Page ─────────────────────────────────────────────────────────────────── */
@@ -107,7 +152,7 @@ export default function Landing() {
         gap: 16,
       }}>
         <span className="folio" style={{ flex: 1 }}>Academic · Quiz Arena</span>
-        <Lockup monogramSize={40} scale={1} />
+        <Lockup size="md" />
         <span className="folio" style={{ flex: 1, textAlign: 'right' }}>Est. 2025</span>
       </header>
 
