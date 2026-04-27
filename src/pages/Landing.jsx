@@ -1,132 +1,260 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import { useAuthStore } from '../stores/authStore'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
 
+/* ── Brand Components ─────────────────────────────────────────────────────── */
+
+function MRMonogram({ size = 48, variant = 'outline' }) {
+  const isDark = variant === 'filled'
+  const bg       = isDark ? '#1A1A1A' : 'none'
+  const stroke   = isDark ? '#F4F1EA' : '#1A1A1A'
+  const textFill = isDark ? '#F4F1EA' : '#1A1A1A'
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="MR monogram">
+      {isDark && <circle cx="50" cy="50" r="50" fill="#1A1A1A" />}
+      <circle cx="50" cy="50" r="46" stroke={stroke} strokeWidth="1.5" fill={bg} />
+      <circle cx="50" cy="50" r="40" stroke={stroke} strokeWidth="0.75" opacity="0.4" />
+      <circle cx="50" cy="6"  r="1.8" fill={stroke} opacity="0.5" />
+      <circle cx="50" cy="94" r="1.8" fill={stroke} opacity="0.5" />
+      <text
+        x="50" y="50"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontFamily="Fraunces, Georgia, serif"
+        fontSize="34"
+        fontWeight="500"
+        fill={textFill}
+      >MR</text>
+    </svg>
+  )
+}
+
+function Wordmark({ scale = 1 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{
+        fontFamily: 'Fraunces, Georgia, serif',
+        fontSize: `${22 * scale}px`,
+        fontWeight: 500,
+        letterSpacing: '0.18em',
+        color: 'var(--ink)',
+        lineHeight: 1,
+        textTransform: 'uppercase',
+      }}>Med Royale</span>
+      <span style={{
+        fontFamily: 'var(--mono)',
+        fontSize: `${8 * scale}px`,
+        letterSpacing: '0.12em',
+        color: 'var(--ink-3)',
+        textTransform: 'uppercase',
+      }}>Quiz Arena · Est. 2025</span>
+    </div>
+  )
+}
+
+function Lockup({ monogramSize = 40, scale = 1 }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <MRMonogram size={monogramSize} />
+      <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--ink)', opacity: 0.2, margin: '6px 0' }} />
+      <Wordmark scale={scale} />
+    </div>
+  )
+}
+
+/* ── Page ─────────────────────────────────────────────────────────────────── */
+
 export default function Landing() {
-  const session = useAuthStore(state => state.session)
-  const profile = useAuthStore(state => state.profile)
+  const session     = useAuthStore(state => state.session)
+  const profile     = useAuthStore(state => state.profile)
   const initialized = useAuthStore(state => state.initialized)
   const [isRetrying, setIsRetrying] = useState(false)
   const navigate = useNavigate()
 
-  // Auto-redirect if already logged in
   React.useEffect(() => {
     if (initialized && session && profile) {
-      const targetPath = profile.role === 'owner' 
-        ? '/owner/dashboard' 
-        : profile.role === 'host' 
-        ? '/host/dashboard' 
-        : '/player/dashboard'
-      
-      // Only redirect if we are exactly on "/"
-      if (window.location.pathname === '/') {
-        navigate(targetPath, { replace: true })
-      }
+      const target =
+        profile.role === 'owner' ? '/owner/dashboard' :
+        profile.role === 'host'  ? '/host/dashboard'  : '/player/dashboard'
+      if (window.location.pathname === '/') navigate(target, { replace: true })
     }
   }, [initialized, session, profile, navigate])
 
   const handleSignOut = () => useAuthStore.getState().signOut()
-
-  const handleRetry = async () => {
+  const handleRetry   = async () => {
     if (!session) return
     setIsRetrying(true)
     await useAuthStore.getState().fetchProfile(session)
     setIsRetrying(false)
   }
 
+  const roleLabel    = profile?.role === 'owner' ? 'Owner' : profile?.role === 'host' ? 'Host' : 'Scholar'
+  const roleTagClass = profile?.role === 'owner' ? 'tag tag-gold' : profile?.role === 'host' ? 'tag tag-navy' : 'tag tag-ghost'
+  const dashPath     = profile?.role === 'owner' ? '/owner/dashboard' : profile?.role === 'host' ? '/host/dashboard' : '/player/dashboard'
+  const dashLabel    = profile?.role === 'owner' ? 'Owner Dashboard' : profile?.role === 'host' ? 'Host Dashboard' : 'Enter the Arena'
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6 font-display">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md space-y-8 text-center"
-      >
-        <div className="space-y-4">
-          <h1 className="text-5xl font-bold text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-            Med <span className="text-primary">Royale</span>
+    <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
+
+      {/* ── Masthead ───────────────────────────────────────────────────── */}
+      <header style={{
+        borderBottom: '3px double var(--rule-strong)',
+        padding: '20px 48px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+      }}>
+        <span className="folio" style={{ flex: 1 }}>Academic · Quiz Arena</span>
+        <Lockup monogramSize={40} scale={1} />
+        <span className="folio" style={{ flex: 1, textAlign: 'right' }}>Est. 2025</span>
+      </header>
+
+      {/* ── Hero ───────────────────────────────────────────────────────── */}
+      <main style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '64px 24px',
+      }}>
+        <div style={{ textAlign: 'center', maxWidth: 680, width: '100%' }}>
+
+          {/* Kicker */}
+          <p className="folio" style={{ marginBottom: 28 }}>Mashrou3 Dactoor — The Game</p>
+
+          {/* Headline */}
+          <h1 style={{
+            fontFamily: 'var(--serif)',
+            fontSize: 'clamp(44px, 8vw, 100px)',
+            fontWeight: 400,
+            lineHeight: 0.95,
+            letterSpacing: '-0.025em',
+            color: 'var(--ink)',
+            margin: '0 0 36px',
+          }}>
+            An Academic<br />
+            <em style={{ color: 'var(--burgundy)' }}>Quiz Arena.</em>
           </h1>
-          <p className="text-xl text-gray-400 font-sans">The Ultimate Medical Battleground</p>
-        </div>
 
-        {!initialized ? (
-          <div className="text-primary animate-pulse py-8 font-sans">Loading...</div>
+          {/* Double rule */}
+          <div className="rule-double" style={{ marginBottom: 48 }} />
 
-        ) : !session ? (
-          <div className="pt-8 flex justify-center">
-            <GoogleSignInButton />
-          </div>
+          {/* ── Auth States ──────────────────────────────────────────── */}
 
-        ) : !profile ? (
-          // Session exists but profile missing — offer retry
-          <div className="space-y-4 pt-8 font-sans">
-            <div className="rounded-2xl border border-amber-800/40 bg-amber-900/20 p-5 text-amber-300 text-sm text-center">
-              {isRetrying
-                ? <span className="animate-pulse">⏳ جاري إعادة تحميل بيانات حسابك...</span>
-                : '⚠️ تعذّر تحميل بيانات حسابك. تحقق من الاتصال وحاول مجددًا.'
-              }
+          {!initialized && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--ink-3)' }}>
+              <span style={{
+                display: 'inline-block', width: 16, height: 16,
+                border: '2px solid var(--rule)', borderTopColor: 'var(--ink)',
+                borderRadius: '50%', animation: 'mr-spin 1.2s linear infinite',
+              }} />
+              <span className="folio">Loading</span>
             </div>
-            <button
-              onClick={handleRetry}
-              disabled={isRetrying}
-              className="w-full rounded-xl bg-primary/10 border border-primary/40 px-6 py-3 font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-            >
-              {isRetrying ? 'جاري المحاولة...' : '🔄 إعادة المحاولة'}
-            </button>
-            <button
-              onClick={handleSignOut}
-              disabled={isRetrying}
-              className="w-full rounded-xl bg-red-500/10 border border-red-500/30 px-6 py-3 font-bold text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50 text-sm"
-            >
-              تسجيل الخروج
-            </button>
-          </div>
+          )}
 
-
-        ) : (
-          <div className="space-y-6 pt-8 font-sans">
-            {/* Profile card */}
-            <div className="rounded-2xl border border-gray-800 bg-gray-900/50 p-6 backdrop-blur-sm">
-              <img
-                src={profile.avatar_url || ''}
-                alt="Profile"
-                className="mx-auto mb-4 h-20 w-20 rounded-full border-2 border-primary object-cover"
-              />
-              <h2 className="text-2xl font-bold text-white">{profile.display_name}</h2>
-              <p className="text-gray-400 mt-1">
-                {profile.role === 'owner' ? '👑 Owner' : profile.role === 'host' ? '🎮 Host' : '🎓 Player'}
+          {initialized && !session && (
+            <div className="card" style={{
+              display: 'inline-flex', flexDirection: 'column',
+              alignItems: 'center', gap: 20, padding: '36px 48px',
+            }}>
+              <p style={{ fontFamily: 'var(--serif)', fontSize: 17, color: 'var(--ink-2)', margin: 0 }}>
+                Sign in to compete
               </p>
+              <GoogleSignInButton />
             </div>
+          )}
 
-            {/* Navigation buttons */}
-            <div className="flex flex-col gap-3">
-              <Link
-                to={profile.role === 'owner' ? '/owner/dashboard' : profile.role === 'host' ? '/host/dashboard' : '/player/dashboard'}
-                className="w-full rounded-xl bg-primary px-6 py-4 font-bold text-background transition-colors hover:bg-[#00D4FF]"
-              >
-                {profile.role === 'owner' ? 'Owner Dashboard' : profile.role === 'host' ? 'Host Dashboard' : 'Join a Game'}
-              </Link>
-
-              {profile.role === 'owner' && (
-                <Link
-                  to="/host/dashboard"
-                  className="w-full rounded-xl bg-white/5 border border-primary/30 px-6 py-4 font-bold text-primary transition-colors hover:bg-primary/10"
-                >
-                  🎮 Host Dashboard
-                </Link>
-              )}
-
-              <button
-                onClick={handleSignOut}
-                className="w-full rounded-xl bg-gray-800/50 border border-gray-700 px-6 py-3 font-bold text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors text-sm"
-              >
+          {initialized && session && !profile && (
+            <div className="card" style={{
+              display: 'inline-flex', flexDirection: 'column',
+              alignItems: 'center', gap: 16, padding: '32px 40px',
+              maxWidth: 360, width: '100%',
+            }}>
+              <span className="tag tag-alert">
+                {isRetrying ? 'جاري المحاولة...' : 'تعذّر تحميل بيانات الحساب'}
+              </span>
+              <p style={{ fontFamily: 'var(--arabic)', color: 'var(--ink-3)', fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+                {isRetrying
+                  ? 'جاري إعادة تحميل بيانات حسابك...'
+                  : 'تحقق من الاتصال وحاول مجددًا.'
+                }
+              </p>
+              <button onClick={handleRetry} disabled={isRetrying} className="btn btn-solid" style={{ width: '100%' }}>
+                إعادة المحاولة
+              </button>
+              <button onClick={handleSignOut} disabled={isRetrying} className="btn btn-sm" style={{ width: '100%', color: 'var(--alert)', borderColor: 'var(--alert)', background: 'transparent' }}>
                 تسجيل الخروج
               </button>
             </div>
-          </div>
-        )}
-      </motion.div>
+          )}
+
+          {initialized && session && profile && (
+            <div className="card" style={{
+              display: 'inline-flex', flexDirection: 'column',
+              alignItems: 'center', gap: 20, padding: '36px 48px', minWidth: 300,
+            }}>
+              {/* Avatar */}
+              <div style={{
+                width: 72, height: 72, borderRadius: '50%',
+                border: '2px solid var(--ink)',
+                overflow: 'hidden',
+                background: 'var(--paper-3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                {profile.avatar_url
+                  ? <img src={profile.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <span style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 500, color: 'var(--ink)' }}>
+                      {(profile.display_name || '?').slice(0, 2).toUpperCase()}
+                    </span>
+                }
+              </div>
+
+              {/* Name + role */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <p style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)', margin: 0, lineHeight: 1.2 }}>
+                  {profile.display_name}
+                </p>
+                <span className={roleTagClass}>{roleLabel}</span>
+              </div>
+
+              {/* Divider */}
+              <div className="rule" style={{ width: '100%' }} />
+
+              {/* Actions */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+                <Link to={dashPath} className="btn btn-burgundy btn-lg" style={{ width: '100%', justifyContent: 'center' }}>
+                  {dashLabel}
+                </Link>
+                {profile.role === 'owner' && (
+                  <Link to="/host/dashboard" className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>
+                    Host Dashboard
+                  </Link>
+                )}
+                <button onClick={handleSignOut} className="btn btn-soft btn-sm" style={{ width: '100%' }}>
+                  تسجيل الخروج
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </main>
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <footer className="rule" style={{
+        padding: '14px 48px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}>
+        <span className="folio">Al-Azhar University · Batch 62</span>
+        <span className="folio">Med Royale · Quiz Arena · Est. 2025</span>
+      </footer>
+
     </div>
   )
 }
