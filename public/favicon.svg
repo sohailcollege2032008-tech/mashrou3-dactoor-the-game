@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Minimalist SVG for maximum transparency compatibility -->
-  <circle cx="50" cy="50" r="48" fill="#1A1A1A"/>
-  <circle cx="50" cy="50" r="42" fill="none" stroke="white" stroke-width="0.5" stroke-opacity="0.2"/>
+  <!-- White Outline Monogram on Transparent Background -->
+  <circle cx="50" cy="50" r="46" fill="none" stroke="white" stroke-width="2"/>
+  <circle cx="50" cy="50" r="40" stroke="white" stroke-width="0.5" stroke-opacity="0.3" fill="none"/>
   
   <text 
-    x="50" y="55" 
+    x="50" y="54" 
     text-anchor="middle" 
     dominant-baseline="middle" 
     font-family="Georgia, serif" 
@@ -13,6 +13,6 @@
     fill="white"
   >M<tspan dx="-3" font-style="italic" font-weight="400">R</tspan></text>
   
-  <path d="M 35 16 L 40 20 M 65 16 L 60 20" stroke="white" stroke-width="1.2" stroke-opacity="0.5" fill="none"/>
-  <circle cx="50" cy="84" r="1.5" fill="white" fill-opacity="0.5"/>
+  <path d="M 36 19 L 40 23 M 64 19 L 60 23" stroke="white" stroke-width="1.2" stroke-opacity="0.6" fill="none"/>
+  <circle cx="50" cy="78" r="1.4" fill="white" fill-opacity="0.6"/>
 </svg>
