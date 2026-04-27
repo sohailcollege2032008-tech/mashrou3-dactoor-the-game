@@ -122,9 +122,6 @@ export default function Landing() {
       }}>
         <div style={{ textAlign: 'center', maxWidth: 680, width: '100%' }}>
 
-          {/* Kicker */}
-          <p className="folio" style={{ marginBottom: 28 }}>Mashrou3 Dactoor — The Game</p>
-
           {/* Headline */}
           <h1 style={{
             fontFamily: 'var(--serif)',
@@ -252,7 +249,7 @@ export default function Landing() {
         alignItems: 'center',
       }}>
         <span className="folio">Al-Azhar University · Batch 62</span>
-        <span className="folio">Med Royale · Quiz Arena · Est. 2025</span>
+        <span className="folio" />
       </footer>
 
     </div>
