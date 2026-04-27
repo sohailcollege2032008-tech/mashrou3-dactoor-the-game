@@ -24,12 +24,10 @@ export default function HostDashboard() {
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
 
-
   useEffect(() => {
     if (profile) fetchBanks()
   }, [profile])
 
-  // Check if host has an unfinished game room to rejoin
   useEffect(() => {
     if (!profile) return
     const check = async () => {
@@ -41,7 +39,6 @@ export default function HostDashboard() {
         if (statusSnap.exists() && statusSnap.val() !== 'finished') {
           setActiveRoom({ code, title })
         } else {
-          // Stale entry — clean up
           set(ref(rtdb, `host_rooms/${profile.id}/active`), null)
         }
       } catch (_) {}
@@ -49,55 +46,38 @@ export default function HostDashboard() {
     check()
   }, [profile])
 
-  // ── Subscribe to host's active tournament ────────────────────────────────
   useEffect(() => {
     if (!session?.uid) return
-    // Query all tournaments by this host, filter active ones client-side
     const q = query(collection(db, 'tournaments'), where('host_id', '==', session.uid))
     const unsub = onSnapshot(q, snap => {
       const ACTIVE = ['registration', 'ffa', 'transition', 'bracket']
-      const found = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .find(t => ACTIVE.includes(t.status))
+      const found = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(t => ACTIVE.includes(t.status))
       setActiveTournament(found || null)
     }, () => {})
     return () => unsub()
   }, [session?.uid])
 
-  // ── Subscribe to host notifications ──────────────────────────────────────
   useEffect(() => {
     if (!session?.uid) return
-    const q = query(
-      collection(db, 'notifications', session.uid, 'items'),
-      orderBy('created_at', 'desc'),
-      limit(20)
-    )
+    const q = query(collection(db, 'notifications', session.uid, 'items'), orderBy('created_at', 'desc'), limit(20))
     const unsub = onSnapshot(q, snap => {
       setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     }, () => {})
     return () => unsub()
   }, [session?.uid])
 
-  // Outside-click is handled by the portal backdrop div — no document listener needed
-
   const markAllRead = async () => {
     if (!session?.uid) return
     const unread = notifications.filter(n => !n.read)
-    await Promise.all(unread.map(n =>
-      updateDoc(doc(db, 'notifications', session.uid, 'items', n.id), { read: true })
-    ))
+    await Promise.all(unread.map(n => updateDoc(doc(db, 'notifications', session.uid, 'items', n.id), { read: true })))
   }
 
   const fetchBanks = async () => {
     setLoading(true)
     try {
-      const q = query(
-        collection(db, 'question_sets'),
-        where('host_id', '==', profile.id)
-      )
+      const q = query(collection(db, 'question_sets'), where('host_id', '==', profile.id))
       const snap = await getDocs(q)
-      const data = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0))
       setBanks(data)
     } catch (err) {
@@ -113,62 +93,38 @@ export default function HostDashboard() {
     try {
       await deleteDoc(doc(db, 'question_sets', id))
       setBanks(prev => prev.filter(b => b.id !== id))
-    } catch (err) {
-      alert('خطأ في الحذف: ' + err.message)
-    }
+    } catch (err) { alert('خطأ في الحذف: ' + err.message) }
     setDeletingId(null)
   }
 
   const handleStartGame = async (bank) => {
     if (!profile) return
-
-    // Use Firebase Auth UID directly — more reliable than profile.id
     const hostUid = session?.uid || profile.id
     if (!hostUid) { alert('خطأ: مش قادر يتعرف على هويتك. حاول تعمل تسجيل خروج ودخول من جديد.'); return }
-
     const MAX_ATTEMPTS = 5
-
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      // Generate a 6-char alphanumeric code (letters + digits only, no ambiguous chars)
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
       const code  = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
       const roomRef = ref(rtdb, `rooms/${code}`)
-
       try {
         const existing = await get(roomRef)
-        if (existing.exists()) continue   // collision — try a new code
-
+        if (existing.exists()) continue
         const roomTitle = bank.title + ' Room'
-
         await set(roomRef, {
-          code,
-          host_id: hostUid,
-          question_set_id: bank.id,
-          title: roomTitle,
-          questions: bank.questions,
-          force_rtl: bank.force_rtl || false,
-          status: 'lobby',
-          current_question_index: 0,
-          question_started_at: null,
-          reveal_data: null,
-          created_at: Date.now()
+          code, host_id: hostUid, question_set_id: bank.id, title: roomTitle,
+          questions: bank.questions, force_rtl: bank.force_rtl || false,
+          status: 'lobby', current_question_index: 0, question_started_at: null,
+          reveal_data: null, created_at: Date.now()
         })
-
         await set(ref(rtdb, `host_rooms/${hostUid}/active`), { code, title: roomTitle })
-
         navigate(`/host/game/${code}`)
         return
       } catch (err) {
         console.error('[Dashboard] Error creating room (attempt', attempt + 1, '):', err)
-        // Only retry on collision errors; surface all other errors immediately
         const isCollision = err?.code === 'ALREADY_EXISTS'
-        if (!isCollision) {
-          alert(`خطأ في إنشاء الأوضة:\n${err?.message || err}\n\nتأكد من إعدادات Firebase RTDB أو تواصل مع المسؤول.`)
-          return
-        }
+        if (!isCollision) { alert(`خطأ في إنشاء الأوضة:\n${err?.message || err}\n\nتأكد من إعدادات Firebase RTDB أو تواصل مع المسؤول.`); return }
       }
     }
-
     alert('فشل إنشاء الأوضة بعد عدة محاولات — من المحتمل تعارض في الكود. حاول تاني.')
   }
 
@@ -178,145 +134,175 @@ export default function HostDashboard() {
         ? (fullBankUpdate ? { ...b, ...fullBankUpdate } : { ...b, questions: updatedQuestions, title: updatedTitle, question_count: updatedQuestions.questions.length })
         : b
     ))
-    // Update selectedBank so modal reflects changes immediately
     setSelectedBank(prev => prev && prev.id === bankId
       ? (fullBankUpdate ? { ...prev, ...fullBankUpdate } : { ...prev, questions: updatedQuestions, title: updatedTitle })
       : prev
     )
   }
 
-  const handleSignOut = async () => {
-    useAuthStore.getState().signOut()
-  }
+  const handleSignOut = async () => { useAuthStore.getState().signOut() }
+
+  const unreadCount = notifications.filter(n => !n.read).length
 
   return (
-    <div className="min-h-screen bg-background text-white p-8">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', color: 'var(--ink)', padding: '0 0 60px' }}>
 
-        <header className="flex justify-between items-center bg-gray-900/50 p-6 rounded-2xl border border-gray-800 backdrop-blur-sm">
+      {/* ── Masthead ───────────────────────────────────────────────────── */}
+      <header style={{
+        borderBottom: '3px double var(--rule-strong)', padding: '13px 24px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <svg width={28} height={28} viewBox="0 0 100 100" fill="none" aria-label="Med Royale">
+            <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
+            <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
+            <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+              fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
+          </svg>
           <div>
-            <h1 className="text-3xl font-display font-bold text-primary">Host Dashboard</h1>
-            <p className="text-gray-400 mt-2 font-sans">Manage your Question Banks and Game Rooms</p>
+            <p style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--ink-4)', marginBottom: 1 }}>MED ROYALE</p>
+            <p style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 400, color: 'var(--ink)', lineHeight: 1 }}>Host Dashboard</p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Notification Bell */}
-            <div>
-              <button
-                onClick={() => { setShowNotifications(v => !v); if (!showNotifications) markAllRead() }}
-                className="relative p-2 rounded-lg bg-gray-800 border border-gray-700 hover:border-gray-600 transition-colors"
-                title="الإشعارات"
-              >
-                <Bell size={18} className="text-gray-300" />
-                {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-background text-[9px] font-bold rounded-full flex items-center justify-center">
-                    {notifications.filter(n => !n.read).length}
-                  </span>
-                )}
-              </button>
+        </div>
 
-              {showNotifications && createPortal(
-                <>
-                  {/* invisible backdrop to close on outside click */}
-                  <div className="fixed inset-0 z-[49998]" onClick={() => setShowNotifications(false)} />
-                  <div className="fixed top-24 right-8 w-80 bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 z-[49999] overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-                      <button onClick={() => setShowNotifications(false)} className="text-gray-500 hover:text-white transition-colors">
-                        <X size={14} />
-                      </button>
-                      <span className="font-bold text-sm text-white ar">الإشعارات</span>
-                    </div>
-                    <div className="max-h-[70vh] overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <p className="text-gray-500 text-sm text-center py-8 ar">لا توجد إشعارات</p>
-                      ) : (
-                        notifications.map(n => (
-                          <div key={n.id}
-                            className={`px-4 py-3 border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors ${!n.read ? 'bg-primary/5' : ''}`}
-                          >
-                            {n.type === 'game_finished' && (
-                              <div className="space-y-1 text-right" dir="rtl">
-                                <div className="flex items-center gap-2 justify-end">
-                                  {!n.read && <span className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />}
-                                  <span className="text-white font-bold text-sm ar">{n.room_title}</span>
-                                  <Trophy size={13} className="text-primary flex-shrink-0" />
-                                </div>
-                                <p className="text-gray-400 text-xs ar">
-                                  {n.winner_nickname ? `الفايز: ${n.winner_nickname} · ` : ''}
-                                  {n.total_players} لاعب
-                                </p>
-                                {n.results_url && (
-                                  <button
-                                    onClick={() => { setShowNotifications(false); navigate(n.results_url) }}
-                                    className="text-primary text-xs font-bold hover:underline"
-                                  >
-                                    → عرض النتائج
-                                  </button>
-                                )}
-                                {n.created_at?.seconds && (
-                                  <p className="text-gray-600 text-[10px] font-mono">
-                                    {new Date(n.created_at.seconds * 1000).toLocaleString('ar-EG')}
-                                  </p>
-                                )}
-                              </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Bell */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => { setShowNotifications(v => !v); if (!showNotifications) markAllRead() }}
+              style={{
+                position: 'relative', background: 'none',
+                border: '1px solid var(--rule)', padding: '6px 8px', cursor: 'pointer',
+                color: 'var(--ink-3)', display: 'flex', alignItems: 'center',
+              }}
+            >
+              <Bell size={14} />
+              {unreadCount > 0 && (
+                <span style={{
+                  position: 'absolute', top: -5, right: -5,
+                  width: 16, height: 16, borderRadius: '50%',
+                  background: 'var(--burgundy)', color: 'var(--paper)',
+                  fontSize: 9, fontFamily: 'var(--mono)', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>{unreadCount}</span>
+              )}
+            </button>
+
+            {showNotifications && createPortal(
+              <>
+                <div className="fixed inset-0 z-[49998]" onClick={() => setShowNotifications(false)} />
+                <div style={{
+                  position: 'fixed', top: 64, right: 20, width: 300, zIndex: 49999,
+                  background: 'var(--paper)', border: '1px solid var(--rule)',
+                  borderTop: '3px double var(--rule-strong)', boxShadow: 'var(--shadow-3)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--rule)' }}>
+                    <button onClick={() => setShowNotifications(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', display: 'flex' }}>
+                      <X size={13} />
+                    </button>
+                    <span className="folio">الإشعارات</span>
+                  </div>
+                  <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                    {notifications.length === 0 ? (
+                      <p className="ar" style={{ color: 'var(--ink-4)', fontSize: 13, textAlign: 'center', padding: '28px 16px' }}>لا توجد إشعارات</p>
+                    ) : notifications.map(n => (
+                      <div key={n.id} style={{
+                        padding: '12px 14px', borderBottom: '1px solid var(--rule)',
+                        background: !n.read ? 'rgba(156,59,46,0.04)' : 'transparent',
+                      }}>
+                        {n.type === 'game_finished' && (
+                          <div dir="rtl" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                              {!n.read && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--burgundy)', flexShrink: 0 }} />}
+                              <span className="ar" style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{n.room_title}</span>
+                              <Trophy size={12} style={{ color: 'var(--gold)', flexShrink: 0 }} />
+                            </div>
+                            <p className="ar" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                              {n.winner_nickname ? `الفايز: ${n.winner_nickname} · ` : ''}
+                              {n.total_players} لاعب
+                            </p>
+                            {n.results_url && (
+                              <button onClick={() => { setShowNotifications(false); navigate(n.results_url) }}
+                                className="folio" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--burgundy)', fontSize: 9, textAlign: 'right' }}>
+                                → عرض النتائج
+                              </button>
+                            )}
+                            {n.created_at?.seconds && (
+                              <p style={{ fontFamily: 'var(--mono)', color: 'var(--ink-4)', fontSize: 10 }}>
+                                {new Date(n.created_at.seconds * 1000).toLocaleString('ar-EG')}
+                              </p>
                             )}
                           </div>
-                        ))
-                      )}
-                    </div>
-                    {notifications.length > 0 && (
-                      <div className="px-4 py-2 border-t border-gray-800 flex justify-end">
-                        <button onClick={markAllRead} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors ar">
-                          تحديد الكل كمقروء <CheckCheck size={12} />
-                        </button>
+                        )}
                       </div>
-                    )}
+                    ))}
                   </div>
-                </>,
-                document.body
-              )}
-            </div>
-
-            <Link to="/" className="text-gray-400 hover:text-white transition-colors font-sans text-sm">Return Home</Link>
-            <Link
-              to="/player/decks"
-              className="px-4 py-2 rounded-lg bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 font-bold transition-all text-sm"
-            >
-              ⚔️ Decks
-            </Link>
-            <button
-              onClick={handleSignOut}
-              className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 font-bold transition-all text-sm"
-            >
-              تسجيل الخروج
-            </button>
+                  {notifications.length > 0 && (
+                    <div style={{ padding: '10px 14px', borderTop: '1px solid var(--rule)', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button onClick={markAllRead} className="ar" style={{
+                        display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+                        cursor: 'pointer', fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--arabic)',
+                      }}>
+                        <CheckCheck size={11} /> تحديد الكل كمقروء
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>,
+              document.body
+            )}
           </div>
-        </header>
 
-        {/* ── Active game rejoin banner ──────────────────────────────────── */}
+          <Link to="/player/decks" style={{
+            padding: '6px 14px', border: '1px solid var(--rule)', background: 'none',
+            fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+            textTransform: 'uppercase', color: 'var(--ink-3)', textDecoration: 'none',
+          }}>DECKS</Link>
+
+          <button onClick={handleSignOut} style={{
+            padding: '6px 14px', border: '1px solid var(--alert)', background: 'none',
+            fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+            textTransform: 'uppercase', color: 'var(--alert)', cursor: 'pointer',
+          }}>SIGN OUT</button>
+        </div>
+      </header>
+
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 0' }}>
+
+        {/* ── Active game rejoin banner ─────────────────────────────────── */}
         {activeRoom && (
-          <div className="bg-primary/10 border border-primary/40 rounded-2xl p-5 flex items-center justify-between gap-4 shadow-lg shadow-primary/5">
-            <div className="min-w-0">
-              <p className="text-primary text-xs font-bold tracking-widest uppercase mb-1">🎮 جيم نشط</p>
-              <h3 className="text-white font-bold text-lg leading-snug truncate">{activeRoom.title}</h3>
-              <p className="text-gray-400 text-sm font-mono mt-0.5">كود: <span className="text-primary font-bold tracking-widest">{activeRoom.code}</span></p>
+          <div style={{
+            border: '1px solid var(--navy)', borderBottomWidth: 3,
+            padding: '16px 20px', marginBottom: 20,
+            background: 'rgba(45,62,92,0.05)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+          }}>
+            <div style={{ minWidth: 0 }}>
+              <p className="folio" style={{ fontSize: 9, color: 'var(--navy)', marginBottom: 4 }}>ACTIVE GAME ROOM</p>
+              <h3 className="ar" style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 400, color: 'var(--ink)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {activeRoom.title}
+              </h3>
+              <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>
+                CODE: <strong style={{ color: 'var(--navy)', letterSpacing: '0.18em' }}>{activeRoom.code}</strong>
+              </p>
             </div>
-            <Link
-              to={`/host/game/${activeRoom.code}`}
-              className="flex-shrink-0 bg-primary text-background font-bold px-6 py-3 rounded-xl hover:bg-[#00D4FF] transition-all active:scale-95 text-sm"
-            >
-              Rejoin →
-            </Link>
+            <Link to={`/host/game/${activeRoom.code}`} style={{
+              flexShrink: 0, padding: '10px 20px',
+              background: 'var(--ink)', color: 'var(--paper)',
+              fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
+              textTransform: 'uppercase', textDecoration: 'none', border: 'none',
+            }}>REJOIN →</Link>
           </div>
         )}
 
-        {/* ── Active tournament banner ───────────────────────────────────── */}
+        {/* ── Active tournament banner ──────────────────────────────────── */}
         {activeTournament && (() => {
           const statusLabel = {
-            registration: { text: '🟡 تسجيل مفتوح',     color: 'yellow' },
-            ffa:          { text: '🔴 FFA جارية',        color: 'red'    },
-            transition:   { text: '⏱ انتقال للـ Bracket', color: 'blue'   },
-            bracket:      { text: '⚔️ Bracket جارية',    color: 'primary' },
-          }[activeTournament.status] || { text: activeTournament.status, color: 'primary' }
+            registration: { text: 'REGISTRATION OPEN', color: 'var(--gold)' },
+            ffa:          { text: 'FFA IN PROGRESS',   color: 'var(--alert)' },
+            transition:   { text: 'TRANSITIONING',     color: 'var(--navy)' },
+            bracket:      { text: 'BRACKET ACTIVE',    color: 'var(--burgundy)' },
+          }[activeTournament.status] || { text: activeTournament.status.toUpperCase(), color: 'var(--ink-3)' }
 
           const url = activeTournament.status === 'registration'
             ? `/tournament/${activeTournament.id}/lobby`
@@ -324,158 +310,154 @@ export default function HostDashboard() {
               ? `/host/game/${activeTournament.ffa_room_id}`
               : `/tournament/${activeTournament.id}/bracket`
 
-          const borderColor = statusLabel.color === 'yellow'  ? 'border-yellow-500/40'
-            : statusLabel.color === 'red'    ? 'border-red-500/40'
-            : statusLabel.color === 'blue'   ? 'border-blue-500/40'
-            : 'border-primary/40'
-          const bgColor = statusLabel.color === 'yellow'  ? 'bg-yellow-500/10'
-            : statusLabel.color === 'red'    ? 'bg-red-500/10'
-            : statusLabel.color === 'blue'   ? 'bg-blue-500/10'
-            : 'bg-primary/10'
-          const textColor = statusLabel.color === 'yellow'  ? 'text-yellow-400'
-            : statusLabel.color === 'red'    ? 'text-red-400'
-            : statusLabel.color === 'blue'   ? 'text-blue-400'
-            : 'text-primary'
-
           return (
-            <div className={`${bgColor} border ${borderColor} rounded-2xl p-5 flex items-center justify-between gap-4 shadow-lg`}>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <Swords size={14} className={textColor} />
-                  <p className={`${textColor} text-xs font-bold tracking-widest uppercase ar`}>
-                    {statusLabel.text}
-                  </p>
+            <div style={{
+              border: `1px solid ${statusLabel.color}`, borderBottomWidth: 3,
+              padding: '16px 20px', marginBottom: 20,
+              background: `color-mix(in srgb, ${statusLabel.color} 5%, transparent)`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <Swords size={12} style={{ color: statusLabel.color, flexShrink: 0 }} />
+                  <p className="folio" style={{ fontSize: 9, color: statusLabel.color }}>{statusLabel.text}</p>
                 </div>
-                <h3 className="text-white font-bold text-base leading-snug truncate ar">{activeTournament.title}</h3>
+                <h3 className="ar" style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 400, color: 'var(--ink)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {activeTournament.title}
+                </h3>
                 {activeTournament.code && (
-                  <p className="text-gray-400 text-xs font-mono mt-0.5">
-                    كود: <span className={`font-bold tracking-widest ${textColor}`}>{activeTournament.code}</span>
+                  <p style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)', marginTop: 3 }}>
+                    CODE: <strong style={{ color: statusLabel.color, letterSpacing: '0.14em' }}>{activeTournament.code}</strong>
                   </p>
                 )}
               </div>
-              <Link
-                to={url}
-                className={`flex-shrink-0 font-bold px-5 py-2.5 rounded-xl transition-all active:scale-95 text-sm ar ${
-                  statusLabel.color === 'yellow'
-                    ? 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
-                    : statusLabel.color === 'red'
-                      ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                      : 'bg-primary text-background hover:bg-[#00D4FF]'
-                }`}
-              >
-                متابعة البطولة →
-              </Link>
+              <Link to={url} style={{
+                flexShrink: 0, padding: '10px 20px',
+                background: 'var(--ink)', color: 'var(--paper)',
+                fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
+                textTransform: 'uppercase', textDecoration: 'none',
+              }}>متابعة →</Link>
             </div>
           )
         })()}
 
-        <section className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 backdrop-blur-sm shadow-xl">
-          <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
-            <h2 className="text-2xl font-bold font-display">My Question Banks</h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigate('/tournament/create')}
-                className="flex items-center gap-2 bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 font-bold px-4 py-2.5 rounded-xl hover:bg-yellow-500/30 transition-all text-sm ar"
-              >
-                <Trophy size={15} /> إنشاء بطولة
+        {/* ── Question Banks ────────────────────────────────────────────── */}
+        <div style={{ border: '1px solid var(--rule)', borderBottomWidth: 3 }}>
+
+          {/* Section header */}
+          <div style={{
+            borderBottom: '1px solid var(--rule)', padding: '14px 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          }}>
+            <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 22, color: 'var(--ink)', margin: 0 }}>
+              Question Banks
+            </h2>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => navigate('/tournament/create')} style={{
+                padding: '7px 14px', border: '1px solid var(--gold)',
+                background: 'none', cursor: 'pointer',
+                fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.1em',
+                textTransform: 'uppercase', color: 'var(--gold)',
+              }}>
+                CREATE TOURNAMENT
               </button>
-              <button
-                onClick={() => setShowUpload(true)}
-                className="bg-primary text-background font-bold px-5 py-2.5 rounded-xl hover:bg-[#00D4FF] hover:scale-105 active:scale-95 transition-all text-sm"
-              >
-                + رفع بنك أسئلة
+              <button onClick={() => setShowUpload(true)} style={{
+                padding: '7px 16px', border: '1px solid var(--ink)',
+                background: 'var(--ink)', cursor: 'pointer',
+                fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.1em',
+                textTransform: 'uppercase', color: 'var(--paper)',
+              }}>
+                + UPLOAD BANK
               </button>
             </div>
           </div>
 
+          {/* Banks list */}
           {loading ? (
-            <div className="text-primary animate-pulse py-6 text-center font-mono">Loading banks...</div>
+            <div style={{ padding: '48px 20px', textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-4)', letterSpacing: '0.1em' }}>
+              LOADING…
+            </div>
           ) : banks.length === 0 ? (
-            <div className="text-center py-14 space-y-3">
-              <div className="text-5xl">📚</div>
-              <p className="ar text-gray-400 font-bold text-lg">مفيش بنوك أسئلة لحد دلوقتي</p>
-              <p className="ar text-gray-600 text-sm">ارفع ملف JSON أو استخدم الذكاء الاصطناعي لاستخراج الأسئلة</p>
-              <button
-                onClick={() => setShowUpload(true)}
-                className="mt-2 bg-primary/10 border border-primary/30 text-primary px-6 py-2 rounded-xl hover:bg-primary/20 transition-all font-bold text-sm"
-              >
-                + رفع أول بنك أسئلة
-              </button>
+            <div style={{ padding: '64px 20px', textAlign: 'center' }}>
+              <p style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 28, color: 'var(--ink)', marginBottom: 10 }}>
+                No banks yet.
+              </p>
+              <p className="ar" style={{ fontSize: 14, color: 'var(--ink-4)', marginBottom: 24 }}>ارفع ملف JSON أو استخدم الذكاء الاصطناعي لاستخراج الأسئلة</p>
+              <button onClick={() => setShowUpload(true)} style={{
+                padding: '10px 24px', border: '1px solid var(--ink)', background: 'var(--ink)',
+                color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 10,
+                letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer',
+              }}>+ UPLOAD FIRST BANK</button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {banks.map(bank => (
-                <div
-                  key={bank.id}
-                  className="bg-gray-800/80 p-5 rounded-xl border border-gray-700 hover:border-primary/50 transition-all flex flex-col justify-between shadow-lg hover:shadow-primary/10 group"
-                >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+              {banks.map((bank, idx) => (
+                <div key={bank.id} style={{
+                  borderRight: '1px solid var(--rule)',
+                  borderBottom: '1px solid var(--rule)',
+                  padding: '18px 20px',
+                  display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 14,
+                }}>
                   <div>
-                    <h3 className="text-lg font-bold mb-2 font-display leading-snug">{bank.title}</h3>
-                    <div className="flex flex-wrap gap-2 text-xs text-gray-400 mb-4 font-mono">
-                      <span className="bg-gray-700/80 px-2 py-1 rounded-md">{bank.question_count} سؤال</span>
-                      <span className="bg-gray-700/80 px-2 py-1 rounded-md uppercase">{bank.source_type}</span>
+                    <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 18, color: 'var(--ink)', margin: '0 0 10px', lineHeight: 1.2 }}>
+                      {bank.title}
+                    </h3>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', padding: '2px 8px', border: '1px solid var(--rule)' }}>
+                        {bank.question_count} سؤال
+                      </span>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)', padding: '2px 8px', border: '1px solid var(--rule)', textTransform: 'uppercase' }}>
+                        {bank.source_type}
+                      </span>
                       {bank.source_file_url && (
-                        <a 
-                          href={bank.source_file_url} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="bg-blue-500/10 text-blue-400 px-2 py-1 rounded-md border border-blue-500/20 hover:bg-blue-500/20 transition-colors flex items-center gap-1.5"
-                          onClick={(e) => e.stopPropagation()}
-                          title={bank.source_filename || 'المصدر'}
-                        >
-                          <FileText size={12} />
-                          المصدر
+                        <a href={bank.source_file_url} target="_blank" rel="noreferrer"
+                          onClick={e => e.stopPropagation()} style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--navy)',
+                            padding: '2px 8px', border: '1px solid var(--navy)',
+                            textDecoration: 'none',
+                          }}>
+                          <FileText size={10} /> SOURCE
                         </a>
                       )}
-                      <span className="bg-gray-700/80 px-2 py-1 rounded-md">
-                        {bank.created_at?.seconds
-                          ? new Date(bank.created_at.seconds * 1000).toLocaleDateString('ar-EG')
-                          : '—'}
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)', padding: '2px 8px', border: '1px solid var(--rule)' }}>
+                        {bank.created_at?.seconds ? new Date(bank.created_at.seconds * 1000).toLocaleDateString('ar-EG') : '—'}
                       </span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <button
-                      onClick={() => handleStartGame(bank)}
-                      className="bg-green-500/10 text-green-400 py-2 rounded-lg hover:bg-green-500/20 transition-colors font-bold text-sm border border-green-500/30"
-                    >
-                      ▶ Host Game
-                    </button>
-                    <button
-                      onClick={() => handleDelete(bank.id)}
-                      disabled={deletingId === bank.id}
-                      className="bg-red-500/10 text-red-400 py-2 rounded-lg hover:bg-red-500/20 transition-colors font-bold text-sm border border-red-500/30 disabled:opacity-40"
-                    >
-                      {deletingId === bank.id ? '...' : '🗑 حذف'}
-                    </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <button onClick={() => handleStartGame(bank)} style={{
+                      padding: '9px 0', border: '1px solid var(--ink)', background: 'var(--ink)',
+                      color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 10,
+                      letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer',
+                    }}>▶ HOST GAME</button>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <button onClick={() => setSelectedBank(bank)} style={{
+                        padding: '8px 0', border: '1px solid var(--navy)', background: 'none',
+                        fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+                        textTransform: 'uppercase', color: 'var(--navy)', cursor: 'pointer',
+                      }}>VIEW / EDIT</button>
+                      <button onClick={() => handleDelete(bank.id)} disabled={deletingId === bank.id} style={{
+                        padding: '8px 0', border: '1px solid var(--alert)', background: 'none',
+                        fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+                        textTransform: 'uppercase', color: 'var(--alert)', cursor: deletingId === bank.id ? 'not-allowed' : 'pointer',
+                        opacity: deletingId === bank.id ? 0.5 : 1,
+                      }}>{deletingId === bank.id ? '…' : 'DELETE'}</button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => setSelectedBank(bank)}
-                    className="w-full mt-2 bg-primary/10 text-primary py-2 rounded-lg hover:bg-primary/20 transition-colors font-bold text-sm border border-primary/30"
-                  >
-                    عرض وتعديل
-                  </button>
                 </div>
               ))}
             </div>
           )}
-        </section>
+        </div>
       </div>
 
       {showUpload && (
-        <UploadQuestionsModal
-          onClose={() => setShowUpload(false)}
-          onSuccess={fetchBanks}
-        />
+        <UploadQuestionsModal onClose={() => setShowUpload(false)} onSuccess={fetchBanks} />
       )}
-
       {selectedBank && (
-        <QuestionBankModal
-          bank={selectedBank}
-          onClose={() => setSelectedBank(null)}
-          onUpdate={handleBankUpdate}
-        />
+        <QuestionBankModal bank={selectedBank} onClose={() => setSelectedBank(null)} onUpdate={handleBankUpdate} />
       )}
     </div>
   )
