@@ -1,9 +1,5 @@
 /**
  * TournamentLobby.jsx — Host registration lobby.
- * • Live registration list
- * • Round-by-round question assignment
- * • Optional scheduled-start countdown → auto-triggers launchFFA
- * • Cancel tournament (deletes Firestore doc + RTDB registrations)
  */
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -14,22 +10,12 @@ import { ref as rtdbRef, onValue, set, remove } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { computeActualTopCut } from '../../utils/tournamentUtils'
-import {
-  Trophy, Users, Play, Loader2, Copy, Check,
-  Settings, Calendar, AlertTriangle, Trash2
-} from 'lucide-react'
+import { Copy, Check, Settings } from 'lucide-react'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
 
 const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 function genRoomCode() {
   return Array.from({ length: 6 }, () => CHARSET[Math.floor(Math.random() * CHARSET.length)]).join('')
-}
-
-function getRoundName(round, totalRounds) {
-  if (round === totalRounds)     return 'النهائي'
-  if (round === totalRounds - 1) return 'نصف النهائي'
-  if (round === totalRounds - 2) return 'ربع النهائي'
-  return `الجولة ${round}`
 }
 
 function formatCountdown(secs) {
@@ -56,18 +42,14 @@ export default function TournamentLobby() {
   const [copied,        setCopied]        = useState(false)
   const [error,         setError]         = useState(null)
 
-  // Round question assignment panel
   const [showQPanel, setShowQPanel] = useState(false)
 
-  // Scheduled countdown
-  const [timeLeft,      setTimeLeft]      = useState(null)  // seconds
+  const [timeLeft,      setTimeLeft]      = useState(null)
   const autoLaunchedRef = useRef(false)
 
-  // Cancel confirmation
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [cancelling,        setCancelling]        = useState(false)
 
-  // ── Subscriptions ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!tournamentId) return
     const unsub = onSnapshot(doc(db, 'tournaments', tournamentId), snap => {
@@ -91,7 +73,6 @@ export default function TournamentLobby() {
       .catch(console.error)
   }, [tournament?.deck_id])
 
-  // Redirect if FFA / bracket already started
   useEffect(() => {
     if (!tournament) return
     if (tournament.status === 'ffa' && tournament.ffa_room_id)
@@ -100,7 +81,6 @@ export default function TournamentLobby() {
       navigate(`/tournament/${tournamentId}/bracket`, { replace: true })
   }, [tournament, tournamentId, navigate])
 
-  // ── Scheduled countdown ──────────────────────────────────────────────────
   useEffect(() => {
     if (!tournament?.scheduled_start_at) return
     const getTargetMs = () => {
@@ -111,7 +91,6 @@ export default function TournamentLobby() {
     }
     const targetMs = getTargetMs()
     if (!targetMs) return
-
     const tick = () => {
       const remaining = Math.ceil((targetMs - Date.now()) / 1000)
       setTimeLeft(remaining)
@@ -121,7 +100,6 @@ export default function TournamentLobby() {
     return () => clearInterval(id)
   }, [tournament?.scheduled_start_at])
 
-  // Auto-launch when countdown reaches 0
   useEffect(() => {
     if (timeLeft === null || timeLeft > 0) return
     if (autoLaunchedRef.current || launching) return
@@ -131,7 +109,6 @@ export default function TournamentLobby() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft])
 
-  // ── Callbacks ────────────────────────────────────────────────────────────
   const copyCode = useCallback(() => {
     if (!tournament?.code) return
     navigator.clipboard.writeText(tournament.code).then(() => {
@@ -152,20 +129,14 @@ export default function TournamentLobby() {
     setCancelling(true)
     setError(null)
     try {
-      // Remove RTDB registrations — ignore if path doesn't exist or permission fails
-      try {
-        await remove(rtdbRef(rtdb, `tournament_registrations/${tournamentId}`))
-      } catch (rtdbErr) {
-        console.warn('RTDB registrations removal failed (non-fatal):', rtdbErr)
-      }
-      // Delete the Firestore tournament document
+      try { await remove(rtdbRef(rtdb, `tournament_registrations/${tournamentId}`)) }
+      catch (rtdbErr) { console.warn('RTDB registrations removal failed (non-fatal):', rtdbErr) }
       await deleteDoc(doc(db, 'tournaments', tournamentId))
       navigate('/host/dashboard', { replace: true })
     } catch (e) {
       console.error('cancelTournament error:', e)
       setError('فشل حذف البطولة: ' + (e.message || 'خطأ غير معروف'))
       setCancelling(false)
-      // Keep confirm panel open so user sees the error
     }
   }, [cancelling, tournamentId, navigate])
 
@@ -175,8 +146,7 @@ export default function TournamentLobby() {
     setError(null)
     try {
       const desiredCap = (tournament.is_auto_top_cut || !tournament.top_cut)
-        ? registrations.length
-        : tournament.top_cut
+        ? registrations.length : tournament.top_cut
       const actualTopCut = computeActualTopCut(registrations.length, desiredCap)
 
       const deckDoc = await getDoc(doc(db, 'question_sets', tournament.deck_id))
@@ -184,7 +154,6 @@ export default function TournamentLobby() {
       const roomCode = genRoomCode()
       const timerSeconds = Math.round(tournament.ffa_question_duration / 1000)
 
-      // Use FFA-assigned questions if host specified them, otherwise full deck
       const ffaIdxs = tournament.round_questions?.ffa
       let roomQuestions = deckData.questions
       if (ffaIdxs?.length > 0) {
@@ -195,8 +164,6 @@ export default function TournamentLobby() {
         }
       }
 
-      // Pre-populate ALL registered players so they can enter the game
-      // directly without going through the normal join-request flow.
       const playersObj = {}
       for (const reg of registrations) {
         playersObj[reg.uid] = {
@@ -247,11 +214,18 @@ export default function TournamentLobby() {
     }
   }, [tournament, launching, registrations.length, session?.uid, tournamentId, navigate])
 
-  // ── Loading state ─────────────────────────────────────────────────────────
+  /* ── Loading ────────────────────────────────────────────────────────────── */
   if (!tournament) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 size={32} className="text-primary animate-spin" />
+      <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width="40" height="40" viewBox="0 0 100 100" fill="none"
+          style={{ animation: 'mr-spin-slow 10s linear infinite' }}>
+          <circle cx="50" cy="50" r="46" stroke="var(--rule)" strokeWidth="1" />
+          <circle cx="50" cy="50" r="36" stroke="var(--ink)" strokeWidth="1.5" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="22" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+        <style>{`@keyframes mr-spin-slow { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
@@ -261,15 +235,13 @@ export default function TournamentLobby() {
   const actualTopCut = registrations.length >= 2
     ? computeActualTopCut(registrations.length, renderDesiredCap) : null
   const tentativeRounds = actualTopCut ? Math.log2(actualTopCut) : null
-
   const isScheduled = !!tournament.scheduled_start_at
   const countdownUrgent = timeLeft !== null && timeLeft <= 60
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background text-white p-4 max-w-lg mx-auto" dir="rtl">
+    <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
 
-      {/* ── Question assignment full-screen panel ─────────────────────── */}
+      {/* ── Question assignment panel (full-screen overlay) ─────────── */}
       {showQPanel && (
         <QuestionAssignmentPanel
           deckQs={deckQs}
@@ -282,188 +254,266 @@ export default function TournamentLobby() {
         />
       )}
 
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 mb-6 mt-4">
-        <Trophy size={22} className="text-primary" />
-        <h1 className="ar text-xl font-bold flex-1">{tournament.title}</h1>
-      </div>
+      {/* ── Masthead ───────────────────────────────────────────────────── */}
+      <header style={{
+        borderBottom: '3px double var(--rule-strong)',
+        padding: '13px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <button
+          onClick={() => navigate('/host/dashboard')}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-3)' }}
+        >
+          ← Back
+        </button>
+        <svg width={28} height={28} viewBox="0 0 100 100" fill="none">
+          <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
+          <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+        <span className="folio">Tournament · Lobby</span>
+      </header>
 
-      {/* ── Scheduled countdown ───────────────────────────────────────────── */}
-      {isScheduled && timeLeft !== null && timeLeft > 0 && (
-        <div className={`rounded-2xl p-4 mb-5 border text-center ${
-          countdownUrgent
-            ? 'bg-red-500/10 border-red-500/40'
-            : 'bg-yellow-500/10 border-yellow-500/30'
-        }`}>
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <Calendar size={14} className={countdownUrgent ? 'text-red-400' : 'text-yellow-400'} />
-            <p className="ar text-xs text-gray-400">موعد البدء التلقائي</p>
-          </div>
-          <p className={`text-3xl font-black font-mono tracking-wider ${
-            countdownUrgent ? 'text-red-400' : 'text-yellow-400'
-          }`}>
-            {formatCountdown(timeLeft)}
-          </p>
-          <p className="ar text-[10px] text-gray-600 mt-1">
-            ستبدأ البطولة تلقائياً — أو اضغط "ابدأ" الآن
-          </p>
-        </div>
-      )}
+      {/* ── Body ───────────────────────────────────────────────────────── */}
+      <main style={{ flex: 1, padding: '24px 20px 32px', maxWidth: 480, margin: '0 auto', width: '100%' }}>
 
-      {/* ── Code card ─────────────────────────────────────────────────────── */}
-      <div className="bg-gray-900 rounded-2xl p-5 mb-5 text-center border border-gray-800">
-        <p className="ar text-xs text-gray-500 mb-2">كود التسجيل في البطولة</p>
-        <div className="flex items-center justify-center gap-3">
-          <span className="text-4xl font-black text-primary tracking-widest">{tournament.code}</span>
-          <button
-            onClick={copyCode}
-            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
-          >
-            {copied ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
-          </button>
-        </div>
-        <p className="ar text-xs text-gray-600 mt-2">شاركه مع المشاركين ليتمكنوا من التسجيل</p>
-      </div>
+        {/* Title */}
+        <h1 style={{
+          fontFamily: 'var(--serif)', fontWeight: 400,
+          fontSize: 'clamp(22px, 5vw, 34px)', lineHeight: 1.1,
+          letterSpacing: '-0.02em', color: 'var(--ink)', margin: '0 0 24px',
+        }}>
+          {tournament.title}
+        </h1>
 
-      {/* ── Registrations ─────────────────────────────────────────────────── */}
-      <div className="bg-gray-900 rounded-2xl p-4 mb-5 border border-gray-800">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Users size={16} className="text-primary" />
-            <span className="ar text-sm font-semibold">المسجلون</span>
-          </div>
-          <span className="text-2xl font-black text-primary">{registrations.length}</span>
-        </div>
-
-        {actualTopCut && (
-          <div className="bg-primary/10 border border-primary/30 rounded-xl p-3 mb-3 text-center">
-            <p className="ar text-xs text-gray-400">Top Cut المتوقع</p>
-            <p className="ar text-lg font-black text-primary">أفضل {actualTopCut} لاعب</p>
-            <p className="ar text-[10px] text-gray-500">
-              {registrations.length} مشارك → أقرب قوة لـ 2
-              {(tournament.is_auto_top_cut || !tournament.top_cut)
-                ? ' (وضع تلقائي)' : ` ≤ ${tournament.top_cut}`}
+        {/* ── Scheduled countdown ─────────────────────────────────────── */}
+        {isScheduled && timeLeft !== null && timeLeft > 0 && (
+          <div style={{
+            border: `1px solid ${countdownUrgent ? 'var(--alert)' : 'var(--gold)'}`,
+            background: countdownUrgent ? 'rgba(180,48,57,0.06)' : 'rgba(176,137,68,0.06)',
+            padding: '16px 20px', marginBottom: 20, textAlign: 'center',
+          }}>
+            <p className="folio" style={{ marginBottom: 8, color: countdownUrgent ? 'var(--alert)' : 'var(--gold)', letterSpacing: '0.2em' }}>
+              AUTO-START IN
+            </p>
+            <p style={{
+              fontFamily: 'var(--mono)', fontSize: 32, fontWeight: 700,
+              color: countdownUrgent ? 'var(--alert)' : 'var(--gold)', margin: '0 0 4px',
+              letterSpacing: '0.08em',
+            }}>
+              {formatCountdown(timeLeft)}
+            </p>
+            <p className="ar" style={{ fontSize: 11, color: 'var(--ink-4)', margin: 0 }}>
+              ستبدأ البطولة تلقائياً — أو اضغط "ابدأ" الآن
             </p>
           </div>
         )}
 
-        <div className="max-h-48 overflow-y-auto space-y-1">
-          {registrations.length === 0 && (
-            <p className="ar text-center text-gray-600 text-sm py-4">لا يوجد مشاركون بعد…</p>
+        {/* ── Code card ───────────────────────────────────────────────── */}
+        <div style={{ border: '1px solid var(--rule)', borderBottomWidth: 2, borderColor: 'var(--ink)', marginBottom: 20 }}>
+          <div style={{
+            padding: '8px 14px', borderBottom: '1px solid var(--rule)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <span className="folio" style={{ letterSpacing: '0.2em' }}>REGISTRATION CODE</span>
+            <button
+              onClick={copyCode}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? 'var(--burgundy)' : 'var(--ink-3)', display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+              <span className="folio" style={{ letterSpacing: '0.12em', color: 'inherit' }}>{copied ? 'COPIED' : 'COPY'}</span>
+            </button>
+          </div>
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <span style={{ fontFamily: 'var(--serif)', fontSize: 44, fontWeight: 500, letterSpacing: '0.2em', color: 'var(--ink)' }}>
+              {tournament.code}
+            </span>
+            <p className="ar" style={{ fontSize: 12, color: 'var(--ink-4)', margin: '8px 0 0' }}>شاركه مع المشاركين</p>
+          </div>
+        </div>
+
+        {/* ── Registrations ───────────────────────────────────────────── */}
+        <div style={{ border: '1px solid var(--rule)', marginBottom: 16 }}>
+          <div style={{
+            padding: '8px 14px', borderBottom: '1px solid var(--rule)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <span className="folio" style={{ letterSpacing: '0.2em' }}>REGISTERED</span>
+            <span style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)' }}>
+              {registrations.length}
+            </span>
+          </div>
+
+          {actualTopCut && (
+            <div style={{
+              padding: '10px 14px', borderBottom: '1px solid var(--rule)',
+              background: 'var(--paper-2)', textAlign: 'center',
+            }}>
+              <span className="folio" style={{ color: 'var(--gold)', letterSpacing: '0.18em' }}>
+                TOP CUT → {actualTopCut} players · {tentativeRounds} rounds
+              </span>
+            </div>
           )}
-          {registrations.map((r, i) => (
-            <div key={r.uid} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-gray-800">
-              <span className="text-xs text-gray-600 w-5 text-center">{i + 1}</span>
-              {r.avatar_url
-                ? <img src={r.avatar_url} className="w-7 h-7 rounded-full object-cover" alt="" />
-                : <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-primary">{r.nickname?.[0] || '?'}</div>
-              }
-              <span className="ar text-sm text-gray-200">{r.nickname}</span>
+
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            {registrations.length === 0 && (
+              <p className="ar" style={{ padding: '16px', textAlign: 'center', fontSize: 13, color: 'var(--ink-4)' }}>
+                لا يوجد مشاركون بعد…
+              </p>
+            )}
+            {registrations.map((r, i) => (
+              <div key={r.uid} style={{
+                padding: '10px 14px', borderBottom: '1px solid var(--rule)',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <span className="folio" style={{ color: 'var(--ink-4)', minWidth: 20 }}>{i + 1}</span>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%', border: '1px solid var(--rule)',
+                  overflow: 'hidden', flexShrink: 0, background: 'var(--paper-3)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {r.avatar_url
+                    ? <img src={r.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontFamily: 'var(--serif)', fontSize: 11, color: 'var(--ink-3)' }}>{r.nickname?.[0] || '?'}</span>
+                  }
+                </div>
+                <span className="ar" style={{ fontSize: 14, color: 'var(--ink)', flex: 1 }}>{r.nickname}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Round question assignment ────────────────────────────────── */}
+        <button
+          onClick={() => setShowQPanel(true)}
+          style={{
+            width: '100%', padding: '12px 16px',
+            background: 'var(--paper)', color: 'var(--ink)',
+            border: '1px solid var(--rule)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            cursor: 'pointer', marginBottom: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Settings size={14} style={{ color: 'var(--ink-3)' }} />
+            <span className="ar" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>تخصيص أسئلة الجولات</span>
+          </div>
+          <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>
+            {Object.values(tournament.round_questions || {}).some(a => a.length > 0)
+              ? `${Object.values(tournament.round_questions).flat().length} ASSIGNED`
+              : 'AUTO'}
+          </span>
+        </button>
+
+        {/* ── Timing summary ───────────────────────────────────────────── */}
+        <div style={{ border: '1px solid var(--rule)', marginBottom: 20 }}>
+          {[
+            ['مدة سؤال FFA',           tournament.ffa_question_duration  / 1000 + 'ث'],
+            ['مدة سؤال Duel',          tournament.duel_question_duration / 1000 + 'ث'],
+            ['انتظار قبل الـ Bracket', tournament.phase_transition_wait  / 1000 + 'ث'],
+            ['استراحة بين الجولات',    tournament.round_break_time       / 1000 + 'ث'],
+          ].map(([k, v], i) => (
+            <div key={k} style={{
+              padding: '9px 14px', borderBottom: i < 3 ? '1px solid var(--rule)' : 'none',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <span className="ar" style={{ fontSize: 12, color: 'var(--ink-3)' }}>{k}</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>{v}</span>
             </div>
           ))}
         </div>
-      </div>
 
-      {/* ── Round Question Assignment ──────────────────────────────────────── */}
-      <button
-        onClick={() => setShowQPanel(true)}
-        className="w-full flex items-center justify-between bg-gray-900 border border-gray-800 hover:border-primary/50 rounded-2xl px-4 py-3.5 mb-5 transition-all group"
-      >
-        <div className="flex items-center gap-2">
-          <Settings size={15} className="text-primary" />
-          <span className="ar text-sm font-bold text-white">تخصيص أسئلة الجولات</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {Object.values(tournament.round_questions || {}).some(a => a.length > 0) ? (
-            <span className="ar text-[11px] text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
-              {Object.values(tournament.round_questions).flat().length} سؤال مخصص
-            </span>
-          ) : (
-            <span className="ar text-[11px] text-gray-600">تلقائي</span>
-          )}
-          <span className="text-gray-600 group-hover:text-primary transition-colors text-xs">←</span>
-        </div>
-      </button>
-
-      {/* ── Timing summary ────────────────────────────────────────────────── */}
-      <div className="bg-gray-900 rounded-xl p-4 mb-5 border border-gray-800 text-xs text-gray-400 space-y-1.5">
-        {[
-          ['مدة سؤال FFA',           tournament.ffa_question_duration  / 1000 + 'ث'],
-          ['مدة سؤال Duel',          tournament.duel_question_duration / 1000 + 'ث'],
-          ['انتظار قبل الـ Bracket', tournament.phase_transition_wait  / 1000 + 'ث'],
-          ['استراحة بين الجولات',    tournament.round_break_time       / 1000 + 'ث'],
-        ].map(([k, v]) => (
-          <div key={k} className="flex justify-between ar">
-            <span>{k}</span><span className="text-gray-300 font-semibold">{v}</span>
+        {/* Error */}
+        {error && (
+          <div style={{ border: '1px solid var(--alert)', background: 'rgba(180,48,57,0.06)', padding: '10px 14px', marginBottom: 16 }}>
+            <p className="ar" style={{ fontSize: 13, color: 'var(--alert)', margin: 0 }}>{error}</p>
           </div>
-        ))}
-      </div>
+        )}
 
-      {error && <p className="ar text-red-400 text-sm text-center mb-4">{error}</p>}
-
-      {/* ── Launch FFA ────────────────────────────────────────────────────── */}
-      <button
-        onClick={launchFFA}
-        disabled={launching || registrations.length < 2}
-        className="w-full py-4 rounded-2xl bg-primary text-background font-black text-lg ar flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#00D4FF] active:scale-95 transition-all mb-3"
-      >
-        {launching
-          ? <><Loader2 size={20} className="animate-spin" /><span>جاري الإطلاق…</span></>
-          : <><Play size={20} /><span>ابدأ مرحلة FFA</span></>
-        }
-      </button>
-
-      {registrations.length < 2 && (
-        <p className="ar text-center text-xs text-gray-600 mb-4">يلزم مشاركان على الأقل لبدء البطولة</p>
-      )}
-
-      {/* ── Cancel tournament ─────────────────────────────────────────────── */}
-      {!showCancelConfirm ? (
+        {/* ── Launch FFA ───────────────────────────────────────────────── */}
         <button
-          onClick={() => setShowCancelConfirm(true)}
-          className="w-full py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-bold ar flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors"
+          onClick={launchFFA}
+          disabled={launching || registrations.length < 2}
+          style={{
+            width: '100%', padding: '15px 20px',
+            background: launching || registrations.length < 2 ? 'var(--rule)' : 'var(--ink)',
+            color: launching || registrations.length < 2 ? 'var(--ink-4)' : 'var(--paper)',
+            border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 16, fontWeight: 700,
+            cursor: launching || registrations.length < 2 ? 'not-allowed' : 'pointer',
+            marginBottom: 8, transition: 'opacity 150ms',
+          }}
         >
-          <Trash2 size={15} />
-          إلغاء البطولة وحذفها
+          {launching ? 'جاري الإطلاق…' : 'ابدأ مرحلة FFA'}
         </button>
-      ) : (
-        <div className="bg-red-500/10 border border-red-500/40 rounded-2xl p-4 space-y-3">
-          <div className="flex items-start gap-2">
-            <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
-            <p className="ar text-sm text-red-300 leading-relaxed">
-              هتحذف البطولة بالكامل وكل التسجيلات — مش هترجعها.
-              هل أنت متأكد؟
-            </p>
-          </div>
-          {error && (
-            <p className="ar text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2">
-              ⚠ {error}
-            </p>
-          )}
-          <div className="flex gap-3">
-            <button
-              onClick={() => { setShowCancelConfirm(false); setError(null) }}
-              disabled={cancelling}
-              className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm ar font-bold hover:bg-gray-700 transition-colors disabled:opacity-40"
-            >
-              تراجع
-            </button>
-            <button
-              onClick={cancelTournament}
-              disabled={cancelling}
-              className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 text-sm ar font-bold hover:bg-red-500/30 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
-            >
-              {cancelling
-                ? <Loader2 size={14} className="animate-spin" />
-                : <Trash2 size={14} />
-              }
-              نعم، احذف
-            </button>
-          </div>
-        </div>
-      )}
 
-      <div className="h-8" />
+        {registrations.length < 2 && (
+          <p className="ar" style={{ textAlign: 'center', fontSize: 11, color: 'var(--ink-4)', marginBottom: 16 }}>
+            يلزم مشاركان على الأقل
+          </p>
+        )}
+
+        {/* ── Cancel tournament ────────────────────────────────────────── */}
+        {!showCancelConfirm ? (
+          <button
+            onClick={() => setShowCancelConfirm(true)}
+            style={{
+              width: '100%', padding: '11px 20px',
+              background: 'transparent', color: 'var(--alert)',
+              border: '1px solid var(--alert)', fontFamily: 'var(--arabic)', fontSize: 14,
+              cursor: 'pointer', marginTop: 4,
+            }}
+          >
+            إلغاء البطولة وحذفها
+          </button>
+        ) : (
+          <div style={{ border: '1px solid var(--alert)', background: 'rgba(180,48,57,0.06)', padding: '16px 20px', marginTop: 4 }}>
+            <p className="ar" style={{ fontSize: 13, color: 'var(--alert)', marginBottom: 14, lineHeight: 1.65 }}>
+              هتحذف البطولة بالكامل وكل التسجيلات — مش هترجعها. هل أنت متأكد؟
+            </p>
+            {error && (
+              <p className="ar" style={{ fontSize: 12, color: 'var(--alert)', marginBottom: 10 }}>⚠ {error}</p>
+            )}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setShowCancelConfirm(false); setError(null) }}
+                disabled={cancelling}
+                style={{
+                  flex: 1, padding: '10px', background: 'var(--paper-2)',
+                  border: '1px solid var(--rule)', color: 'var(--ink)',
+                  fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer',
+                  opacity: cancelling ? 0.5 : 1,
+                }}
+              >
+                تراجع
+              </button>
+              <button
+                onClick={cancelTournament}
+                disabled={cancelling}
+                style={{
+                  flex: 1, padding: '10px', background: 'transparent',
+                  border: '1px solid var(--alert)', color: 'var(--alert)',
+                  fontFamily: 'var(--arabic)', fontSize: 13, fontWeight: 700,
+                  cursor: cancelling ? 'not-allowed' : 'pointer',
+                  opacity: cancelling ? 0.5 : 1,
+                }}
+              >
+                {cancelling ? 'جاري الحذف…' : 'نعم، احذف'}
+              </button>
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <footer style={{
+        borderTop: '1px solid var(--rule)', padding: '12px 20px',
+        display: 'flex', justifyContent: 'center',
+      }}>
+        <span className="folio">Host · Tournament Lobby</span>
+      </footer>
+
     </div>
   )
 }

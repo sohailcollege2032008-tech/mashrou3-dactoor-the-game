@@ -6,98 +6,110 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { recordPlayedQuestions } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
-import { Home, ClipboardList, X } from 'lucide-react'
+import { X } from 'lucide-react'
 
-// ── Log Review Modal ──────────────────────────────────────────────────────────
+// ── Review Modal ──────────────────────────────────────────────────────────────
 function ReviewModal({ duel, uid, onClose }) {
   const players = duel.players || {}
   const playerUids = Object.keys(players)
   const opponentUid = playerUids.find(p => p !== uid)
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" dir="rtl">
-      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
-      <div className="relative flex flex-col bg-[#0A0E1A] border-t border-gray-700 rounded-t-2xl mt-12 max-h-[90vh]">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{
+        position: 'relative', marginTop: 40,
+        background: 'var(--paper)', borderTop: '3px double var(--rule-strong)',
+        display: 'flex', flexDirection: 'column', maxHeight: '92vh',
+      }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 flex-shrink-0">
-          <h2 className="text-lg font-bold font-display text-white">مراجعة الإجابات</h2>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white transition-colors">
-            <X size={20} />
+        <div style={{
+          padding: '14px 20px', borderBottom: '1px solid var(--rule)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+        }}>
+          <span className="folio" style={{ letterSpacing: '0.2em' }}>ANSWER REVIEW</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', display: 'flex', alignItems: 'center' }}>
+            <X size={18} />
           </button>
         </div>
 
-        {/* Scrollable list */}
-        <div className="overflow-y-auto flex-1 p-4 space-y-4">
+        {/* Scrollable content */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px' }}>
           {Array.from({ length: duel.total_questions }).map((_, qi) => {
             const question = duel.questions?.[qi]
             if (!question) return null
             const answers = duel.answers?.[qi] || {}
             const myAnswer = answers[uid]
             const opponentAnswer = opponentUid ? answers[opponentUid] : null
-            // correct_reveal is written by the reveal winner at scoring time.
-            // Fall back to plain question.correct for old in-progress duels.
             const correctIdx = answers.correct_reveal ?? question.correct
             const correctChoice = question.choices?.[correctIdx]
 
             return (
-              <div key={qi} className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 space-y-3">
+              <div key={qi} style={{
+                border: '1px solid var(--rule)', marginBottom: 14,
+                background: 'var(--paper)',
+              }}>
                 {/* Question header */}
-                <div className="flex items-start gap-2">
-                  <span className="w-6 h-6 rounded-full bg-gray-800 text-gray-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                    {qi + 1}
-                  </span>
-                  <p dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-white text-sm font-medium leading-snug">
+                <div style={{
+                  padding: '10px 14px', borderBottom: '1px solid var(--rule)',
+                  display: 'flex', gap: 10, alignItems: 'flex-start',
+                }}>
+                  <span style={{
+                    minWidth: 22, height: 22, border: '1px solid var(--rule)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)',
+                  }}>{qi + 1}</span>
+                  <p dir={duel.force_rtl ? 'rtl' : 'auto'} style={{ fontFamily: 'var(--serif)', fontSize: 14, color: 'var(--ink)', margin: 0, lineHeight: 1.5, flex: 1 }}>
                     <MathText text={question.question} dir={duel.force_rtl ? 'rtl' : 'auto'} />
                   </p>
                 </div>
 
                 {/* Correct answer */}
-                <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-xl">
-                  <span className="text-green-500 font-bold text-sm">✓</span>
-                  <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-green-300 text-sm font-medium">
+                <div style={{
+                  padding: '8px 14px', borderBottom: '1px solid var(--rule)',
+                  background: 'rgba(34,197,94,0.06)',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#22c55e', fontWeight: 700 }}>✓</span>
+                  <span dir={duel.force_rtl ? 'rtl' : 'auto'} style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)', flex: 1 }}>
                     <MathText text={correctChoice} dir={duel.force_rtl ? 'rtl' : 'auto'} />
                   </span>
-                  <span className="text-xs text-green-600 font-mono mr-auto">الإجابة الصحيحة</span>
+                  <span className="folio" style={{ color: '#22c55e', letterSpacing: '0.12em', fontSize: 9 }}>CORRECT</span>
                 </div>
 
-                {/* My answer */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <p className="text-xs text-gray-500 font-bold">أنت</p>
-                    {myAnswer ? (
-                      <div className={`px-3 py-2 rounded-xl border text-sm ${myAnswer.is_correct ? 'bg-green-500/10 border-green-500/30 text-green-300' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold">{myAnswer.is_correct ? '✓' : '✗'}</span>
-                          <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="leading-snug truncate">
-                            <MathText text={question.choices?.[myAnswer.selected_choice] ?? '—'} dir={duel.force_rtl ? 'rtl' : 'auto'} />
+                {/* My answer vs opponent */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: 'none' }}>
+                  {[
+                    { label: 'أنت', answer: myAnswer },
+                    { label: 'خصمك', answer: opponentAnswer },
+                  ].map(({ label, answer }, idx) => (
+                    <div key={idx} style={{ padding: '10px 14px', borderRight: idx === 0 ? '1px solid var(--rule)' : 'none' }}>
+                      <p className="ar" style={{ fontSize: 11, color: 'var(--ink-4)', margin: '0 0 6px' }}>{label}</p>
+                      {answer ? (
+                        <div style={{
+                          padding: '7px 10px',
+                          border: `1px solid ${answer.is_correct ? '#22c55e' : 'var(--alert)'}`,
+                          background: answer.is_correct ? 'rgba(34,197,94,0.05)' : 'rgba(180,48,57,0.05)',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: answer.is_correct ? '#22c55e' : 'var(--alert)', fontWeight: 700 }}>
+                              {answer.is_correct ? '✓' : '✗'}
+                            </span>
+                            <span dir={duel.force_rtl ? 'rtl' : 'auto'} style={{ fontFamily: 'var(--serif)', fontSize: 12, color: 'var(--ink)' }}>
+                              <MathText text={question.choices?.[answer.selected_choice] ?? '—'} dir={duel.force_rtl ? 'rtl' : 'auto'} />
+                            </span>
+                          </div>
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>
+                            {answer.reaction_time_ms}ms
                           </span>
                         </div>
-                        <p className="text-xs font-mono mt-0.5 opacity-60">{myAnswer.reaction_time_ms}ms</p>
-                      </div>
-                    ) : (
-                      <div className="px-3 py-2 rounded-xl border border-gray-700 bg-gray-800/40 text-gray-600 text-sm">
-                        لم تجب
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-gray-500 font-bold">خصمك</p>
-                    {opponentAnswer ? (
-                      <div className={`px-3 py-2 rounded-xl border text-sm ${opponentAnswer.is_correct ? 'bg-green-500/10 border-green-500/30 text-green-300' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold">{opponentAnswer.is_correct ? '✓' : '✗'}</span>
-                          <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="leading-snug truncate">
-                            <MathText text={question.choices?.[opponentAnswer.selected_choice] ?? '—'} dir={duel.force_rtl ? 'rtl' : 'auto'} />
-                          </span>
+                      ) : (
+                        <div style={{ padding: '7px 10px', border: '1px solid var(--rule)', background: 'var(--paper-2)' }}>
+                          <span className="ar" style={{ fontSize: 12, color: 'var(--ink-4)' }}>لم يجب</span>
                         </div>
-                        <p className="text-xs font-mono mt-0.5 opacity-60">{opponentAnswer.reaction_time_ms}ms</p>
-                      </div>
-                    ) : (
-                      <div className="px-3 py-2 rounded-xl border border-gray-700 bg-gray-800/40 text-gray-600 text-sm">
-                        لم يجب
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )
@@ -118,7 +130,7 @@ export default function DuelResults() {
   const [duel, setDuel]               = useState(null)
   const [loading, setLoading]         = useState(true)
   const [showReview, setShowReview]   = useState(false)
-  const [playerProfiles, setPlayerProfiles] = useState({}) // uid → Firestore profile
+  const [playerProfiles, setPlayerProfiles] = useState({})
 
   useEffect(() => {
     if (!duelId) return
@@ -127,7 +139,6 @@ export default function DuelResults() {
       setDuel(data)
       setLoading(false)
 
-      // ── Fetch Firestore profiles for any player with missing/empty nickname ──
       if (data?.players) {
         const missingUids = Object.entries(data.players)
           .filter(([, p]) => !p?.nickname)
@@ -144,13 +155,11 @@ export default function DuelResults() {
         }
       }
 
-      // ── Record played questions in Firestore (cross-device) ─────────────────
       if (data && uid && data.deck_id && Array.isArray(data.questions)) {
         const playedTexts = data.questions.map(q => q.question).filter(Boolean)
         recordPlayedQuestions(uid, data.deck_id, playedTexts)
       }
 
-      // ── Write game history entry to Firestore ─────────────────────────────
       if (data && uid && duelId) {
         try {
           const players = data.players || {}
@@ -167,7 +176,6 @@ export default function DuelResults() {
           if (data.forfeit_by === uid) outcome = 'lose_forfeit'
           if (data.surrender_by) outcome = 'draw_surrender'
 
-          // Use duelId as document ID to prevent duplicate history entries
           await setDoc(doc(db, 'profiles', uid, 'game_history', duelId), {
             type: 'duel',
             deck_id: data.deck_id || null,
@@ -190,23 +198,30 @@ export default function DuelResults() {
     })
   }, [duelId, uid])
 
+  /* ── Loading ────────────────────────────────────────────────────────────── */
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+      <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width="40" height="40" viewBox="0 0 100 100" fill="none" style={{ animation: 'mr-spin-slow 10s linear infinite' }}>
+          <circle cx="50" cy="50" r="46" stroke="var(--rule)" strokeWidth="1" />
+          <circle cx="50" cy="50" r="36" stroke="var(--ink)" strokeWidth="1.5" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="22" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+        <style>{`@keyframes mr-spin-slow { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
 
+  /* ── Not found ──────────────────────────────────────────────────────────── */
   if (!duel) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center text-gray-400" dir="rtl">
-        <div className="text-center space-y-3">
-          <p>النتيجة غير متوفرة</p>
-          <button onClick={() => navigate('/player/dashboard')} className="text-primary text-sm hover:underline">
-            الرئيسية
-          </button>
-        </div>
+      <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <p className="folio" style={{ letterSpacing: '0.28em' }}>DUEL · RESULTS</p>
+        <p className="ar" style={{ fontSize: 14, color: 'var(--ink-3)' }}>النتيجة غير متوفرة</p>
+        <button onClick={() => navigate('/player/dashboard')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-3)' }}>
+          ← الرئيسية
+        </button>
       </div>
     )
   }
@@ -230,90 +245,154 @@ export default function DuelResults() {
   if (duel.surrender_by) outcome = 'draw_surrender'
 
   const outcomeConfig = {
-    win:           { label: 'فزت!',             icon: '🏆', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
-    lose:          { label: 'خسرت',             icon: '😔', color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
-    tie:           { label: 'تعادل!',            icon: '🤝', color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
-    win_forfeit:   { label: 'فزت بالانسحاب',    icon: '🏆', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
-    lose_forfeit:  { label: 'خسرت بالانسحاب',   icon: '🚪', color: 'text-red-400',    bg: 'bg-red-500/10 border-red-500/30' },
-    draw_surrender:{ label: 'تعادل بالاستسلام', icon: '🤝', color: 'text-primary',    bg: 'bg-primary/10 border-primary/30' },
-  }[outcome] ?? { label: 'انتهت اللعبة', icon: '', color: 'text-gray-400', bg: 'bg-gray-800 border-gray-700' }
+    win:           { headline: 'Victory.',   sub: 'فزت!',            color: 'var(--gold)',    folio: 'WIN' },
+    lose:          { headline: 'Defeat.',    sub: 'خسرت.',           color: 'var(--alert)',   folio: 'LOSE' },
+    tie:           { headline: 'Draw.',      sub: 'تعادل!',          color: 'var(--navy)',    folio: 'DRAW' },
+    win_forfeit:   { headline: 'Victory.',   sub: 'فزت بالانسحاب',  color: 'var(--gold)',    folio: 'WIN — FORFEIT' },
+    lose_forfeit:  { headline: 'Defeat.',    sub: 'خسرت بالانسحاب', color: 'var(--alert)',   folio: 'LOSE — FORFEIT' },
+    draw_surrender:{ headline: 'Draw.',      sub: 'تعادل بالاستسلام', color: 'var(--navy)',  folio: 'DRAW — SURRENDER' },
+  }[outcome] ?? { headline: 'Finished.', sub: 'انتهت اللعبة', color: 'var(--ink-3)', folio: 'END' }
 
-  function PlayerCard({ player, playerUid, score, isMe }) {
+  function PlayerPanel({ player, playerUid, score, isMe }) {
     if (!player && !playerUid) return null
-    const prof     = playerProfiles[playerUid] || {}
-    const nickname = player?.nickname || prof.display_name || 'لاعب'
+    const prof      = playerProfiles[playerUid] || {}
+    const nickname  = player?.nickname || prof.display_name || 'لاعب'
     const avatarUrl = player?.avatar_url || prof.avatar_url || ''
     return (
-      <div className={`flex-1 min-w-0 flex flex-col items-center gap-2 p-4 rounded-2xl border ${isMe ? 'bg-primary/5 border-primary/20' : 'bg-gray-900/60 border-gray-800'}`}>
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+        padding: '16px 12px', border: `1px solid ${isMe ? 'var(--ink)' : 'var(--rule)'}`,
+        background: isMe ? 'var(--paper-2)' : 'var(--paper)',
+      }}>
         <button
           onClick={() => playerUid && !isMe && navigate(`/player/profile/${playerUid}`)}
-          className={`flex-shrink-0 ${!isMe && playerUid ? 'cursor-pointer hover:opacity-80 active:scale-95 transition-all' : 'cursor-default'}`}
+          style={{ cursor: !isMe && playerUid ? 'pointer' : 'default', background: 'none', border: 'none', padding: 0 }}
         >
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-gray-700" />
-          ) : (
-            <div className="w-14 h-14 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-xl font-bold text-gray-400">
-              {nickname[0]}
-            </div>
-          )}
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%',
+            border: `2px solid ${isMe ? 'var(--ink)' : 'var(--rule)'}`,
+            overflow: 'hidden', background: 'var(--paper-3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {avatarUrl
+              ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <span style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 500, color: 'var(--ink)' }}>
+                  {nickname[0]}
+                </span>
+            }
+          </div>
         </button>
-        <p className="text-white text-sm font-bold text-center w-full truncate px-1">{nickname}</p>
-        <p className={`text-2xl font-bold font-mono ${isMe ? 'text-primary' : 'text-white'}`}>{score}</p>
-        {isMe && <p className="text-xs text-gray-500">أنت</p>}
+        <p style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 500, color: 'var(--ink)', margin: 0, textAlign: 'center', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {nickname}
+        </p>
+        <p style={{ fontFamily: 'var(--mono)', fontSize: 28, fontWeight: 700, color: 'var(--ink)', margin: 0, lineHeight: 1 }}>
+          {score}
+        </p>
+        {isMe && <span className="folio" style={{ color: 'var(--ink-3)', letterSpacing: '0.15em', fontSize: 9 }}>YOU</span>}
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background text-white flex flex-col items-center justify-center p-6" dir="rtl">
-      <div className="w-full max-w-sm space-y-6">
+    <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
 
-        {/* Outcome badge */}
-        <div className={`flex items-center justify-center gap-2 py-4 rounded-2xl border ${outcomeConfig.bg}`}>
-          <span className={`text-2xl font-bold font-display ${outcomeConfig.color}`}>
-            {outcomeConfig.icon} {outcomeConfig.label}
-          </span>
+      {/* ── Masthead ───────────────────────────────────────────────────── */}
+      <header style={{
+        borderBottom: '3px double var(--rule-strong)',
+        padding: '13px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span className="folio" style={{ flex: 1 }}>Duel · Results</span>
+        <svg width={28} height={28} viewBox="0 0 100 100" fill="none">
+          <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
+          <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+        <span className="folio" style={{ flex: 1, textAlign: 'right', color: outcomeConfig.color }}>{outcomeConfig.folio}</span>
+      </header>
+
+      {/* ── Main ───────────────────────────────────────────────────────── */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}>
+        <div style={{ width: '100%', maxWidth: 380 }}>
+
+          {/* Headline */}
+          <h1 style={{
+            fontFamily: 'var(--serif)', fontWeight: 400,
+            fontSize: 'clamp(44px, 10vw, 72px)', lineHeight: 1.0,
+            letterSpacing: '-0.025em', margin: '0 0 6px', textAlign: 'center',
+            color: 'var(--ink)',
+          }}>
+            {outcomeConfig.headline}
+          </h1>
+          <p className="ar" style={{ textAlign: 'center', fontSize: 14, color: outcomeConfig.color, fontWeight: 600, marginBottom: 28 }}>
+            {outcomeConfig.sub}
+          </p>
+
+          {/* ── Player panels ──────────────────────────────────────────── */}
+          <div style={{ display: 'flex', gap: 0, marginBottom: 16 }}>
+            <PlayerPanel player={me} playerUid={uid} score={myScore} isMe={true} />
+            <div style={{ display: 'flex', alignItems: 'center', padding: '0 10px', background: 'var(--paper)', border: '1px solid var(--rule)', borderLeft: 'none', borderRight: 'none' }}>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)' }}>vs</span>
+            </div>
+            <PlayerPanel player={opponent} playerUid={opponentUid} score={opponentScore} isMe={false} />
+          </div>
+
+          {/* Deck info */}
+          <p className="folio" style={{ textAlign: 'center', marginBottom: 24, letterSpacing: '0.15em', color: 'var(--ink-4)' }}>
+            {duel.deck_title} · {duel.total_questions} QUESTIONS
+          </p>
+
+          {/* ── Actions ──────────────────────────────────────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              onClick={() => setShowReview(true)}
+              style={{
+                width: '100%', padding: '13px 20px',
+                background: 'var(--paper-2)', color: 'var(--ink)',
+                border: '1px solid var(--rule)', borderBottomWidth: 2,
+                fontFamily: 'var(--arabic)', fontSize: 14, cursor: 'pointer',
+              }}
+            >
+              مراجعة الإجابات
+            </button>
+            <button
+              onClick={() => navigate('/player/dashboard')}
+              style={{
+                width: '100%', padding: '13px 20px',
+                background: 'var(--ink)', color: 'var(--paper)',
+                border: '1px solid var(--ink)',
+                fontFamily: 'var(--arabic)', fontSize: 14, cursor: 'pointer',
+              }}
+            >
+              الرئيسية
+            </button>
+            <button
+              onClick={() => navigate('/player/decks')}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+                textTransform: 'uppercase', color: 'var(--ink-4)', padding: '8px 0',
+              }}
+            >
+              تصفح Decks أخرى →
+            </button>
+          </div>
+
         </div>
+      </main>
 
-        {/* Players side by side */}
-        <div className="flex gap-3">
-          <PlayerCard player={me} playerUid={uid} score={myScore} isMe={true} />
-          <div className="flex items-center text-gray-600 font-bold text-lg">vs</div>
-          <PlayerCard player={opponent} playerUid={opponentUid} score={opponentScore} isMe={false} />
-        </div>
-
-        {/* Deck info */}
-        <p className="text-center text-gray-500 text-sm font-mono">{duel.deck_title} · {duel.total_questions} سؤال</p>
-
-        {/* Actions */}
-        <div className="space-y-3">
-          <button
-            onClick={() => setShowReview(true)}
-            className="w-full flex items-center justify-center gap-2 py-3.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-2xl transition-colors"
-          >
-            <ClipboardList size={18} />
-            مراجعة الإجابات
-          </button>
-          <button
-            onClick={() => navigate('/player/dashboard')}
-            className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary font-bold rounded-2xl transition-colors"
-          >
-            <Home size={18} />
-            الرئيسية
-          </button>
-          <button
-            onClick={() => navigate('/player/decks')}
-            className="w-full py-3 text-gray-600 hover:text-gray-400 transition-colors text-sm font-bold"
-          >
-            تصفح Decks أخرى
-          </button>
-        </div>
-      </div>
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <footer style={{
+        borderTop: '1px solid var(--rule)', padding: '12px 20px',
+        display: 'flex', justifyContent: 'center',
+      }}>
+        <span className="folio">Player · Duel Results</span>
+      </footer>
 
       {/* Review modal */}
-      {showReview && (
-        <ReviewModal duel={duel} uid={uid} onClose={() => setShowReview(false)} />
-      )}
+      {showReview && <ReviewModal duel={duel} uid={uid} onClose={() => setShowReview(false)} />}
+
     </div>
   )
 }

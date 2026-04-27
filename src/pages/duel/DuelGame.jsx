@@ -14,54 +14,64 @@ import {
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { findCorrectForDuel } from '../../utils/crypto'
-import { Loader2, Timer, WifiOff, LogOut, Flag } from 'lucide-react'
+import { WifiOff, LogOut, Flag } from 'lucide-react'
 
 const QUESTION_DURATION_MS = 30_000
 const REVEAL_DURATION_MS   = 3_000
 const FORFEIT_TIMEOUT_S    = 120
 
-// ── Avatar pill ───────────────────────────────────────────────────────────────
+// ── Editorial player pill ─────────────────────────────────────────────────────
 function PlayerPill({ player, score, align = 'right' }) {
-  if (!player) return <div className="w-28" />
+  if (!player) return <div style={{ width: 100 }} />
   return (
-    <div className={`flex items-center gap-2 ${align === 'left' ? 'flex-row-reverse' : ''}`}>
-      {player.avatar_url ? (
-        <img src={player.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border-2 border-gray-700 flex-shrink-0" />
-      ) : (
-        <div className="w-9 h-9 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-gray-400 text-sm font-bold flex-shrink-0">
-          {(player.nickname || '?')[0]}
-        </div>
-      )}
-      <div className={`min-w-0 ${align === 'left' ? 'text-right' : 'text-left'}`}>
-        <p className="text-white text-xs font-bold truncate max-w-[72px]">{player.nickname}</p>
-        <p className="text-primary text-sm font-mono font-bold">{score ?? 0}</p>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: align === 'left' ? 'row-reverse' : 'row' }}>
+      <div style={{
+        width: 34, height: 34, borderRadius: '50%',
+        border: '2px solid var(--ink)',
+        overflow: 'hidden', flexShrink: 0, background: 'var(--paper-3)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {player.avatar_url
+          ? <img src={player.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <span style={{ fontFamily: 'var(--serif)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
+              {(player.nickname || '?')[0]}
+            </span>
+        }
+      </div>
+      <div style={{ minWidth: 0, textAlign: align === 'left' ? 'right' : 'left' }}>
+        <p style={{ fontFamily: 'var(--serif)', fontSize: 12, fontWeight: 500, color: 'var(--ink)', margin: 0, maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {player.nickname}
+        </p>
+        <p style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>
+          {score ?? 0}
+        </p>
       </div>
     </div>
   )
 }
 
-// ── Timer Bar ─────────────────────────────────────────────────────────────────
+// ── Timer bar (thin ink rule) ─────────────────────────────────────────────────
 function TimerBar({ pct }) {
-  const color = pct > 0.5 ? '#00B8D9' : pct > 0.25 ? '#F59E0B' : '#EF4444'
+  const color = pct > 0.5 ? 'var(--ink)' : pct > 0.25 ? 'var(--gold)' : 'var(--alert)'
   return (
-    <div className="h-1 bg-gray-800 w-full">
-      <div
-        className="h-full transition-all duration-200"
-        style={{ width: `${Math.max(0, pct * 100)}%`, backgroundColor: color }}
-      />
+    <div style={{ height: 3, background: 'var(--rule)', width: '100%', flexShrink: 0 }}>
+      <div style={{
+        height: '100%', width: `${Math.max(0, pct * 100)}%`,
+        background: color, transition: 'width 200ms linear, background 300ms',
+      }} />
     </div>
   )
 }
 
 /**
- * DuelGame can be used standalone (regular duel) or embedded in a tournament.
+ * DuelGame — standalone or tournament-embedded.
  * Props:
  *   duelPath          {string}  RTDB base path — default 'duels'
- *   questionDurationMs {number} override for question timer — default 30000
- *   onFinished        {fn}      called on game end instead of navigating to /duel/results
- *   duelIdOverride    {string}  use this duelId instead of the URL param
- *   isObserver        {bool}    true = host watching; skips presence write, disables answers
- *   tournamentBadge   {string}  e.g. "بطولة X — النهائي"; shown as header badge in tournament duels
+ *   questionDurationMs {number} override for question timer
+ *   onFinished        {fn}      called on game end
+ *   duelIdOverride    {string}  use this instead of URL param
+ *   isObserver        {bool}    host watching; disables answers
+ *   tournamentBadge   {string}  e.g. "بطولة X — النهائي"
  */
 export default function DuelGame({
   duelPath          = 'duels',
@@ -77,7 +87,6 @@ export default function DuelGame({
   const { session } = useAuth()
   const uid = session?.uid
 
-  // Effective question duration (prop overrides constant)
   const activeDurationMs = propDurationMs || QUESTION_DURATION_MS
 
   const [duel, setDuel]               = useState(null)
@@ -86,31 +95,25 @@ export default function DuelGame({
   const [selectedChoice, setSelectedChoice] = useState(null)
   const [hasAnswered, setHasAnswered] = useState(false)
 
-  // Presence
   const [watchOpponentUid, setWatchOpponentUid]   = useState(null)
   const [opponentConnected, setOpponentConnected] = useState(true)
   const [disconnectCountdown, setDisconnectCountdown] = useState(null)
 
-  // Exit / surrender
-  const [confirmAction, setConfirmAction] = useState(null) // 'forfeit' | 'surrender'
+  const [confirmAction, setConfirmAction] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
 
-  // Tournament-duel start countdown (null → 5 → 4 → 3 → 2 → 1 → 0)
   const [startCountdown,  setStartCountdown]  = useState(null)
 
-  // ── Refs ─────────────────────────────────────────────────────────────────
   const duelRef             = useRef(null)
-  const serverOffsetRef     = useRef(0)          // Firebase server clock offset (ms)
-  const revealInProgressRef = useRef(false)      // guard for triggerReveal
-  const nextInProgressRef   = useRef(false)      // guard for triggerNextOrFinish
+  const serverOffsetRef     = useRef(0)
+  const revealInProgressRef = useRef(false)
+  const nextInProgressRef   = useRef(false)
   const timerIntervalRef    = useRef(null)
   const revealTimerRef      = useRef(null)
   const countdownIntervalRef = useRef(null)
 
-  // server-adjusted "now"
   const serverNow = useCallback(() => Date.now() + serverOffsetRef.current, [])
 
-  // ── Server clock offset ───────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onValue(rtdbRef(rtdb, '.info/serverTimeOffset'), snap => {
       serverOffsetRef.current = snap.val() ?? 0
@@ -118,10 +121,8 @@ export default function DuelGame({
     return () => unsub()
   }, [])
 
-  // Keep duelRef current
   useEffect(() => { duelRef.current = duel }, [duel])
 
-  // ── Own presence + activeDuelId (skipped for observers) ──────────────────
   useEffect(() => {
     if (!duelId || !uid || isObserver) return
     const presRef = rtdbRef(rtdb, `duel_presence/${duelId}/${uid}`)
@@ -131,7 +132,6 @@ export default function DuelGame({
     return () => { set(presRef, { connected: false }) }
   }, [duelId, uid, isObserver])
 
-  // ── Watch opponent presence ───────────────────────────────────────────────
   useEffect(() => {
     if (!duelId || !watchOpponentUid) return
     const unsub = onValue(rtdbRef(rtdb, `duel_presence/${duelId}/${watchOpponentUid}`), snap => {
@@ -141,7 +141,6 @@ export default function DuelGame({
     return () => unsub()
   }, [duelId, watchOpponentUid])
 
-  // ── Disconnect countdown → auto-forfeit ──────────────────────────────────
   useEffect(() => {
     if (isObserver) return
     if (opponentConnected) {
@@ -167,8 +166,7 @@ export default function DuelGame({
         if (!cur || cur.status === 'finished') return
         const oppUid = Object.keys(cur.players || {}).find(p => p !== uid)
         update(rtdbRef(rtdb, `${duelPath}/${duelId}`), {
-          status: 'finished',
-          forfeit_by: oppUid || null,
+          status: 'finished', forfeit_by: oppUid || null,
         }).catch(console.error)
       }
     }, 1000)
@@ -181,7 +179,6 @@ export default function DuelGame({
     }
   }, [opponentConnected, duelId, duelPath, uid])
 
-  // ── Reset per-question state ──────────────────────────────────────────────
   const lastQiRef = useRef(null)
   useEffect(() => {
     if (!duel) return
@@ -195,11 +192,6 @@ export default function DuelGame({
     }
   }, [duel?.current_question_index])
 
-  // ── Auto-start tournament duels with a simple timeout ────────────────────
-  // No presence detection needed. Every client (player or observer) loading a
-  // 'waiting' tournament duel starts a 5-second countdown, then fires a
-  // runTransaction that is idempotent — only the first commit wins, the rest
-  // are no-ops. This avoids dependency on duel_presence reads/rules entirely.
   useEffect(() => {
     if (!duel || duelPath === 'duels' || duel.status !== 'waiting') return
 
@@ -214,11 +206,7 @@ export default function DuelGame({
         try {
           await runTransaction(rtdbRef(rtdb, `${duelPath}/${duelId}`), current => {
             if (!current || current.status !== 'waiting') return undefined
-            return {
-              ...current,
-              status:              'playing',
-              question_started_at: Date.now() + serverOffsetRef.current,
-            }
+            return { ...current, status: 'playing', question_started_at: Date.now() + serverOffsetRef.current }
           })
         } catch (e) { console.error('auto-start error:', e) }
       }, 5000),
@@ -226,7 +214,6 @@ export default function DuelGame({
     return () => ticks.forEach(clearTimeout)
   }, [duel?.status, duelPath, duelId])
 
-  // ── Subscribe to duel ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!duelId) return
     const unsub = onValue(rtdbRef(rtdb, `${duelPath}/${duelId}`), snap => {
@@ -249,7 +236,6 @@ export default function DuelGame({
     return () => unsub()
   }, [duelId, navigate, uid])
 
-  // ── triggerReveal: playing → revealing + compute scores ──────────────────
   const triggerReveal = useCallback(async () => {
     if (revealInProgressRef.current) return
     const currentDuel = duelRef.current
@@ -266,21 +252,16 @@ export default function DuelGame({
 
       if (!iWon) { revealInProgressRef.current = false; return }
 
-      // Only the winner of the transaction computes scores
       const qi = currentDuel.current_question_index
       const question = currentDuel.questions?.[qi]
       const answersSnap = await rtdbGet(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}`))
       const allAnswers  = answersSnap.val() || {}
       const realPlayers = new Set(Object.keys(currentDuel.players || {}))
-      // Only score answers from the two registered players — ignore any visitor answers
       const answers = Object.fromEntries(
         Object.entries(allAnswers).filter(([aUid]) => realPlayers.has(aUid))
       )
       const scoreUpdates = {}
 
-      // ── Resolve the correct answer index ─────────────────────────────────
-      // New duels store correct_hash (no plain `correct`).
-      // Old in-progress duels still have plain `correct` — use as fallback.
       let correctC = question?.correct ?? null
       if (correctC == null && question?.correct_hash) {
         correctC = await findCorrectForDuel(
@@ -288,10 +269,8 @@ export default function DuelGame({
         )
       }
 
-      // Reveal the correct index in the DB so UI can highlight without plain `correct`
       if (correctC != null) scoreUpdates[`answers/${qi}/correct_reveal`] = correctC
 
-      // Hybrid scoring: regular duels cap repeated questions at 1pt; tournament = pure race
       const isRegularDuel = duelPath === 'duels'
       const correctAnswers = Object.entries(answers)
         .filter(([, a]) => a.selected_choice === correctC)
@@ -305,12 +284,11 @@ export default function DuelGame({
         if (isCorrect) {
           const rank = arrivalRank[aUid] ?? 99
           if (isRegularDuel && question?.played_by_uids?.includes(aUid)) {
-            pointsEarned = 1  // repeated question — capped at 1pt regardless of arrival rank
+            pointsEarned = 1
           } else {
-            pointsEarned = rank === 0 ? 2 : 1  // race-based: 1st correct = 2pts, 2nd+ = 1pt
+            pointsEarned = rank === 0 ? 2 : 1
           }
         }
-
         scoreUpdates[`answers/${qi}/${aUid}/is_correct`]    = isCorrect
         scoreUpdates[`answers/${qi}/${aUid}/points_earned`] = pointsEarned
         if (isCorrect) {
@@ -327,7 +305,6 @@ export default function DuelGame({
     }
   }, [duelId, duelPath, serverNow])
 
-  // ── triggerNextOrFinish: revealing → playing (next Q) or finished ─────────
   const triggerNextOrFinish = useCallback(async () => {
     if (nextInProgressRef.current) return
     const currentDuel = duelRef.current
@@ -338,15 +315,11 @@ export default function DuelGame({
       const result = await runTransaction(
         rtdbRef(rtdb, `${duelPath}/${duelId}`),
         current => {
-          if (!current || current.status !== 'revealing') return // abort
+          if (!current || current.status !== 'revealing') return
 
-          const nextQi  = (current.current_question_index ?? 0) + 1
-          const atEnd   = nextQi >= (current.total_questions ?? 0)
+          const nextQi = (current.current_question_index ?? 0) + 1
+          const atEnd  = nextQi >= (current.total_questions ?? 0)
 
-          // ── Tournament tiebreaker extension ────────────────────────────
-          // When a tournament duel (duelPath !== 'duels') reaches the last
-          // question with equal NON-ZERO scores, append one reserve question
-          // instead of finishing.  Repeats until reserve is exhausted.
           if (atEnd && duelPath !== 'duels') {
             const uids   = Object.keys(current.players || {})
             const scores = uids.map(u => current.players?.[u]?.score ?? 0)
@@ -356,26 +329,22 @@ export default function DuelGame({
               const tbPool = current.tiebreaker_questions || []
               const tbUsed = current.tiebreaker_used || 0
               if (tbUsed < tbPool.length) {
-                // Append the next tiebreaker question and keep playing
                 return {
                   ...current,
-                  questions:        [...(current.questions || []), tbPool[tbUsed]],
-                  total_questions:  (current.total_questions ?? 0) + 1,
-                  tiebreaker_used:  tbUsed + 1,
-                  is_tiebreaker:    true,
-                  status:           'playing',
+                  questions:              [...(current.questions || []), tbPool[tbUsed]],
+                  total_questions:        (current.total_questions ?? 0) + 1,
+                  tiebreaker_used:        tbUsed + 1,
+                  is_tiebreaker:          true,
+                  status:                 'playing',
                   current_question_index: nextQi,
                   question_started_at:    serverNow(),
                   reveal_started_at:      null,
                 }
               }
-              // Reserve exhausted → fall through to finish (speed tiebreaker in handleFinished)
             }
           }
 
-          if (atEnd) {
-            return { ...current, status: 'finished', reveal_started_at: null }
-          }
+          if (atEnd) return { ...current, status: 'finished', reveal_started_at: null }
           return {
             ...current,
             status: 'playing',
@@ -385,7 +354,6 @@ export default function DuelGame({
           }
         }
       )
-
       if (!result.committed) nextInProgressRef.current = false
     } catch (e) {
       console.error('triggerNextOrFinish error:', e)
@@ -393,14 +361,11 @@ export default function DuelGame({
     }
   }, [duelId, duelPath, serverNow])
 
-  // ── Timer: question countdown ─────────────────────────────────────────────
   useEffect(() => {
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
     if (!duel || duel.status !== 'playing' || !duel.question_started_at) {
-      setTimerPct(1)
-      return
+      setTimerPct(1); return
     }
-
     const tick = () => {
       const elapsed = serverNow() - duel.question_started_at
       const pct     = Math.max(0, 1 - elapsed / activeDurationMs)
@@ -408,18 +373,10 @@ export default function DuelGame({
       if (pct <= 0) {
         clearInterval(timerIntervalRef.current)
         if (duelPath === 'duels') {
-          // Regular duel: client owns the reveal (no CF).
           triggerReveal()
         } else if (!hasAnswered && !isObserver && uid) {
-          // Tournament duel: CF owns scoring, but it only fires when an answer is written.
-          // If this player didn't answer in time, write a timeout marker so the CF
-          // sees "all players accounted for" and can advance the game.
-          // No selected_choice → CF scores 0 pts (correct behaviour for timeout).
           const qi = duelRef.current?.current_question_index ?? 0
-          update(
-            rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}/${uid}`),
-            { uid, timed_out: true }
-          ).catch(console.error)
+          update(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}/${uid}`), { uid, timed_out: true }).catch(console.error)
         }
       }
     }
@@ -428,87 +385,67 @@ export default function DuelGame({
     return () => clearInterval(timerIntervalRef.current)
   }, [duel?.status, duel?.question_started_at, triggerReveal, serverNow, activeDurationMs])
 
-  // ── Watch answers: both answered → reveal early ───────────────────────────
-  // For tournament duels (duelPath !== 'duels'), the Cloud Function
-  // on_tournament_answer_written handles early reveal server-side.
-  // We keep this effect only for regular duels (no CF coverage).
   useEffect(() => {
     if (!duel || duel.status !== 'playing') return
-    if (duelPath !== 'duels') return  // Cloud Function handles tournament duels
+    if (duelPath !== 'duels') return
     const qi         = duel.current_question_index
     const answers    = duel.answers?.[qi] || {}
     const playerUids = Object.keys(duel.players || {})
-    // Only count answers from real players (ignore any visitor who slipped in)
     const validAnswerCount = playerUids.filter(p => p in answers).length
-    if (playerUids.length >= 2 && validAnswerCount >= playerUids.length) {
-      triggerReveal()
-    }
+    if (playerUids.length >= 2 && validAnswerCount >= playerUids.length) triggerReveal()
   }, [duel?.answers, duel?.status, duel?.current_question_index, duelPath, triggerReveal])
 
-  // ── Timer: reveal countdown (3s) ─────────────────────────────────────────
   useEffect(() => {
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current)
     if (!duel || duel.status !== 'revealing' || !duel.reveal_started_at) return
-
     const elapsed   = serverNow() - duel.reveal_started_at
     const remaining = REVEAL_DURATION_MS - elapsed
-
     if (remaining <= 0) { triggerNextOrFinish(); return }
-
     revealTimerRef.current = setTimeout(triggerNextOrFinish, remaining)
     return () => clearTimeout(revealTimerRef.current)
   }, [duel?.status, duel?.reveal_started_at, triggerNextOrFinish, serverNow])
 
-  // ── Answer submission ─────────────────────────────────────────────────────
   const submitAnswer = useCallback(async (choiceIndex) => {
     if (isObserver || hasAnswered || !duel || duel.status !== 'playing' || !uid) return
     if (!duel.question_started_at) return
-
     const reactionTimeMs = serverNow() - duel.question_started_at
     setSelectedChoice(choiceIndex)
     setHasAnswered(true)
-
     const qi = duel.current_question_index
     try {
       await update(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}`), {
         [uid]: { uid, selected_choice: choiceIndex, reaction_time_ms: reactionTimeMs }
       })
-    } catch (e) {
-      console.error('submitAnswer error:', e)
-    }
+    } catch (e) { console.error('submitAnswer error:', e) }
   }, [hasAnswered, duel, uid, duelId, duelPath, serverNow])
 
-  // ── Forfeit (loss) ────────────────────────────────────────────────────────
   const handleForfeit = useCallback(async () => {
     if (actionLoading) return
-    setActionLoading(true)
-    setConfirmAction(null)
+    setActionLoading(true); setConfirmAction(null)
     try {
       await update(rtdbRef(rtdb, `${duelPath}/${duelId}`), { status: 'finished', forfeit_by: uid })
-    } catch (e) {
-      console.error(e)
-      setActionLoading(false)
-    }
+    } catch (e) { console.error(e); setActionLoading(false) }
   }, [duelId, duelPath, uid, actionLoading])
 
-  // ── Surrender (draw) ──────────────────────────────────────────────────────
   const handleSurrender = useCallback(async () => {
     if (actionLoading) return
-    setActionLoading(true)
-    setConfirmAction(null)
+    setActionLoading(true); setConfirmAction(null)
     try {
       await update(rtdbRef(rtdb, `${duelPath}/${duelId}`), { status: 'finished', surrender_by: uid })
-    } catch (e) {
-      console.error(e)
-      setActionLoading(false)
-    }
+    } catch (e) { console.error(e); setActionLoading(false) }
   }, [duelId, duelPath, uid, actionLoading])
 
-  // ── Render guards ─────────────────────────────────────────────────────────
+  /* ── Loading ────────────────────────────────────────────────────────────── */
   if (loading || !duel) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 size={32} className="animate-spin text-primary" />
+      <div style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width="40" height="40" viewBox="0 0 100 100" fill="none" style={{ animation: 'mr-spin-slow 10s linear infinite' }}>
+          <circle cx="50" cy="50" r="46" stroke="var(--rule)" strokeWidth="1" />
+          <circle cx="50" cy="50" r="36" stroke="var(--ink)" strokeWidth="1.5" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="22" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+        <style>{`@keyframes mr-spin-slow { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
@@ -521,50 +458,54 @@ export default function DuelGame({
   const opponentUid    = playerUids.find(p => p !== uid)
   const opponentPlayer = opponentUid ? players[opponentUid] : null
 
-  // ── Tournament duel "about to start" waiting screen ─────────────────────
+  /* ── Tournament duel — "about to start" waiting screen ─────────────────── */
   if (duelPath !== 'duels' && duel.status === 'waiting') {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-10 p-6" dir="rtl">
-        {/* Observer badge */}
+      <div style={{
+        minHeight: '100svh', background: 'var(--paper)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 32, padding: 24,
+      }}>
         {isObserver && (
-          <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-3 py-1 rounded-full font-bold">
-            👁 وضع المشاهدة
+          <span className="folio" style={{ border: '1px solid var(--gold)', padding: '4px 12px', color: 'var(--gold)', letterSpacing: '0.2em' }}>
+            OBSERVER MODE
           </span>
         )}
-
-        {/* Tournament badge */}
         {tournamentBadge && (
-          <span className="text-xs font-bold ar text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 px-3 py-1 rounded-full">
+          <span className="folio" style={{ border: '1px solid var(--gold)', padding: '4px 12px', color: 'var(--gold)', letterSpacing: '0.15em' }}>
             🏆 {tournamentBadge}
           </span>
         )}
 
-        {/* VS header */}
-        <div className="flex items-center gap-8">
+        {/* VS display */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <PlayerPill player={myPlayer}       score={0} align="right" />
-          <span className="text-3xl font-black text-primary select-none">VS</span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>VS</span>
           <PlayerPill player={opponentPlayer} score={0} align="left" />
         </div>
 
-        {/* Countdown / waiting message */}
-        <div className="text-center space-y-3">
+        {/* Countdown */}
+        <div style={{ textAlign: 'center' }}>
           {startCountdown !== null ? (
-            <p
-              key={startCountdown}
-              className="text-8xl font-black tabular-nums"
-              style={{ color: startCountdown === 0 ? '#00B8D9' : '#ffffff' }}
-            >
-              {startCountdown === 0 ? '🚀' : startCountdown}
+            <p style={{
+              fontFamily: 'var(--serif)', fontSize: 96, fontWeight: 400, lineHeight: 1,
+              color: startCountdown === 0 ? 'var(--burgundy)' : 'var(--ink)',
+              margin: '0 0 8px',
+            }}>
+              {startCountdown === 0 ? 'Go!' : startCountdown}
             </p>
           ) : (
-            <Loader2 size={40} className="text-primary animate-spin mx-auto" />
+            <div style={{ position: 'relative', width: 60, height: 60, margin: '0 auto 8px' }}>
+              <svg width="60" height="60" viewBox="0 0 100 100" fill="none"
+                style={{ animation: 'mr-spin-slow 10s linear infinite' }}>
+                <circle cx="50" cy="50" r="46" stroke="var(--rule)" strokeWidth="1" />
+                <circle cx="50" cy="50" r="36" stroke="var(--ink)" strokeWidth="1.5" />
+              </svg>
+              <style>{`@keyframes mr-spin-slow { to { transform: rotate(360deg); } }`}</style>
+            </div>
           )}
-          <p className="ar text-gray-400 text-sm">
-            {startCountdown === null
-              ? 'جارٍ التحضير…'
-              : startCountdown > 0
-              ? 'تبدأ المباراة خلال…'
-              : 'انطلق!'}
+          <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: 0 }}>
+            {startCountdown === null ? 'جارٍ التحضير…' : startCountdown > 0 ? 'تبدأ المباراة خلال…' : 'انطلق!'}
           </p>
         </div>
       </div>
@@ -575,236 +516,292 @@ export default function DuelGame({
   const currentAnswers = duel.answers?.[qi] || {}
   const myAnswer       = currentAnswers[uid]
   const opponentAnswer = opponentUid ? currentAnswers[opponentUid] : null
-
-  // Resolve which choice to highlight during reveal.
-  // New duels: correct_reveal is written to answers by the reveal winner.
-  // Old duels (transition): fall back to plain question.correct.
-  const correctReveal = currentAnswers.correct_reveal ?? question?.correct ?? null
-
-  const timeLeftSec = Math.ceil(timerPct * (activeDurationMs / 1000))
+  const correctReveal  = currentAnswers.correct_reveal ?? question?.correct ?? null
+  const timeLeftSec    = Math.ceil(timerPct * (activeDurationMs / 1000))
 
   function choiceStyle(i) {
     if (!isRevealing && !hasAnswered) {
-      return 'bg-gray-900 border border-gray-700 hover:border-primary/60 hover:bg-gray-800 text-white active:scale-95'
+      return {
+        background: 'var(--paper)', color: 'var(--ink)',
+        border: '1px solid var(--rule)', borderBottomWidth: 2, borderBottomColor: 'var(--ink)',
+        cursor: 'pointer',
+      }
     }
     if (!isRevealing && hasAnswered) {
-      if (i === selectedChoice) return 'bg-primary/15 border border-primary/50 text-primary'
-      return 'bg-gray-900 border border-gray-800 text-gray-600'
+      if (i === selectedChoice) return { background: 'var(--ink)', color: 'var(--paper)', border: '1px solid var(--ink)' }
+      return { background: 'var(--paper)', color: 'var(--ink-4)', border: '1px solid var(--rule)', opacity: 0.35 }
     }
     const isCorrect   = i === correctReveal
     const wasMyChoice = i === myAnswer?.selected_choice
-    if (isCorrect) return 'bg-green-500/15 border border-green-500/60 text-green-300 font-bold'
-    if (wasMyChoice && !isCorrect) return 'bg-red-500/15 border border-red-500/60 text-red-400'
-    return 'bg-gray-900 border border-gray-800 text-gray-600'
+    if (isCorrect) return { background: 'rgba(34,197,94,0.07)', border: '2px solid #22c55e', color: 'var(--ink)' }
+    if (wasMyChoice && !isCorrect) return { background: 'rgba(180,48,57,0.07)', border: '2px solid var(--alert)', color: 'var(--ink)' }
+    return { background: 'var(--paper)', color: 'var(--ink-4)', border: '1px solid var(--rule)', opacity: 0.25 }
+  }
+
+  function choiceLetterStyle(i) {
+    if (!isRevealing && !hasAnswered) return { border: '1px solid var(--rule)', color: 'var(--ink-3)', background: 'transparent' }
+    if (!isRevealing && i === selectedChoice) return { border: '1px solid var(--paper-2)', color: 'var(--paper)', background: 'transparent' }
+    const isCorrect   = i === correctReveal
+    const wasMyChoice = i === myAnswer?.selected_choice
+    if (isCorrect)   return { border: '1px solid #22c55e', background: '#22c55e', color: 'var(--paper)' }
+    if (wasMyChoice) return { border: '1px solid var(--alert)', background: 'var(--alert)', color: 'var(--paper)' }
+    return { border: '1px solid var(--rule)', color: 'var(--ink-4)', background: 'transparent' }
   }
 
   return (
-    <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl">
+    <div style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }} dir="rtl">
 
       {/* Tournament badge */}
       {tournamentBadge && (
-        <div className="mx-4 mt-3 flex items-center justify-center gap-1.5 py-1.5">
-          <span className="text-xs font-bold ar text-yellow-400">🏆 {tournamentBadge}</span>
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--rule)', textAlign: 'center' }}>
+          <span className="folio" style={{ color: 'var(--gold)', letterSpacing: '0.15em' }}>🏆 {tournamentBadge}</span>
         </div>
       )}
 
       {/* Tiebreaker banner */}
       {duel.is_tiebreaker && (
-        <div className="mx-4 mt-1 bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-1.5 text-center">
-          <span className="text-orange-400 text-xs font-bold ar">⚡ سؤال فاصل!</span>
+        <div style={{ padding: '7px 16px', borderBottom: '1px solid var(--gold)', background: 'rgba(176,137,68,0.06)', textAlign: 'center' }}>
+          <span className="ar" style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold)' }}>⚡ سؤال فاصل!</span>
         </div>
       )}
 
       {/* Observer banner */}
       {isObserver && (
-        <div className="mx-4 mt-1 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-3 py-1.5 text-center">
-          <span className="text-yellow-400 text-xs font-bold ar">👁 وضع المشاهدة — لا يمكنك الإجابة</span>
+        <div style={{ padding: '7px 16px', borderBottom: '1px solid var(--rule)', background: 'var(--paper-2)', textAlign: 'center' }}>
+          <span className="folio" style={{ color: 'var(--ink-3)', letterSpacing: '0.2em' }}>OBSERVER MODE — لا يمكنك الإجابة</span>
         </div>
       )}
 
       {/* Disconnect banner */}
       {!isObserver && !opponentConnected && disconnectCountdown !== null && (
-        <div className="mx-4 mt-3 z-50">
-          <div className="bg-yellow-500/10 border border-yellow-500/40 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <WifiOff size={16} className="text-yellow-400 flex-shrink-0" />
-              <div>
-                <p className="text-yellow-300 font-bold text-sm">خصمك انقطع الاتصال</p>
-                <p className="text-yellow-600 text-xs">ستفوز تلقائياً إذا لم يعد خلال</p>
-              </div>
+        <div style={{
+          padding: '10px 16px', borderBottom: '1px solid var(--gold)',
+          background: 'rgba(176,137,68,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <WifiOff size={14} style={{ color: 'var(--gold)', flexShrink: 0 }} />
+            <div>
+              <p className="ar" style={{ fontWeight: 600, fontSize: 13, color: 'var(--gold)', margin: 0 }}>خصمك انقطع الاتصال</p>
+              <p className="ar" style={{ fontSize: 11, color: 'var(--ink-3)', margin: 0 }}>ستفوز تلقائياً إذا لم يعد خلال</p>
             </div>
-            <span className="text-yellow-300 font-mono font-bold text-2xl tabular-nums flex-shrink-0">
-              {disconnectCountdown}s
-            </span>
           </div>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 24, fontWeight: 700, color: 'var(--gold)', flexShrink: 0 }}>
+            {disconnectCountdown}s
+          </span>
         </div>
       )}
 
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">
+      {/* ── Top bar: player pills + question counter + timer ──────────── */}
+      <div style={{
+        padding: '12px 16px 10px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        borderBottom: '1px solid var(--rule)',
+      }}>
         <PlayerPill player={myPlayer} score={myPlayer?.score} align="right" />
 
-        <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
-          <p className="text-xs text-gray-500 font-mono">{qi + 1}/{duel.total_questions}</p>
-          <div className="flex items-center gap-1">
-            <Timer size={12} className={isObserver ? 'text-gray-600' : 'text-primary'} />
-            <span className={`font-mono tabular-nums ${
-              isObserver
-                ? 'text-sm text-gray-500'
-                : `text-lg font-bold ${timeLeftSec <= 5 ? 'text-red-400' : 'text-white'}`
-            }`}>
-              {duel.status === 'revealing' ? '✓' : timeLeftSec}
-            </span>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>
+            {qi + 1} / {duel.total_questions}
+          </span>
+          <span style={{
+            fontFamily: 'var(--mono)', fontSize: isObserver ? 14 : 20, fontWeight: 700,
+            color: isObserver ? 'var(--ink-4)' : timeLeftSec <= 5 ? 'var(--alert)' : 'var(--ink)',
+          }}>
+            {duel.status === 'revealing' ? '✓' : timeLeftSec}
+          </span>
         </div>
 
         <PlayerPill player={opponentPlayer} score={opponentPlayer?.score} align="left" />
       </div>
 
-      {/* Timer bar — full bar for players; observer sees only the compact number above */}
+      {/* Timer bar */}
       {!isObserver && <TimerBar pct={duel.status === 'revealing' ? 0 : timerPct} />}
 
-      {/* Question */}
-      <div dir={duel.force_rtl ? 'rtl' : 'ltr'} className="flex-1 flex flex-col px-4 pt-4 pb-4 gap-4 overflow-y-auto">
-        <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-5">
-          <p dir={duel.force_rtl ? 'rtl' : 'auto'} className="text-white font-bold text-base leading-relaxed text-center">
+      {/* ── Question + choices ────────────────────────────────────────── */}
+      <div dir={duel.force_rtl ? 'rtl' : 'ltr'} style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px', gap: 12, overflowY: 'auto' }}>
+
+        {/* Question card */}
+        <div style={{
+          border: '1px solid var(--rule)', borderBottomWidth: 2, borderBottomColor: 'var(--ink)',
+          padding: '16px', background: 'var(--paper)',
+        }}>
+          <p dir={duel.force_rtl ? 'rtl' : 'auto'} style={{ fontFamily: 'var(--serif)', fontSize: 17, fontWeight: 500, color: 'var(--ink)', margin: 0, lineHeight: 1.55, textAlign: 'center' }}>
             <MathText text={question?.question} dir={duel.force_rtl ? 'rtl' : 'auto'} />
           </p>
           {question?.image_url && (
-            <img
-              src={question.image_url}
-              alt="question"
-              className="mt-4 w-full max-h-48 object-contain bg-gray-900 rounded-xl border border-gray-700"
-            />
+            <img src={question.image_url} alt="question" style={{ marginTop: 12, width: '100%', maxHeight: 200, objectFit: 'contain', border: '1px solid var(--rule)' }} />
           )}
         </div>
 
         {/* Reveal mini-result */}
         {isRevealing && (
-          <div className="flex items-center justify-center gap-6 py-2">
-            <div className="text-center">
-              <p className="text-xs text-gray-500 mb-1">أنت</p>
-              {myAnswer ? (
-                <div className={`flex items-center gap-1 text-sm font-bold ${myAnswer.is_correct ? 'text-green-400' : 'text-red-400'}`}>
-                  <span>{myAnswer.is_correct ? '✓' : '✗'}</span>
-                  {myAnswer.is_correct && myAnswer.points_earned != null && (
-                    <span className={`font-mono text-xs font-bold ${myAnswer.points_earned === 1 ? 'text-yellow-400' : 'text-green-400'}`}>
-                      +{myAnswer.points_earned}
+          <div style={{
+            border: '1px solid var(--rule)', padding: '10px 16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 28,
+          }}>
+            {[
+              { label: 'أنت', answer: myAnswer },
+              { label: 'خصمك', answer: opponentAnswer },
+            ].map(({ label, answer }, idx) => (
+              <div key={idx} style={{ textAlign: 'center' }}>
+                <p className="ar" style={{ fontSize: 10, color: 'var(--ink-4)', margin: '0 0 4px' }}>{label}</p>
+                {answer ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: answer.is_correct ? '#22c55e' : 'var(--alert)' }}>
+                      {answer.is_correct ? '✓' : '✗'}
                     </span>
-                  )}
-                  <span className="font-mono text-xs text-gray-500">{myAnswer.reaction_time_ms}ms</span>
-                </div>
-              ) : (
-                <span className="text-gray-600 text-xs">لم تجب</span>
-              )}
-            </div>
-            <div className="w-px h-8 bg-gray-700" />
-            <div className="text-center">
-              <p className="text-xs text-gray-500 mb-1">خصمك</p>
-              {opponentAnswer ? (
-                <div className={`flex items-center gap-1 text-sm font-bold ${opponentAnswer.is_correct ? 'text-green-400' : 'text-red-400'}`}>
-                  <span>{opponentAnswer.is_correct ? '✓' : '✗'}</span>
-                  {opponentAnswer.is_correct && opponentAnswer.points_earned != null && (
-                    <span className={`font-mono text-xs font-bold ${opponentAnswer.points_earned === 1 ? 'text-yellow-400' : 'text-green-400'}`}>
-                      +{opponentAnswer.points_earned}
-                    </span>
-                  )}
-                  <span className="font-mono text-xs text-gray-500">{opponentAnswer.reaction_time_ms}ms</span>
-                </div>
-              ) : (
-                <span className="text-gray-600 text-xs">لم يجب</span>
-              )}
-            </div>
+                    {answer.is_correct && answer.points_earned != null && (
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: answer.points_earned === 1 ? 'var(--gold)' : '#22c55e' }}>
+                        +{answer.points_earned}
+                      </span>
+                    )}
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>{answer.reaction_time_ms}ms</span>
+                  </div>
+                ) : (
+                  <span className="ar" style={{ fontSize: 11, color: 'var(--ink-4)' }}>لم يجب</span>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
         {/* Choices */}
-        <div dir={duel.force_rtl ? 'rtl' : 'ltr'} className="space-y-3">
+        <div dir={duel.force_rtl ? 'rtl' : 'ltr'} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {(question?.choices || []).map((choice, i) => (
             <button
               key={i}
               onClick={() => submitAnswer(i)}
               disabled={hasAnswered || isRevealing}
-              className={`w-full flex items-center gap-3 px-4 py-4 rounded-2xl transition-all duration-150 ${choiceStyle(i)} disabled:cursor-default`}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+                padding: '13px 14px', transition: 'opacity 150ms',
+                ...choiceStyle(i),
+              }}
             >
-              <span className="w-7 h-7 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-xs font-bold flex-shrink-0 font-mono">
-                {String.fromCharCode(65 + i)}
+              <span style={{
+                width: 26, height: 26, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
+                ...choiceLetterStyle(i),
+              }}>
+                {isRevealing && i === correctReveal ? '✓' :
+                 isRevealing && i === myAnswer?.selected_choice && i !== correctReveal ? '✗' :
+                 String.fromCharCode(65 + i)}
               </span>
-              <span dir={duel.force_rtl ? 'rtl' : 'auto'} className="flex-1 text-sm font-medium leading-snug">
+              <span dir={duel.force_rtl ? 'rtl' : 'auto'} style={{ flex: 1, fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 500, lineHeight: 1.4, textAlign: 'right' }}>
                 <MathText text={choice} dir={duel.force_rtl ? 'rtl' : 'auto'} />
               </span>
-              {isRevealing && i === correctReveal && (
-                <span className="text-green-500 font-bold flex-shrink-0">✓</span>
-              )}
             </button>
           ))}
         </div>
 
-        {/* Waiting indicator */}
+        {/* Waiting for opponent */}
         {hasAnswered && !isRevealing && (
-          <div className="flex items-center justify-center gap-2 text-gray-500 text-sm py-2">
-            <Loader2 size={14} className="animate-spin text-primary" />
-            في انتظار الخصم...
+          <div style={{ textAlign: 'center', padding: '6px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--burgundy)', animation: 'mr-dot-pulse 1.6s ease-in-out infinite' }} />
+            <span className="ar" style={{ fontSize: 12, color: 'var(--ink-3)' }}>في انتظار الخصم…</span>
+            <style>{`@keyframes mr-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }`}</style>
           </div>
         )}
       </div>
 
-      {/* Exit / Surrender bar — hidden for observers */}
+      {/* ── Exit / surrender bar ─────────────────────────────────────── */}
       {!isObserver && (
-        <div className="flex items-center justify-center gap-4 px-4 pb-4 pt-1">
+        <div style={{
+          borderTop: '1px solid var(--rule)', padding: '10px 20px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20,
+        }}>
           <button
             onClick={() => setConfirmAction('surrender')}
             disabled={actionLoading}
-            className="flex items-center gap-1.5 text-gray-600 hover:text-yellow-400 transition-colors text-xs font-bold disabled:opacity-40"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: 'var(--ink-4)',
+              opacity: actionLoading ? 0.4 : 1,
+            }}
           >
-            <Flag size={13} />
-            استسلام (تعادل)
+            <Flag size={11} />
+            استسلام
           </button>
-          <span className="w-px h-4 bg-gray-800" />
+          <div style={{ width: 1, height: 14, background: 'var(--rule)' }} />
           <button
             onClick={() => setConfirmAction('forfeit')}
             disabled={actionLoading}
-            className="flex items-center gap-1.5 text-gray-600 hover:text-red-400 transition-colors text-xs font-bold disabled:opacity-40"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: 'var(--ink-4)',
+              opacity: actionLoading ? 0.4 : 1,
+            }}
           >
-            <LogOut size={13} />
-            الخروج (خسارة)
+            <LogOut size={11} />
+            الخروج
           </button>
         </div>
       )}
 
-      {/* Confirm overlay */}
+      {/* ── Editorial confirm overlay ─────────────────────────────────── */}
       {confirmAction && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" dir="rtl">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setConfirmAction(null)} />
-          <div className="relative bg-[#0D1321] border-t border-gray-700 rounded-t-2xl p-6 w-full max-w-sm space-y-4">
-            <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto -mt-2 mb-2" />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} dir="rtl">
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={() => setConfirmAction(null)} />
+          <div style={{
+            position: 'relative', background: 'var(--paper)',
+            borderTop: '3px double var(--rule-strong)',
+            width: '100%', maxWidth: 400, padding: '24px 20px',
+            display: 'flex', flexDirection: 'column', gap: 16,
+          }}>
             {confirmAction === 'forfeit' ? (
               <>
-                <div className="text-center space-y-1">
-                  <p className="text-white font-bold text-lg">الخروج من اللعبة؟</p>
-                  <p className="text-gray-400 text-sm">ستُحسب خسارة حتى لو كنت متقدم بالنقاط</p>
+                <div style={{ textAlign: 'center' }}>
+                  <h3 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, color: 'var(--ink)', margin: '0 0 6px' }}>
+                    الخروج من اللعبة؟
+                  </h3>
+                  <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: 0 }}>
+                    ستُحسب خسارة حتى لو كنت متقدم بالنقاط
+                  </p>
                 </div>
-                <button onClick={handleForfeit} className="w-full py-3 bg-red-500/20 border border-red-500/40 hover:bg-red-500/30 text-red-400 font-bold rounded-2xl text-sm transition-colors">
+                <button onClick={handleForfeit} style={{
+                  width: '100%', padding: '13px', background: 'transparent',
+                  border: '1px solid var(--alert)', color: 'var(--alert)',
+                  fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                }}>
                   تأكيد الخروج
                 </button>
               </>
             ) : (
               <>
-                <div className="text-center space-y-1">
-                  <p className="text-white font-bold text-lg">الاستسلام؟</p>
-                  <p className="text-gray-400 text-sm">ستنتهي اللعبة بتعادل لكلا اللاعبَين</p>
+                <div style={{ textAlign: 'center' }}>
+                  <h3 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, color: 'var(--ink)', margin: '0 0 6px' }}>
+                    الاستسلام؟
+                  </h3>
+                  <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: 0 }}>
+                    ستنتهي اللعبة بتعادل لكلا اللاعبَين
+                  </p>
                 </div>
-                <button onClick={handleSurrender} className="w-full py-3 bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20 text-yellow-400 font-bold rounded-2xl text-sm transition-colors">
+                <button onClick={handleSurrender} style={{
+                  width: '100%', padding: '13px', background: 'transparent',
+                  border: '1px solid var(--gold)', color: 'var(--gold)',
+                  fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                }}>
                   تأكيد التعادل
                 </button>
               </>
             )}
-            <button onClick={() => setConfirmAction(null)} className="w-full py-2 text-gray-500 hover:text-gray-300 text-sm font-bold transition-colors">
+            <button onClick={() => setConfirmAction(null)} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.12em',
+              textTransform: 'uppercase', color: 'var(--ink-4)', padding: '4px 0',
+            }}>
               إلغاء
             </button>
           </div>
         </div>
       )}
+
     </div>
   )
 }

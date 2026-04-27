@@ -6,7 +6,7 @@ import { doc, updateDoc, increment, getDoc, setDoc, serverTimestamp, collection 
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
-import { Trophy, Clock, CheckCircle2, XCircle, AlertCircle, Zap, WifiOff, Download, Loader2, Edit2, Check, X, Star } from 'lucide-react'
+import { Trophy, WifiOff, Download, Loader2, Edit2, Check, X } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import QuestionImage from '../../components/QuestionImage'
 import { signAnswer, validateReactionTime, verifyAnswerHash } from '../../utils/crypto'
@@ -15,39 +15,47 @@ import { getDir } from '../../utils/rtlUtils'
 import { useUnattendedGameRunner } from '../../hooks/useUnattendedGameRunner'
 
 // ── Mini leaderboard strip ────────────────────────────────────────────────────
-// top5: [{rank, user_id, nickname, score}] — from rooms/${roomId}/leaderboard/top5
-// myId, myRank, myScore, myNickname — player's own data (from player node)
 function MiniLeaderboard({ top5, myId, myRank, myScore, myNickname }) {
   if (!top5 || top5.length === 0) return null
   const isMeInTop5 = top5.some(p => p.user_id === myId)
 
   return (
-    <div className="w-full max-w-2xl mb-3">
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+    <div style={{ width: '100%', maxWidth: 640, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', paddingBottom: 2 }}>
         {top5.map(p => {
           const isMe = p.user_id === myId
           return (
-            <div key={p.user_id}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold flex-shrink-0 transition-colors ${
-                isMe
-                  ? 'bg-primary/20 border border-primary/50 text-primary'
-                  : 'bg-gray-800/80 border border-gray-700 text-gray-300'
-              }`}
-            >
-              <span className="text-gray-500 font-mono">#{p.rank}</span>
-              <span className="max-w-[80px] truncate">{p.nickname}</span>
-              <span className={`font-mono ${isMe ? 'text-primary' : 'text-gray-400'}`}>{p.score}</span>
+            <div key={p.user_id} style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '3px 8px', flexShrink: 0,
+              border: `1px solid ${isMe ? 'var(--ink)' : 'var(--rule)'}`,
+              background: isMe ? 'var(--ink)' : 'var(--paper-2)',
+            }}>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: isMe ? 'var(--paper-2)' : 'var(--ink-4)' }}>
+                #{p.rank}
+              </span>
+              <span style={{ fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 600, color: isMe ? 'var(--paper)' : 'var(--ink)', maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {p.nickname}
+              </span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, color: isMe ? 'var(--paper)' : 'var(--ink)' }}>
+                {p.score}
+              </span>
             </div>
           )
         })}
-        {/* Show my chip only if I'm not in top 5 */}
         {!isMeInTop5 && myRank && (
           <>
-            <span className="text-gray-700 text-xs flex-shrink-0">···</span>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold flex-shrink-0 bg-primary/20 border border-primary/50 text-primary">
-              <span className="text-gray-500 font-mono">#{myRank}</span>
-              <span className="max-w-[80px] truncate">{myNickname}</span>
-              <span className="font-mono text-primary">{myScore}</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink-4)' }}>···</span>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '3px 8px', flexShrink: 0,
+              border: '1px solid var(--ink)', background: 'var(--ink)',
+            }}>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--paper-2)' }}>#{myRank}</span>
+              <span style={{ fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 600, color: 'var(--paper)', maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {myNickname}
+              </span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, color: 'var(--paper)' }}>{myScore}</span>
             </div>
           </>
         )}
@@ -71,36 +79,39 @@ function PlayerCountdown({ startedAt, duration }) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [startedAt, duration])
 
-  const pct    = (remaining / duration) * 100
+  const pct     = (remaining / duration) * 100
   const urgent  = remaining < duration * 0.25
   const expired = remaining === 0
 
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors ${
-      expired ? 'border-gray-700 bg-gray-800/40'
-      : urgent ? 'border-red-500/50 bg-red-500/10'
-      : 'border-primary/40 bg-primary/5'
-    }`}>
-      <Clock size={13} className={expired ? 'text-gray-600' : urgent ? 'text-red-400 animate-pulse' : 'text-primary'} />
-      <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-none ${expired ? 'bg-gray-600' : urgent ? 'bg-red-400' : 'bg-primary'}`}
-          style={{ width: `${pct}%` }} />
+    <div style={{ marginTop: 8 }}>
+      <div style={{
+        height: 3, background: 'var(--rule)', position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', left: 0, top: 0, height: '100%',
+          width: `${pct}%`,
+          background: expired ? 'var(--rule)' : urgent ? 'var(--alert)' : 'var(--ink)',
+          transition: 'background 300ms',
+        }} />
       </div>
-      <span className={`font-mono font-bold text-sm w-10 text-right tabular-nums ${
-        expired ? 'text-gray-500' : urgent ? 'text-red-400' : 'text-primary'
-      }`}>
-        {expired ? 'Done' : `${Math.ceil(remaining)}s`}
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
+        <span style={{
+          fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700,
+          color: expired ? 'var(--ink-4)' : urgent ? 'var(--alert)' : 'var(--ink)',
+        }}>
+          {expired ? 'Time up' : `${Math.ceil(remaining)}s`}
+        </span>
+      </div>
     </div>
   )
 }
 
-// ── Dynamic font size for question text ───────────────────────────────────────
-function questionFontClass(text = '') {
+function questionFontSize(text = '') {
   const len = text.length
-  if (len > 220) return 'text-sm'
-  if (len > 120) return 'text-base'
-  return 'text-lg'
+  if (len > 220) return 14
+  if (len > 120) return 16
+  return 18
 }
 
 export default function PlayerGameView() {
@@ -118,10 +129,8 @@ export default function PlayerGameView() {
   const [hostOnline, setHostOnline]         = useState(true)
   const [top5, setTop5]                     = useState([])
 
-  // Auto-navigate countdown for tournament FFA finish
   const [autoNavCountdown, setAutoNavCountdown] = useState(null)
 
-  // Nickname editing
   const [editingName, setEditingName]   = useState(false)
   const [nameInput, setNameInput]       = useState('')
   const [savingName, setSavingName]     = useState(false)
@@ -137,7 +146,6 @@ export default function PlayerGameView() {
     questionServerStartRef.current = Date.now() + clockOffset.current
   }
 
-  // ── Player presence ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!session) return
     const uid = session.uid
@@ -147,7 +155,6 @@ export default function PlayerGameView() {
     return () => set(presRef, { online: false, last_seen: Date.now() })
   }, [roomId, session])
 
-  // ── Host presence ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!session) return
     const unsub = onValue(ref(rtdb, `rooms/${roomId}/presence/host`), snap => {
@@ -156,7 +163,6 @@ export default function PlayerGameView() {
     return () => unsub()
   }, [roomId, session])
 
-  // ── Room subscription ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!session) return
     const uid = session.uid
@@ -176,11 +182,9 @@ export default function PlayerGameView() {
         const qSetId  = data.question_set_id
         const hostUid = data.host_id
 
-        // Auto-navigate to tournament wait page after 5 seconds
         if (data.tournament_id) setAutoNavCountdown(5)
 
         if (qSetId && uid) {
-          // Increment played count
           updateDoc(doc(db, 'profiles', uid), {
             [`played_decks.${qSetId}`]: increment(1)
           }).catch(() => {})
@@ -198,9 +202,6 @@ export default function PlayerGameView() {
               const tournamentTitle = tournSnap?.data()?.title || ''
               const myScore        = data.players?.[uid]?.score ?? 0
 
-              // ── Write game history entry ────────────────────────────────
-              // Tournament FFA games get their own doc ID + type so they
-              // show as "بطولة X" in the player's history, not just a room.
               const historyDocId = isTournament
                 ? `t_${data.tournament_id}_ffa_${roomId}`
                 : roomId
@@ -234,14 +235,12 @@ export default function PlayerGameView() {
 
               await setDoc(doc(db, 'profiles', uid, 'game_history', historyDocId), historyEntry)
 
-              // Track that this host has hosted us (for phone visibility)
               if (hostUid) {
                 updateDoc(doc(db, 'profiles', uid), {
                   [`hosted_by.${hostUid}`]: hostName,
                 }).catch(() => {})
               }
 
-              // ── Write player notification ───────────────────────────────
               const sortedLeaderboard = data.players
                 ? Object.values(data.players)
                     .sort((a, b) => (b.score || 0) - (a.score || 0))
@@ -252,7 +251,6 @@ export default function PlayerGameView() {
                 : []
               const myRank = sortedLeaderboard.findIndex(p => p.user_id === uid) + 1
 
-              // Write only if notification doesn't exist yet (prevents re-mount duplicates)
               const playerNotifRef = doc(db, 'notifications', uid, 'items', roomId)
               const existingNotif  = await getDoc(playerNotifRef)
               if (!existingNotif.exists()) {
@@ -270,7 +268,6 @@ export default function PlayerGameView() {
                 })
               }
 
-              // ── Write host notification (backup for unattended mode) ────
               if (hostUid) {
                 const hostNotifRef = doc(db, 'notifications', hostUid, 'items', roomId)
                 getDoc(hostNotifRef).then(snap => {
@@ -302,7 +299,6 @@ export default function PlayerGameView() {
     return () => unsub()
   }, [roomId, session])
 
-  // ── My player node ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!session) return
     const uid = session.uid
@@ -319,7 +315,6 @@ export default function PlayerGameView() {
     return () => unsub()
   }, [roomId, session])
 
-  // ── Leaderboard subscription (top 5 only — minimal bandwidth) ────────────
   useEffect(() => {
     if (!session) return
     const unsub = onValue(ref(rtdb, `rooms/${roomId}/leaderboard/top5`), snap => {
@@ -328,12 +323,8 @@ export default function PlayerGameView() {
     return () => unsub()
   }, [roomId, session])
 
-  // ── Unattended game runner ────────────────────────────────────────────────
-  // When unattended_mode is on, this client acts as a backup runner so the
-  // game advances even if the host closes their browser.
   useUnattendedGameRunner({ roomId, room, session })
 
-  // ── Tournament FFA auto-navigate countdown ───────────────────────────────
   useEffect(() => {
     if (autoNavCountdown === null || !room?.tournament_id) return
     if (autoNavCountdown <= 0) {
@@ -344,7 +335,6 @@ export default function PlayerGameView() {
     return () => clearTimeout(t)
   }, [autoNavCountdown, room?.tournament_id, navigate])
 
-  // ── Rejoin: load existing answer ──────────────────────────────────────────
   useEffect(() => {
     if (!session || !room) return
     const uid = session.uid
@@ -361,7 +351,6 @@ export default function PlayerGameView() {
     }
   }, [room?.status, room?.current_question_index])
 
-  // ── Fetch result after reveal ─────────────────────────────────────────────
   const fetchMyAnswerResult = async (questionIndex, uid) => {
     const [answerSnap, revealSnap] = await Promise.all([
       get(ref(rtdb, `rooms/${roomId}/answers/${questionIndex}/${uid}`)),
@@ -387,15 +376,14 @@ export default function PlayerGameView() {
       })
       if (a.is_correct) confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } })
     } else {
-      setRevealedResult({ 
-        didNotAnswer: true, 
+      setRevealedResult({
+        didNotAnswer: true,
         winner_nickname: winnerNickname,
         winners:          revealData?.winners || [],
       })
     }
   }
 
-  // ── Submit answer with cryptographic signing ──────────────────────────────────
   const handleChoiceClick = async (choiceIndex) => {
     if (answerLocked || !room || !session) return
 
@@ -407,46 +395,27 @@ export default function PlayerGameView() {
     setSelectedChoice(choiceIndex)
     setAnswerLocked(true)
 
-    // Initialize activity logger if not already done
     let logger = getActivityLogger()
-    if (!logger) {
-      logger = initActivityLogger(session.uid, roomId)
-    }
+    if (!logger) logger = initActivityLogger(session.uid, roomId)
 
     const uid    = session.uid
     const qIdx   = room.current_question_index
-
-    // SECURITY: Validate reaction time (detect impossible speeds)
     const questionLimit = room.config?.timer_seconds || 30
     const timeValidation = validateReactionTime(reactionMs, questionLimit)
     const isAnomalous = timeValidation.isAnomalous
 
     if (isAnomalous) {
-      logger.addLog('anomalous_reaction_time', {
-        reaction_time_ms: reactionMs,
-        reason: timeValidation.reason,
-        question_index: qIdx
-      })
+      logger.addLog('anomalous_reaction_time', { reaction_time_ms: reactionMs, reason: timeValidation.reason, question_index: qIdx })
     }
 
-    // SECURITY: Prepare answer for signing (NO is_correct field!)
     const answerData = {
-      selected_choice: choiceIndex,
-      reaction_time: reactionMs,
-      timestamp: Date.now(),
-      room_id: roomId,
-      user_id: uid,
-      question_index: qIdx
+      selected_choice: choiceIndex, reaction_time: reactionMs,
+      timestamp: Date.now(), room_id: roomId, user_id: uid, question_index: qIdx
     }
 
-    // SECURITY: Get game secret (stored in room config or generated per room)
     let gameSecret = room.game_secret || 'default-secret-' + roomId
-    if (!room.game_secret) {
-      // If no secret in room, use room ID + created timestamp to make it harder to predict
-      gameSecret = 'secure-' + roomId + '-' + (room.created_at || 'generated')
-    }
+    if (!room.game_secret) gameSecret = 'secure-' + roomId + '-' + (room.created_at || 'generated')
 
-    // SECURITY: Sign the answer to prevent tampering
     let signature = null
     try {
       signature = await signAnswer(answerData, gameSecret)
@@ -458,32 +427,23 @@ export default function PlayerGameView() {
       return
     }
 
-    // Log the submission
-    logger.logAnswerSubmission({
-      ...answerData,
-      signature: signature.substring(0, 16) + '...' // Log partial signature for record
-    })
+    logger.logAnswerSubmission({ ...answerData, signature: signature.substring(0, 16) + '...' })
 
     const answerRef = ref(rtdb, `rooms/${roomId}/answers/${qIdx}/${uid}`)
-
-    // SECURITY: Submit answer WITHOUT is_correct field
-    // Server/Host will verify the answer using the signature and correct answer hash
     await runTransaction(answerRef, current => {
-      if (current !== null) return undefined  // already answered — abort
+      if (current !== null) return undefined
       return {
         user_id:          uid,
         player_name:      player?.nickname || 'Unknown',
         selected_choice:  choiceIndex,
-        // NOTE: is_correct is NOT sent - server/host calculates it
         is_anomalous:     isAnomalous,
         reaction_time_ms: reactionMs,
-        signature:        signature,  // Cryptographic proof of answer integrity
+        signature:        signature,
         submitted_at:     Date.now(),
       }
     })
   }
 
-  // ── Nickname editing ──────────────────────────────────────────────────────
   const saveNickname = async () => {
     const trimmed = nameInput.trim()
     if (!trimmed || trimmed === player?.nickname) { setEditingName(false); return }
@@ -494,7 +454,6 @@ export default function PlayerGameView() {
     finally { setSavingName(false); setEditingName(false) }
   }
 
-  // ── Download game logs ────────────────────────────────────────────────────
   const [downloadingLogs, setDownloadingLogs] = useState(false)
 
   const downloadLogs = async () => {
@@ -504,7 +463,6 @@ export default function PlayerGameView() {
       const questions = room.questions?.questions || []
       const pad = (s, n) => String(s).padEnd(n)
       const lines = []
-
       lines.push('=== Med Royale — Game Log ===')
       lines.push(`Room      : ${roomId}`)
       lines.push(`Date      : ${new Date().toLocaleString()}`)
@@ -512,7 +470,6 @@ export default function PlayerGameView() {
       lines.push(`Scoring   : ${room.config?.scoring_mode || 'classic'}`)
       lines.push('')
 
-      // Read all players for the room
       const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`))
       const allPlayers  = playersSnap.exists()
         ? Object.values(playersSnap.val()).sort((a, b) => b.score - a.score)
@@ -525,17 +482,8 @@ export default function PlayerGameView() {
         const secretKey = `${roomId}:${room.created_at}`
         let correctIdx = -1
         for (let i = 0; i < q.choices.length; i++) {
-          const isMatch = await verifyAnswerHash(
-            i, 
-            q.correct_hash, 
-            `${roomId}-q${qi}`, 
-            roomId, 
-            secretKey
-          )
-          if (isMatch) {
-            correctIdx = i
-            break
-          }
+          const isMatch = await verifyAnswerHash(i, q.correct_hash, `${roomId}-q${qi}`, roomId, secretKey)
+          if (isMatch) { correctIdx = i; break }
         }
         lines.push(`Correct: ${q.choices[correctIdx] || '?'}`)
         lines.push('─'.repeat(62))
@@ -570,7 +518,7 @@ export default function PlayerGameView() {
         lines.push(`  #${pad(i + 1, 4)}${pad(p.nickname, 32)}${p.score} pts`)
       })
 
-      const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/plain;charset=utf-8' })
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href = url
@@ -584,20 +532,23 @@ export default function PlayerGameView() {
     }
   }
 
-  // Preload next question's image while answering current one (must be before early return)
   const nextQImg = room?.questions?.questions?.[room?.current_question_index + 1]?.image_url
   useEffect(() => {
     if (!nextQImg) return
-    const img = new Image()
-    img.src = nextQImg
+    const img = new Image(); img.src = nextQImg
   }, [nextQImg])
 
-  // ─────────────────────────────────────────────────────────────────────────
   if (!room || !player) return (
-    <div className="flex h-screen items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-4 text-white">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-gray-400">Joining game...</p>
+    <div style={{ height: '100svh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <svg width="40" height="40" viewBox="0 0 100 100" fill="none" style={{ animation: 'mr-spin-slow 10s linear infinite' }}>
+          <circle cx="50" cy="50" r="46" stroke="var(--rule)" strokeWidth="1" />
+          <circle cx="50" cy="50" r="36" stroke="var(--ink)" strokeWidth="1.5" />
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+            fontFamily="Fraunces, Georgia, serif" fontSize="22" fontWeight="500" fill="var(--ink)">MR</text>
+        </svg>
+        <style>{`@keyframes mr-spin-slow { to { transform: rotate(360deg); } }`}</style>
+        <span className="folio">Joining game…</span>
       </div>
     </div>
   )
@@ -606,105 +557,141 @@ export default function PlayerGameView() {
   const myId     = session?.uid
 
   return (
-    <div className="flex flex-col h-screen bg-background text-white overflow-hidden">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100svh', background: 'var(--paper)', overflow: 'hidden' }}>
 
-      {/* Host offline banner */}
+      {/* ── Host offline banner ───────────────────────────────────────── */}
       {!hostOnline && room?.status !== 'finished' && !room?.config?.unattended_mode && (
-        <div className="bg-red-500/20 border-b border-red-500/40 px-4 py-2 flex items-center justify-center gap-2 text-red-300 text-sm font-bold flex-shrink-0">
-          <WifiOff size={15} /> الهوست خرج — في انتظار عودته...
+        <div style={{
+          background: 'rgba(180,48,57,0.08)', borderBottom: '1px solid var(--alert)',
+          padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          flexShrink: 0,
+        }}>
+          <WifiOff size={13} style={{ color: 'var(--alert)' }} />
+          <span className="ar" style={{ fontSize: 13, color: 'var(--alert)', fontWeight: 600 }}>الهوست خرج — في انتظار عودته...</span>
         </div>
       )}
 
-      {/* Top bar */}
-      <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex justify-between items-center shadow-lg flex-shrink-0">
-        <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
+      {/* ── Top bar ───────────────────────────────────────────────────── */}
+      <div style={{
+        borderBottom: '2px solid var(--ink)', padding: '10px 16px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
+        background: 'var(--paper)',
+      }}>
+        {/* Avatar + name */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, marginRight: 12 }}>
           {player.avatar_url && (
-            <img src={player.avatar_url} alt="" className="w-9 h-9 rounded-full border-2 border-primary flex-shrink-0" />
+            <div style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid var(--ink)', overflow: 'hidden', flexShrink: 0 }}>
+              <img src={player.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
           )}
-          {/* Inline nickname editor — only in lobby */}
           {editingName ? (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
               <input
                 autoFocus
                 value={nameInput}
                 onChange={e => setNameInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') saveNickname(); if (e.key === 'Escape') setEditingName(false) }}
                 maxLength={30}
-                className="flex-1 min-w-0 bg-gray-800 border border-primary rounded-lg px-3 py-1 text-white font-bold text-sm focus:outline-none"
+                style={{
+                  flex: 1, minWidth: 0, background: 'var(--paper-2)',
+                  border: '1px solid var(--ink)', padding: '4px 8px',
+                  fontFamily: 'var(--serif)', fontSize: 14, color: 'var(--ink)', outline: 'none',
+                }}
               />
-              <button onClick={saveNickname} disabled={savingName}
-                className="p-1.5 bg-primary/20 text-primary rounded-lg hover:bg-primary/30 transition-colors flex-shrink-0">
-                {savingName ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              <button onClick={saveNickname} disabled={savingName} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink)', padding: 4 }}>
+                {savingName ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />}
               </button>
-              <button onClick={() => setEditingName(false)}
-                className="p-1.5 bg-gray-700 text-gray-400 rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0">
-                <X size={14} />
+              <button onClick={() => setEditingName(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', padding: 4 }}>
+                <X size={13} />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="font-bold text-base truncate">{player.nickname}</span>
-              {/* Edit icon — only in lobby */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <span style={{ fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {player.nickname}
+              </span>
               {room?.status === 'lobby' && (
                 <button
                   onClick={() => { setNameInput(player.nickname); setEditingName(true) }}
-                  className="p-1 text-gray-600 hover:text-primary transition-colors flex-shrink-0"
-                  title="تغيير الاسم"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 2 }}
                 >
-                  <Edit2 size={13} />
+                  <Edit2 size={11} />
                 </button>
               )}
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 bg-gray-800 px-3 py-1.5 rounded-xl flex-shrink-0">
-          <Trophy className="text-[#FFD700]" size={16} />
-          <span className="font-mono text-lg font-bold">{player.score} PTS</span>
+
+        {/* Score */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          border: '1px solid var(--rule)', padding: '5px 12px', flexShrink: 0,
+        }}>
+          <Trophy size={13} style={{ color: 'var(--gold)' }} />
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
+            {player.score} <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-4)' }}>PTS</span>
+          </span>
         </div>
       </div>
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col items-center overflow-y-auto px-4 pt-4 pb-4">
+      {/* ── Main area ─────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', overflowY: 'auto', padding: '16px', paddingBottom: 24 }}>
 
-        {/* ── LOBBY ──────────────────────────────────────────────────────── */}
+        {/* ────────── LOBBY ────────────────────────────────────────────── */}
         {room.status === 'lobby' && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center space-y-6 max-w-md w-full">
-              <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto border-4 border-primary">
-                <Clock size={36} className="text-primary animate-pulse" />
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+            <div style={{ textAlign: 'center', maxWidth: 340 }}>
+              <div style={{ position: 'relative', width: 72, height: 72, margin: '0 auto 24px' }}>
+                <svg width="72" height="72" viewBox="0 0 100 100" fill="none"
+                  style={{ animation: 'mr-spin-slow 10s linear infinite' }}>
+                  <circle cx="50" cy="50" r="46" stroke="var(--rule)" strokeWidth="1" />
+                  <circle cx="50" cy="50" r="36" stroke="var(--ink)" strokeWidth="1.5" />
+                  <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+                    fontFamily="Fraunces, Georgia, serif" fontSize="22" fontWeight="500" fill="var(--ink)">MR</text>
+                </svg>
+                <div style={{ position: 'absolute', inset: -8, border: '1px solid var(--rule)', borderRadius: '50%', animation: 'mr-ring-pulse 2.6s ease-in-out infinite' }} />
+                <style>{`
+                  @keyframes mr-spin-slow  { to { transform: rotate(360deg); } }
+                  @keyframes mr-ring-pulse { 0%,100%{transform:scale(1);opacity:0.6} 50%{transform:scale(1.1);opacity:0.15} }
+                `}</style>
               </div>
-              <h1 className="text-3xl font-display font-bold">You're In!</h1>
-              <p className="text-lg text-gray-400">في انتظار <span className="text-white font-bold">{room.title}</span></p>
+              <p className="folio" style={{ marginBottom: 10, letterSpacing: '0.25em' }}>YOU'RE IN</p>
+              <h2 style={{ fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 400, color: 'var(--ink)', margin: '0 0 8px', lineHeight: 1.1 }}>
+                Waiting for<br /><em style={{ fontWeight: 300, color: 'var(--burgundy)' }}>{room.title}</em>
+              </h2>
             </div>
           </div>
         )}
 
-        {/* ── PLAYING ────────────────────────────────────────────────────── */}
+        {/* ────────── PLAYING ──────────────────────────────────────────── */}
         {room.status === 'playing' && currentQ && (
-          <div className="w-full max-w-2xl flex flex-col gap-3">
+          <div style={{ width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-            {/* Late-joiner notice */}
             {player?.joined_at_question_index > 0 && (
-              <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-2 flex items-center gap-2 text-xs text-orange-300">
-                <span className="flex-shrink-0"><AlertCircle size={13} /></span>
-                <span>دخلت من سؤال {player.joined_at_question_index + 1} — الأسئلة السابقة محسوبة صفر.</span>
+              <div style={{ border: '1px solid var(--gold)', background: 'rgba(176,137,68,0.06)', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--gold)' }}>!</span>
+                <span className="ar" style={{ fontSize: 12, color: 'var(--gold)' }}>دخلت من سؤال {player.joined_at_question_index + 1} — الأسئلة السابقة محسوبة صفر.</span>
               </div>
             )}
-            {/* Mini leaderboard */}
+
             <MiniLeaderboard top5={top5} myId={myId} myRank={player?.rank} myScore={player?.score} myNickname={player?.nickname} />
 
             {/* Question card */}
-            <div dir={getDir(currentQ.question, room.force_rtl)} className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0 space-y-3">
-              <span className="text-primary font-bold text-xs tracking-widest uppercase block">
-                سؤال {room.current_question_index + 1} / {room.questions.questions.length}
-              </span>
-              <p className={`text-white font-bold ${questionFontClass(currentQ.question)} leading-snug`}>
+            <div dir={getDir(currentQ.question, room.force_rtl)} style={{
+              border: '1px solid var(--rule)', borderBottomWidth: 2, borderBottomColor: 'var(--ink)',
+              padding: '16px', background: 'var(--paper)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span className="folio" style={{ letterSpacing: '0.2em', color: 'var(--burgundy)' }}>
+                  Q {room.current_question_index + 1} / {room.questions.questions.length}
+                </span>
+              </div>
+              <p style={{ fontFamily: 'var(--serif)', fontSize: questionFontSize(currentQ.question), fontWeight: 500, color: 'var(--ink)', lineHeight: 1.55, margin: 0 }}>
                 <MathText text={currentQ.question} dir={getDir(currentQ.question, room.force_rtl)} />
               </p>
               {currentQ.image_url && (
-                <QuestionImage src={currentQ.image_url} className="w-full max-h-36 object-contain rounded-xl border border-gray-700 bg-gray-950" />
+                <QuestionImage src={currentQ.image_url} style={{ width: '100%', maxHeight: 160, objectFit: 'contain', marginTop: 12, border: '1px solid var(--rule)' }} />
               )}
-              {/* Countdown bar — appears when host starts it */}
               {room.countdown_started_at && (
                 <PlayerCountdown startedAt={room.countdown_started_at} duration={room.countdown_duration} />
               )}
@@ -712,252 +699,301 @@ export default function PlayerGameView() {
 
             {/* Choices */}
             {!answerLocked ? (
-              <div dir={getDir(currentQ.question, room.force_rtl)} className="grid grid-cols-2 gap-2">
+              <div dir={getDir(currentQ.question, room.force_rtl)} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 {currentQ.choices.map((choice, idx) => (
-                  <button key={idx} onClick={() => handleChoiceClick(idx)}
-                    className="flex items-center gap-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl px-4 py-3 transition-all active:scale-95 group">
-                    <span className="w-8 h-8 rounded-lg bg-gray-700 group-hover:bg-primary/20 text-gray-300 group-hover:text-primary font-bold flex-shrink-0 flex items-center justify-center text-sm transition-colors">
+                  <button key={idx} onClick={() => handleChoiceClick(idx)} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 14px',
+                    background: 'var(--paper)', color: 'var(--ink)',
+                    border: '1px solid var(--rule)', borderBottomWidth: 2, borderBottomColor: 'var(--ink)',
+                    cursor: 'pointer', textAlign: 'left',
+                    transition: 'background 80ms',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--paper-2)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'var(--paper)'}
+                  >
+                    <span style={{
+                      width: 26, height: 26, flexShrink: 0,
+                      border: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, color: 'var(--ink-3)',
+                    }}>
                       {String.fromCharCode(65 + idx)}
                     </span>
-                    <span className="text-white font-medium text-sm leading-snug">
+                    <span style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
                       <MathText text={choice} dir={getDir(choice, room.force_rtl)} />
                     </span>
                   </button>
                 ))}
               </div>
             ) : (
-              <>
-                <div dir={getDir(currentQ.question, room.force_rtl)} className="grid grid-cols-2 gap-2">
-                  {currentQ.choices.map((choice, idx) => {
-                    const isPicked = idx === selectedChoice
-                    return (
-                      <div key={idx} className={`flex items-center gap-3 border rounded-xl px-4 py-3 transition-all ${
-                        isPicked
-                          ? 'bg-primary/10 border-primary'
-                          : 'bg-gray-900/50 border-gray-800 opacity-40'
-                      }`}>
-                        <span className={`w-8 h-8 rounded-lg font-bold flex-shrink-0 flex items-center justify-center text-sm ${
-                          isPicked ? 'bg-primary text-background' : 'bg-gray-700 text-gray-400'
-                        }`}>
-                          {String.fromCharCode(65 + idx)}
-                        </span>
-                        <span className={`font-medium text-sm leading-snug ${isPicked ? 'text-white' : 'text-gray-400'}`}>
-                          <MathText text={choice} dir={getDir(choice, room.force_rtl)} />
-                        </span>
-                        {isPicked && <Zap size={13} className="ml-auto flex-shrink-0 text-primary" fill="currentColor" />}
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="py-2 text-center">
-                  <div className="inline-flex items-center gap-2 bg-gray-900 border border-gray-700 px-4 py-2 rounded-full">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
-                    <span className="ar text-gray-400 text-sm">في انتظار الكشف...</span>
-                  </div>
-                </div>
-              </>
+              <div dir={getDir(currentQ.question, room.force_rtl)} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {currentQ.choices.map((choice, idx) => {
+                  const isPicked = idx === selectedChoice
+                  return (
+                    <div key={idx} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '12px 14px',
+                      background: isPicked ? 'var(--ink)' : 'var(--paper)',
+                      border: `1px solid ${isPicked ? 'var(--ink)' : 'var(--rule)'}`,
+                      opacity: isPicked ? 1 : 0.35,
+                    }}>
+                      <span style={{
+                        width: 26, height: 26, flexShrink: 0,
+                        border: `1px solid ${isPicked ? 'var(--paper-2)' : 'var(--rule)'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
+                        color: isPicked ? 'var(--paper)' : 'var(--ink-3)',
+                      }}>
+                        {String.fromCharCode(65 + idx)}
+                      </span>
+                      <span style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 500, color: isPicked ? 'var(--paper)' : 'var(--ink)', lineHeight: 1.4 }}>
+                        <MathText text={choice} dir={getDir(choice, room.force_rtl)} />
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {answerLocked && !revealedResult && (
+              <div style={{ textAlign: 'center', padding: '8px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--burgundy)', animation: 'mr-dot-pulse 1.6s ease-in-out infinite' }} />
+                <span className="ar" style={{ fontSize: 12, color: 'var(--ink-3)' }}>في انتظار الكشف…</span>
+                <style>{`@keyframes mr-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }`}</style>
+              </div>
             )}
           </div>
         )}
 
-        {/* ── REVEALING ──────────────────────────────────────────────────── */}
+        {/* ────────── REVEALING ────────────────────────────────────────── */}
         {room.status === 'revealing' && currentQ && (
-          <div className="w-full max-w-2xl flex flex-col gap-3">
+          <div style={{ width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-            {/* Mini leaderboard */}
             <MiniLeaderboard top5={top5} myId={myId} myRank={player?.rank} myScore={player?.score} myNickname={player?.nickname} />
 
-            {/* Question */}
-            <div dir={getDir(currentQ.question, room.force_rtl)} className="bg-gray-900/80 rounded-2xl border border-gray-800 p-4 flex-shrink-0 space-y-2">
-              <p className={`text-gray-300 font-medium ${questionFontClass(currentQ.question)} leading-snug`}>
+            {/* Question (dimmed) */}
+            <div dir={getDir(currentQ.question, room.force_rtl)} style={{
+              border: '1px solid var(--rule)', padding: '12px 16px',
+              background: 'var(--paper-2)',
+            }}>
+              <p style={{ fontFamily: 'var(--serif)', fontSize: questionFontSize(currentQ.question), color: 'var(--ink-3)', margin: 0, lineHeight: 1.5 }}>
                 <MathText text={currentQ.question} dir={getDir(currentQ.question, room.force_rtl)} />
               </p>
               {currentQ.image_url && (
-                <QuestionImage src={currentQ.image_url} className="w-full max-h-28 object-contain rounded-xl border border-gray-700 bg-gray-950" />
+                <QuestionImage src={currentQ.image_url} style={{ width: '100%', maxHeight: 120, objectFit: 'contain', marginTop: 10, border: '1px solid var(--rule)' }} />
               )}
             </div>
 
-            {/* Choices with correct highlight (revealed_answer shows only text, not index) */}
-            <div dir={getDir(currentQ.question, room.force_rtl)} className="grid grid-cols-2 gap-2 flex-shrink-0">
+            {/* Revealed choices */}
+            <div dir={getDir(currentQ.question, room.force_rtl)} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {currentQ.choices.map((choice, idx) => {
                 const revealedAnswer = room.revealed_answers?.[room.current_question_index]
                 const isCorrect = choice === revealedAnswer
                 const isPicked  = idx === selectedChoice
                 return (
-                  <div key={idx} className={`flex items-center gap-3 border rounded-xl px-4 py-3 transition-all ${
-                    isCorrect
-                      ? 'bg-primary/15 border-primary shadow-[0_0_12px_rgba(0,255,255,0.12)]'
+                  <div key={idx} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 14px',
+                    border: isCorrect
+                      ? '2px solid #22c55e'
                       : isPicked
-                        ? 'bg-red-500/15 border-red-500'
-                        : 'bg-gray-900/30 border-gray-800 opacity-30'
-                  }`}>
-                    <span className={`w-8 h-8 rounded-lg font-bold flex-shrink-0 flex items-center justify-center text-sm ${
-                      isCorrect ? 'bg-primary text-background' : isPicked ? 'bg-red-500 text-white' : 'bg-gray-700 text-gray-400'
-                    }`}>
-                      {String.fromCharCode(65 + idx)}
+                        ? `2px solid var(--alert)`
+                        : '1px solid var(--rule)',
+                    background: isCorrect
+                      ? 'rgba(34,197,94,0.07)'
+                      : isPicked
+                        ? 'rgba(180,48,57,0.07)'
+                        : 'var(--paper)',
+                    opacity: (!isCorrect && !isPicked) ? 0.3 : 1,
+                  }}>
+                    <span style={{
+                      width: 26, height: 26, flexShrink: 0,
+                      background: isCorrect ? '#22c55e' : isPicked ? 'var(--alert)' : 'transparent',
+                      border: `1px solid ${isCorrect ? '#22c55e' : isPicked ? 'var(--alert)' : 'var(--rule)'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
+                      color: (isCorrect || isPicked) ? 'var(--paper)' : 'var(--ink-3)',
+                    }}>
+                      {isCorrect ? '✓' : isPicked ? '✗' : String.fromCharCode(65 + idx)}
                     </span>
-                    <span className={`font-medium text-sm leading-snug ${isCorrect || isPicked ? 'text-white' : 'text-gray-400'}`}>
+                    <span style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
                       <MathText text={choice} dir={getDir(choice, room.force_rtl)} />
                     </span>
-                    {isCorrect && <CheckCircle2 size={14} className="ml-auto flex-shrink-0 text-primary" />}
-                    {!isCorrect && isPicked && <XCircle size={14} className="ml-auto flex-shrink-0 text-red-400" />}
                   </div>
                 )
               })}
             </div>
 
-            {/* Result card & Honor Roll */}
-            <div className="w-full flex flex-col gap-4">
-              {revealedResult ? (
-                <div className={`w-full p-5 rounded-2xl border ${
-                  revealedResult.didNotAnswer
-                    ? 'bg-gray-900/80 border-gray-700'
-                    : revealedResult.is_correct
-                      ? 'bg-primary/10 border-primary shadow-[0_0_30px_rgba(0,255,255,0.1)]'
-                      : 'bg-red-900/20 border-red-700'
-                }`}>
-                  {revealedResult.didNotAnswer ? (
-                    <div className="ar text-center">
-                      <AlertCircle size={40} className="mx-auto mb-2 text-gray-500" />
-                      <h3 className="text-xl font-bold text-gray-400">انتهى الوقت!</h3>
-                    </div>
-                  ) : revealedResult.is_correct ? (
-                    <div className="ar text-center">
-                      <CheckCircle2 size={40} className="mx-auto mb-2 text-primary" />
-                      <h3 className="text-2xl font-bold text-primary">صح! 🎉</h3>
-                      {revealedResult.points_earned > 0 ? (
-                        <p className="text-primary/70 text-sm mt-1">عاش يا بطل، أخدت {revealedResult.points_earned} نقطة</p>
-                      ) : (
-                        <p className="text-primary/70 text-sm mt-1 italic opacity-80">إجابة صحيحة! لكن لم يحالفك الحظ في النقاط هذه المرة.</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="ar text-center">
-                      <XCircle size={40} className="mx-auto mb-2 text-red-500" />
-                      <h3 className="text-xl font-bold text-red-400">غلط! معلش</h3>
-                      <p className="text-red-400/60 text-sm mt-1">ركز في اللى جاي</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="w-full text-center text-gray-500 py-4">
-                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                  <p className="text-sm">جاري التحميل...</p>
-                </div>
-              )}
+            {/* Result card */}
+            {revealedResult ? (
+              <div style={{
+                border: revealedResult.didNotAnswer
+                  ? '1px solid var(--rule)'
+                  : revealedResult.is_correct
+                    ? '1px solid #22c55e'
+                    : '1px solid var(--alert)',
+                background: revealedResult.didNotAnswer
+                  ? 'var(--paper-2)'
+                  : revealedResult.is_correct
+                    ? 'rgba(34,197,94,0.07)'
+                    : 'rgba(180,48,57,0.07)',
+                padding: '16px', textAlign: 'center',
+              }}>
+                {revealedResult.didNotAnswer ? (
+                  <p className="ar" style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink-3)', margin: 0 }}>انتهى الوقت!</p>
+                ) : revealedResult.is_correct ? (
+                  <>
+                    <p style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, color: '#22c55e', margin: '0 0 4px' }}>Correct!</p>
+                    {revealedResult.points_earned > 0 ? (
+                      <p className="ar" style={{ fontSize: 13, color: '#22c55e', margin: 0 }}>عاش يا بطل، أخدت {revealedResult.points_earned} نقطة</p>
+                    ) : (
+                      <p className="ar" style={{ fontSize: 12, color: 'var(--ink-3)', margin: 0 }}>إجابة صحيحة! لكن لم يحالفك الحظ في النقاط.</p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, color: 'var(--alert)', margin: '0 0 4px' }}>Wrong.</p>
+                    <p className="ar" style={{ fontSize: 13, color: 'var(--alert)', margin: 0 }}>غلط! معلش، ركز في اللى جاي</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <Loader2 size={18} style={{ color: 'var(--ink-3)', animation: 'spin 1s linear infinite', margin: '0 auto 6px' }} />
+                <p style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)', margin: 0 }}>جاري التحميل…</p>
+              </div>
+            )}
 
-              {/* Question Honor Roll */}
-              {revealedResult && revealedResult.winners && revealedResult.winners.length > 0 && (
-                <div className="bg-gray-900/50 rounded-2xl border border-gray-800 p-4 space-y-3">
-                  <div className="flex items-center justify-between border-b border-gray-800 pb-2">
-                    <h3 className="text-xs font-bold text-gray-400 flex items-center gap-1.5 uppercase tracking-wider">
-                      <Star size={12} className="text-yellow-500" /> لوحة شرف السؤال
-                    </h3>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                    {revealedResult.winners.map((w) => {
-                      const isMe = w.user_id === myId
-                      return (
-                        <div key={w.user_id} 
-                          className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all ${
-                            isMe 
-                              ? 'bg-primary/10 border-primary shadow-[0_0_10px_rgba(0,255,255,0.1)]' 
-                              : 'bg-gray-800/50 border-gray-700'
-                          }`}
-                        >
-                          <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${
-                            w.rank === 1 ? 'bg-yellow-500 text-black' :
-                            w.rank === 2 ? 'bg-gray-300 text-black' :
-                            w.rank === 3 ? 'bg-orange-400 text-black' :
-                            'bg-gray-700 text-gray-400'
-                          }`}>
-                            {w.rank}
-                          </div>
-                          
-                          <span className={`text-sm font-bold truncate flex-1 ${isMe ? 'text-primary' : 'text-white'}`}>
-                            {isMe ? 'أنا' : w.nickname}
-                          </span>
-
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-gray-500 font-mono italic">{w.time_ms}ms</span>
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${isMe ? 'bg-primary/20 text-primary' : 'bg-gray-700 text-gray-400'}`}>
-                              +{w.points}
-                            </span>
-                          </div>
+            {/* Honor Roll */}
+            {revealedResult?.winners?.length > 0 && (
+              <div style={{ border: '1px solid var(--rule)' }}>
+                <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="folio" style={{ letterSpacing: '0.18em' }}>QUESTION HONOR ROLL</span>
+                </div>
+                <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+                  {revealedResult.winners.map(w => {
+                    const isMe = w.user_id === myId
+                    return (
+                      <div key={w.user_id} style={{
+                        padding: '9px 14px', borderBottom: '1px solid var(--rule)',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        background: isMe ? 'var(--paper-2)' : 'var(--paper)',
+                      }}>
+                        <div style={{
+                          width: 22, height: 22, flexShrink: 0,
+                          background: w.rank === 1 ? 'var(--gold)' : w.rank === 2 ? 'var(--ink-3)' : 'var(--rule)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
+                          color: w.rank <= 2 ? 'var(--paper)' : 'var(--ink)',
+                        }}>
+                          {w.rank}
                         </div>
-                      )
-                    })}
-                  </div>
+                        <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)', flex: 1 }}>
+                          {isMe ? 'أنا' : w.nickname}
+                        </span>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)', marginLeft: 'auto' }}>{w.time_ms}ms</span>
+                        <span style={{
+                          fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700,
+                          color: isMe ? 'var(--burgundy)' : 'var(--ink)', marginLeft: 6,
+                        }}>+{w.points}</span>
+                      </div>
+                    )
+                  })}
                 </div>
-              )}
+              </div>
+            )}
 
-              {revealedResult && (
-                <p className="ar text-gray-600 mt-1 flex items-center justify-center gap-1.5 text-[10px]">
-                  <AlertCircle size={10} /> في انتظار الهوست...
-                </p>
-              )}
-            </div>
+            {revealedResult && (
+              <p className="ar" style={{ textAlign: 'center', fontSize: 11, color: 'var(--ink-4)' }}>في انتظار الهوست…</p>
+            )}
           </div>
         )}
 
-        {/* ── FINISHED ───────────────────────────────────────────────────── */}
+        {/* ────────── FINISHED ─────────────────────────────────────────── */}
         {room.status === 'finished' && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Trophy size={80} className="mx-auto text-[#FFD700] mb-6" />
-              <h1 className="text-5xl font-display font-bold mb-3">انتهت!</h1>
-              <p className="text-xl text-gray-400 mb-2">نقاطك النهائية</p>
-              <p className="text-5xl font-mono font-bold text-primary mb-8">{player.score}</p>
-              {/* Mini final leaderboard — uses top5 (already minimal) */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+            <div style={{ textAlign: 'center', maxWidth: 360, width: '100%' }}>
+              <p className="folio" style={{ marginBottom: 16, letterSpacing: '0.3em' }}>GAME FINISHED</p>
+              <h1 style={{
+                fontFamily: 'var(--serif)', fontSize: 'clamp(40px, 10vw, 64px)',
+                fontWeight: 400, lineHeight: 1.0, letterSpacing: '-0.025em',
+                color: 'var(--ink)', margin: '0 0 8px',
+              }}>
+                انتهت!
+              </h1>
+              <p style={{ fontFamily: 'var(--mono)', fontSize: 48, fontWeight: 700, color: 'var(--ink)', margin: '0 0 24px' }}>
+                {player.score}
+                <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--ink-4)', marginLeft: 4 }}>pts</span>
+              </p>
+
+              {/* Top 5 final */}
               {top5.length > 0 && (
-                <div className="space-y-2 max-w-xs mx-auto mb-8">
+                <div style={{ border: '1px solid var(--rule)', marginBottom: 24 }}>
                   {top5.map(p => (
-                    <div key={p.user_id} className={`flex items-center justify-between px-4 py-2 rounded-xl text-sm ${
-                      p.user_id === myId ? 'bg-primary/20 border border-primary text-primary' : 'bg-gray-800 border border-gray-700'
-                    }`}>
-                      <span className="font-bold">#{p.rank} {p.nickname}</span>
-                      <span className="font-mono font-bold">{p.score}</span>
+                    <div key={p.user_id} style={{
+                      padding: '9px 14px', borderBottom: '1px solid var(--rule)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      background: p.user_id === myId ? 'var(--paper-2)' : 'var(--paper)',
+                    }}>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)', minWidth: 20 }}>#{p.rank}</span>
+                      <span style={{ fontFamily: 'var(--serif)', fontSize: 14, color: 'var(--ink)', flex: 1, textAlign: 'left', marginLeft: 8 }}>{p.nickname}</span>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{p.score}</span>
                     </div>
                   ))}
                 </div>
               )}
-              <div className="flex gap-3 justify-center flex-wrap">
-                {/* Tournament FFA redirect — auto-navigates after countdown */}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {room.tournament_id && (
-                  <div className="flex flex-col items-center gap-1">
+                  <div>
                     <button
                       onClick={() => navigate(`/tournament/${room.tournament_id}/wait`, { replace: true })}
-                      className="ar flex items-center gap-2 bg-primary text-background font-bold py-3 px-6 rounded-xl hover:bg-[#00D4FF] transition-colors"
+                      style={{
+                        width: '100%', padding: '13px 20px',
+                        background: 'var(--ink)', color: 'var(--paper)',
+                        border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                      }}
                     >
-                      <Trophy size={15} />
-                      متابعة البطولة
-                      {autoNavCountdown !== null && ` (${autoNavCountdown}ث)`}
+                      متابعة البطولة{autoNavCountdown !== null ? ` (${autoNavCountdown}ث)` : ''}
                     </button>
                     {autoNavCountdown !== null && (
-                      <p className="ar text-xs text-gray-500">سيتم الانتقال تلقائياً…</p>
+                      <p className="ar" style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 4 }}>سيتم الانتقال تلقائياً…</p>
                     )}
                   </div>
                 )}
                 <button
                   onClick={downloadLogs}
                   disabled={downloadingLogs}
-                  className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-bold py-3 px-6 rounded-xl transition-colors disabled:opacity-50"
+                  style={{
+                    width: '100%', padding: '11px 20px',
+                    background: 'var(--paper-2)', color: 'var(--ink)',
+                    border: '1px solid var(--rule)',
+                    fontFamily: 'var(--sans)', fontSize: 13, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    opacity: downloadingLogs ? 0.5 : 1,
+                  }}
                 >
                   {downloadingLogs
-                    ? <><Loader2 size={15} className="animate-spin" /> جاري التحميل...</>
-                    : <><Download size={15} /> تحميل اللوجز</>}
+                    ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> جاري التحميل...</>
+                    : <><Download size={13} /> تحميل اللوجز</>}
                 </button>
                 {!room.tournament_id && (
-                  <button onClick={() => navigate('/')}
-                    className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-xl transition-colors">
-                    الرئيسية
+                  <button
+                    onClick={() => navigate('/')}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em',
+                      textTransform: 'uppercase', color: 'var(--ink-4)', padding: '8px 0',
+                    }}
+                  >
+                    الرئيسية →
                   </button>
                 )}
               </div>
             </div>
           </div>
         )}
+
       </div>
     </div>
   )
