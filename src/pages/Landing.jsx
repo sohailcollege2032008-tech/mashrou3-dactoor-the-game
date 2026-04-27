@@ -14,8 +14,7 @@ function MRMonogram({ size = 64, color = 'var(--ink)', bg = 'transparent', fille
   const patternId = React.useId().replace(/:/g, '');
 
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: 'block', borderRadius: filled ? 'var(--r-sm)' : '0' }}>
-      {filled && <rect width="100" height="100" fill="#1A1A1A" />}
+    <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: 'block' }}>
       <circle cx="50" cy="50" r={filled ? 44 : 48} fill={fill} stroke={color} strokeWidth={stroke} />
       <circle cx="50" cy="50" r={filled ? 38 : 42} fill="none" stroke={color} strokeWidth={stroke * 0.5} opacity={filled ? 0.25 : 0.4} />
       <text
