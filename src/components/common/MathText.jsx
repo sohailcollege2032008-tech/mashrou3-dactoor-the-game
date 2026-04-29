@@ -27,16 +27,9 @@ export default function MathText({ text, className = "", dir = "auto" }) {
   // Automatic RTL detection if dir is "auto"
   const finalDir = dir === 'auto' ? (hasArabic(text) ? 'rtl' : 'ltr') : dir
 
-  // Runtime fix: Inject dir="rtl" into <math> tags if we are in RTL mode
-  // and the AI didn't already provide it.
+  // Do NOT inject dir="rtl" into math tags — it reverses the entire equation structure
+  // MathML renders correctly without it; the parent span's dir="rtl" provides proper text context
   let processedText = text
-  if (finalDir === 'rtl' && text?.includes('<math')) {
-    processedText = text.replace(/<math([^>]*)>/g, (match, attrs) => {
-      if (attrs.includes('dir=')) return match
-      const spaceOrEmpty = attrs.trim() ? ' ' : ''
-      return `<math${attrs}${spaceOrEmpty}dir="rtl">`
-    })
-  }
 
   // If there's no MathML, just render normally to avoid overhead
   if (!text || !text.includes('<math')) {
