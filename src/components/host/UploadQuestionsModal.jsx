@@ -272,15 +272,16 @@ function FileUploadTab({ session, onSuccess, onClose }) {
             onChange={(e) => processFile(e.target.files[0])}
           />
           <Upload size={28} style={{ color: 'var(--ink-3)', margin: '0 auto 12px' }} />
-          <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 15, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>
+          <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 15, fontWeight: 500, color: 'var(--ink)', marginBottom: 6, textAlign: 'center' }}>
             اسحب الملف هنا أو انقر للاختيار
           </p>
-          <p className="folio" style={{ color: 'var(--ink-4)', marginBottom: 14 }}>
+          <p className="folio" style={{ color: 'var(--ink-4)', marginBottom: 14, textAlign: 'center' }}>
             PDF · PPTX · DOCX · TXT · IMAGE
           </p>
           <p className="ar" style={{
             fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink-4)',
             border: '1px solid var(--rule)', padding: '6px 12px', display: 'inline-block',
+            textAlign: 'center',
           }}>
             Gemini 3.1 & 2.5 & 2 + Gemma 4 — تبديل تلقائي عند الفشل
           </p>
