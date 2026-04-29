@@ -427,22 +427,48 @@ export default function HostDashboard() {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {/* PRIMARY — host game */}
                     <button onClick={() => handleStartGame(bank)} style={{
-                      padding: '13px 0', border: '1px solid var(--burgundy)', background: 'var(--burgundy)',
-                      color: '#F4F1EA', fontFamily: 'var(--mono)', fontSize: 12,
-                      letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer',
-                    }}>▶ HOST GAME</button>
+                      padding: '15px 0',
+                      border: 'none',
+                      borderBottom: '3px solid color-mix(in srgb, var(--burgundy) 60%, black)',
+                      background: 'var(--burgundy)',
+                      color: '#F4F1EA',
+                      fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700,
+                      letterSpacing: '0.18em', textTransform: 'uppercase',
+                      cursor: 'pointer', transition: 'filter 120ms',
+                    }}
+                      onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.12)'}
+                      onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1)'}
+                    >▶ HOST GAME</button>
+
+                    {/* SECONDARY row */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {/* VIEW / EDIT — ink fill, max contrast */}
                       <button onClick={() => setSelectedBank(bank)} style={{
-                        padding: '11px 0', border: '1px solid var(--navy)', background: 'none',
-                        fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: '0.1em',
-                        textTransform: 'uppercase', color: 'var(--navy)', cursor: 'pointer',
-                      }}>VIEW / EDIT</button>
+                        padding: '11px 0',
+                        border: '1px solid var(--ink)',
+                        background: 'var(--ink)',
+                        fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
+                        textTransform: 'uppercase',
+                        color: 'var(--paper)',
+                        cursor: 'pointer', transition: 'opacity 120ms',
+                      }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                        onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                      >VIEW / EDIT</button>
+
+                      {/* DELETE — tinted alert, clearly destructive */}
                       <button onClick={() => handleDelete(bank.id)} disabled={deletingId === bank.id} style={{
-                        padding: '11px 0', border: '1px solid var(--alert)', background: 'none',
-                        fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: '0.1em',
-                        textTransform: 'uppercase', color: 'var(--alert)', cursor: deletingId === bank.id ? 'not-allowed' : 'pointer',
+                        padding: '11px 0',
+                        border: '1px solid var(--alert)',
+                        background: 'color-mix(in srgb, var(--alert) 12%, var(--paper))',
+                        fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
+                        textTransform: 'uppercase',
+                        color: 'var(--alert)',
+                        cursor: deletingId === bank.id ? 'not-allowed' : 'pointer',
                         opacity: deletingId === bank.id ? 0.5 : 1,
+                        transition: 'opacity 120ms',
                       }}>{deletingId === bank.id ? '…' : 'DELETE'}</button>
                     </div>
                   </div>
