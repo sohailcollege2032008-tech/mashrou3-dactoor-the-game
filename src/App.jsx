@@ -27,6 +27,7 @@ import TournamentJoin from './pages/tournament/TournamentJoin'
 import TournamentBracket from './pages/tournament/TournamentBracket'
 import TournamentPlayerWait from './pages/tournament/TournamentPlayerWait'
 import TournamentDuelWrapper from './pages/tournament/TournamentDuelWrapper'
+import TestMathRendering from './pages/TestMathRendering'
 
 // ── Global Error Boundary — prevents blank screen on unexpected render errors ──
 class ErrorBoundary extends Component {
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/not-authorized" element={<NotAuthorized />} />
+        <Route path="/test-math" element={<TestMathRendering />} />
         
         <Route path="/owner/dashboard" element={<ProtectedRoute allowedRoles={['owner']}><OwnerDashboard /></ProtectedRoute>} />
         <Route path="/owner/logs" element={<ProtectedRoute allowedRoles={['owner']}><OwnerLogs /></ProtectedRoute>} />
