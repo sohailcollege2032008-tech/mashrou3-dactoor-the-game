@@ -7,17 +7,7 @@
 
 /* ─── Tailwind Theme Tokens ───────────────────────────────────────────────── */
 @theme {
-  /* Legacy (keep during page-by-page transition) */
-  --color-background: #0A0E1A;
-  --color-primary:    #00F5A0;
-  --color-secondary:  #00D4FF;
-  --color-warning:    #FFB800;
-  --color-choice-A:   #FF6B6B;
-  --color-choice-B:   #4ECDC4;
-  --color-choice-C:   #FFE66D;
-  --color-choice-D:   #A78BFA;
-
-  /* New editorial palette — generates bg-paper, text-ink, border-rule, etc. */
+  /* Editorial palette — generates bg-paper, text-ink, border-rule, etc. */
   --color-paper:        #F4F1EA;
   --color-paper-2:      #EDE8DB;
   --color-paper-3:      #E4DDCC;
@@ -121,9 +111,8 @@
 
   body {
     margin: 0;
-    /* Legacy dark background for non-redesigned pages */
-    background-color: var(--color-background);
-    color: white;
+    background-color: var(--paper);
+    color: var(--ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

@@ -449,8 +449,8 @@ export default function HostDashboard() {
                         padding: '11px 0',
                         border: '1px solid var(--ink)',
                         background: 'var(--ink)',
-                        fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
-                        textTransform: 'uppercase',
+                        fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700,
+                        letterSpacing: '0.12em', textTransform: 'uppercase',
                         color: 'var(--paper)',
                         cursor: 'pointer', transition: 'opacity 120ms',
                       }}
@@ -462,9 +462,9 @@ export default function HostDashboard() {
                       <button onClick={() => handleDelete(bank.id)} disabled={deletingId === bank.id} style={{
                         padding: '11px 0',
                         border: '1px solid var(--alert)',
-                        background: 'color-mix(in srgb, var(--alert) 12%, var(--paper))',
-                        fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
-                        textTransform: 'uppercase',
+                        background: 'color-mix(in srgb, var(--alert) 14%, var(--paper))',
+                        fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700,
+                        letterSpacing: '0.12em', textTransform: 'uppercase',
                         color: 'var(--alert)',
                         cursor: deletingId === bank.id ? 'not-allowed' : 'pointer',
                         opacity: deletingId === bank.id ? 0.5 : 1,
