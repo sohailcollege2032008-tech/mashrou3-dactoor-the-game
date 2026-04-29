@@ -1,19 +1,28 @@
 import React, { useEffect, useRef } from 'react'
 import { hasArabic } from '../../utils/rtlUtils'
 
-/**
- * MathText Component
- * Renders text that may contain MathML tags.
- * It uses dangerouslySetInnerHTML to allow MathML tags to exist in the DOM,
- * and then triggers MathJax to typeset the current component.
- */
+// In RTL context, MathJax renders LTR which puts the variable (LHS) on the left.
+// An Arabic reader reads right-to-left, so they hit the expression (RHS) first, then "=", then the variable.
+// Fix: swap LHS and RHS around <mo>=</mo> so MathJax places the variable on the RIGHT — read first in RTL.
+// This avoids dir="rtl" on <math> which would reverse arrow glyphs (→ becomes ←).
+function swapEquationSidesForRtl(text) {
+  return text.replace(/<math([^>]*)>([\s\S]*?)<\/math>/gi, (match, attrs, content) => {
+    const eqMatches = content.match(/<mo>\s*=\s*<\/mo>/g)
+    if (!eqMatches || eqMatches.length !== 1) return match
+    const eqTag = eqMatches[0]
+    const eqIndex = content.indexOf(eqTag)
+    const lhs = content.slice(0, eqIndex)
+    const rhs = content.slice(eqIndex + eqTag.length)
+    return `<math${attrs}>${rhs}${eqTag}${lhs}</math>`
+  })
+}
+
 export default function MathText({ text, className = "", dir = "auto" }) {
   const containerRef = useRef(null)
 
   useEffect(() => {
     if (!containerRef.current) return
 
-    // Check if MathJax is available; if not, retry after a short delay
     if (!window.MathJax) {
       setTimeout(() => {
         if (window.MathJax?.typesetPromise && containerRef.current) {
@@ -25,14 +34,12 @@ export default function MathText({ text, className = "", dir = "auto" }) {
       return
     }
 
-    // Trigger MathJax to process this specific container
     try {
       if (window.MathJax.typesetPromise) {
         window.MathJax.typesetPromise([containerRef.current]).catch(err => {
           console.error('MathJax typeset failed:', err)
         })
       } else if (window.MathJax.typesetClear && window.MathJax.typesetPromise) {
-        // For older versions
         window.MathJax.typesetClear()
         window.MathJax.typesetPromise([containerRef.current]).catch(err => {
           console.error('MathJax typeset failed:', err)
@@ -43,17 +50,13 @@ export default function MathText({ text, className = "", dir = "auto" }) {
     }
   }, [text])
 
-  // Automatic RTL detection if dir is "auto"
   const finalDir = dir === 'auto' ? (hasArabic(text) ? 'rtl' : 'ltr') : dir
 
-  // Do NOT inject dir="rtl" into math tags — it reverses the entire equation structure
-  // MathML renders correctly without it; the parent span's dir="rtl" provides proper text context
-  let processedText = text
-
-  // If there's no MathML, just render normally to avoid overhead
   if (!text || !text.includes('<math')) {
     return <span className={className} dir={finalDir}>{text}</span>
   }
+
+  const processedText = finalDir === 'rtl' ? swapEquationSidesForRtl(text) : text
 
   return (
     <span
