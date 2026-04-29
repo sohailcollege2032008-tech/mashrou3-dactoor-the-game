@@ -33,7 +33,8 @@ export default function MathText({ text, className = "", dir = "auto" }) {
   if (finalDir === 'rtl' && text?.includes('<math')) {
     processedText = text.replace(/<math([^>]*)>/g, (match, attrs) => {
       if (attrs.includes('dir=')) return match
-      return `<math${attrs} dir="rtl">`
+      const spaceOrEmpty = attrs.trim() ? ' ' : ''
+      return `<math${attrs}${spaceOrEmpty}dir="rtl">`
     })
   }
 
