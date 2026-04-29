@@ -4,6 +4,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
+import { X, Loader2, Upload, FileJson, Copy, Check } from 'lucide-react'
 
 const CLOUD_RUN_URL  = import.meta.env.VITE_CLOUD_RUN_URL
 const API_SECRET     = import.meta.env.VITE_CLOUD_RUN_SECRET || ''
@@ -75,7 +76,7 @@ RULES:
 11. ARABIC MATH SYMBOLS: When extracting Arabic math variables (like ق, س, ص, ع):
    - ALWAYS use <math dir="rtl"> for the root element of Arabic equations. This is CRITICAL for correct alignment and right-to-left layout.
    - Use <mi> for the Arabic letter.
-   - FOR SUBSCRIPTS: Use standard <msub> (e.g., ق١ becomes <math dir="rtl"><msub><mi>ق</mi><mn>١</mn></msub></math>). 
+   - FOR SUBSCRIPTS: Use standard <msub> (e.g., ق١ becomes <math dir="rtl"><msub><mi>ق</mi><mn>١</mn></msub></math>).
    - FOR VECTORS: Use <mover> (e.g., <math dir="rtl"><mover><mi>ق</mi><mo>→</mo></mover></math>). Use the standard right arrow →.
    - FOR BOTH: Nest them (e.g., <math dir="rtl"><msub><mover><mi>ق</mi><mo>→</mo></mover><mn>١</mn></msub></math>).
    - Match the numeral style (Arabic 1, 2 or Arabic-Indic ١, ٢) EXACTLY as per the source.`
@@ -83,56 +84,71 @@ RULES:
 // ── Questions preview ──────────────────────────────────────────────────────────
 function QuestionsPreview({ data }) {
   const needsImg = data.questions.filter(q => q.needs_image && !q.image_url).length
+  const noAnswer = data.questions.filter(q => q.correct === -1).length
+
   return (
-    <div className="bg-gray-800/60 border border-primary/30 rounded-xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <h3 className="text-lg font-bold text-white leading-tight">{data.title}</h3>
-          <div className="flex flex-wrap gap-2 mt-2">
-            <span className="text-primary font-mono text-xs bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
-              ✅ {data.questions.length} سؤال
+    <div style={{
+      border: '1px solid var(--rule)', borderRadius: 4, overflow: 'hidden',
+      background: 'var(--paper-2)',
+    }}>
+      {/* Title row */}
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 500, color: 'var(--ink)', marginBottom: 8 }} className="ar">
+            {data.title}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <span className="folio" style={{ color: 'var(--success)', border: '1px solid var(--success)', padding: '2px 8px' }}>
+              {data.questions.length} QUESTIONS
             </span>
-            {data.questions.filter(q => q.correct === -1).length > 0 && (
-              <span className="text-amber-400 font-mono text-xs bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
-                ⚠️ {data.questions.filter(q => q.correct === -1).length} بدون إجابة
+            {noAnswer > 0 && (
+              <span className="folio" style={{ color: 'var(--gold)', border: '1px solid var(--gold)', padding: '2px 8px' }}>
+                {noAnswer} NO ANSWER
               </span>
             )}
             {needsImg > 0 && (
-              <span className="text-amber-400 font-mono text-xs bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
-                🖼 {needsImg} تحتاج صورة
+              <span className="folio" style={{ color: 'var(--gold)', border: '1px solid var(--gold)', padding: '2px 8px' }}>
+                {needsImg} NEEDS IMAGE
               </span>
             )}
           </div>
         </div>
-        <div className="text-right flex flex-col items-end gap-1 select-none">
-          <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-[10px] font-mono border border-primary/30">
-            {data.model_used || 'Gemini'} ✨
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+          <span className="folio" style={{ color: 'var(--ink-3)', fontSize: 9 }}>
+            {data.model_used || 'Gemini'}
           </span>
           {data.is_rollback && (
-            <span className="bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded-full text-[9px] font-bold border border-amber-500/30 animate-pulse ar">
-              🔄 تم النقل آلياً (Rollback)
+            <span className="folio" style={{ color: 'var(--gold)', fontSize: 9, border: '1px solid var(--gold)', padding: '1px 6px' }}>
+              ROLLBACK
             </span>
           )}
         </div>
       </div>
-      <div className="space-y-2 max-h-48 overflow-y-auto">
+
+      {/* Questions sample */}
+      <div style={{ maxHeight: 200, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {data.questions.slice(0, 5).map((q, i) => (
-          <div key={i} className="bg-gray-700/50 rounded-lg p-3">
-            <p className="text-gray-200 text-sm font-bold mb-1 line-clamp-2">
+          <div key={i} style={{ paddingBottom: 8, borderBottom: i < Math.min(4, data.questions.length - 1) ? '1px solid var(--rule)' : 'none' }}>
+            <p style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)', marginBottom: 6 }} className="ar">
               {i + 1}. <MathText text={q.question} />
             </p>
-            <div className="flex flex-wrap gap-1">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {q.choices.map((c, ci) => (
-                <span key={ci} className={`text-xs px-2 py-0.5 rounded font-mono ${
-                  ci === q.correct ? 'bg-green-500/20 text-green-400 border border-green-500/40' : 'bg-gray-600/50 text-gray-400'
-                }`}>{ci === q.correct ? '✅ ' : ''}<MathText text={c} /></span>
+                <span key={ci} style={{
+                  fontFamily: 'var(--mono)', fontSize: 11, padding: '2px 8px',
+                  border: `1px solid ${ci === q.correct ? 'var(--success)' : 'var(--rule)'}`,
+                  color: ci === q.correct ? 'var(--success)' : 'var(--ink-3)',
+                  background: ci === q.correct ? 'color-mix(in srgb, var(--success) 8%, var(--paper))' : 'transparent',
+                }}>
+                  <MathText text={c} />
+                </span>
               ))}
             </div>
           </div>
         ))}
         {data.questions.length > 5 && (
-          <p className="text-gray-500 text-xs text-center font-mono py-1">
-            + {data.questions.length - 5} سؤال آخر...
+          <p className="folio" style={{ color: 'var(--ink-4)', textAlign: 'center', paddingTop: 4 }}>
+            + {data.questions.length - 5} MORE
           </p>
         )}
       </div>
@@ -140,34 +156,28 @@ function QuestionsPreview({ data }) {
   )
 }
 
-// ── File Upload Tab (Cloud Run → Gemini) ───────────────────────────────────────
+// ── File Upload Tab ────────────────────────────────────────────────────────────
 function FileUploadTab({ session, onSuccess, onClose }) {
-  const [dragOver, setDragOver]   = useState(false)
-  const [status, setStatus]       = useState('idle')   // idle | uploading | done | error
-  const [statusMsg, setStatusMsg] = useState('')
-  const [parsed, setParsed]       = useState(null)
-  const [sourceData, setSourceData] = useState(null) // { url, filename }
-  const [saving, setSaving]       = useState(false)
-  const fileInputRef              = useRef(null)
+  const [dragOver, setDragOver]     = useState(false)
+  const [status, setStatus]         = useState('idle')
+  const [statusMsg, setStatusMsg]   = useState('')
+  const [parsed, setParsed]         = useState(null)
+  const [sourceData, setSourceData] = useState(null)
+  const [saving, setSaving]         = useState(false)
+  const fileInputRef                = useRef(null)
 
   const ACCEPTED = '.pdf,.pptx,.ppt,.docx,.doc,.txt,image/*'
 
   const processFile = async (file) => {
     if (!file) return
-
     if (!CLOUD_RUN_URL) {
       setStatus('error')
       setStatusMsg('VITE_CLOUD_RUN_URL غير مضبوط — تواصل مع المسؤول')
       return
     }
-
-    setParsed(null)
-    setSourceData(null)
-    setStatus('uploading')
-    setStatusMsg('⏫ جاري رفع الملف والأرشفة...')
-
+    setParsed(null); setSourceData(null)
+    setStatus('uploading'); setStatusMsg('جاري رفع الملف والأرشفة...')
     try {
-      // 1. Archive to Firebase Storage
       let archiveUrl = null
       try {
         const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5)
@@ -178,15 +188,11 @@ function FileUploadTab({ session, onSuccess, onClose }) {
         setSourceData({ url: archiveUrl, filename: file.name })
       } catch (storageErr) {
         console.warn('Failed to archive source file:', storageErr)
-        // We continue anyway so as not to block extraction, 
-        // but maybe the user should know? For now, we proceed.
       }
 
-      // 2. Extract with AI
       const formData = new FormData()
       formData.append('file', file)
-
-      setStatusMsg('🤖 جاري المعالجة بنظام Multi-Model Fallback...')
+      setStatusMsg('جاري المعالجة بنظام Multi-Model Fallback...')
 
       const res = await fetch(`${CLOUD_RUN_URL}/process`, {
         method: 'POST',
@@ -196,12 +202,10 @@ function FileUploadTab({ session, onSuccess, onClose }) {
 
       if (!res.ok) {
         let detail = `خطأ ${res.status}`
-        let errJson = null
-        try { 
-            errJson = await res.json()
-            detail = errJson.detail?.message || errJson.detail || detail 
+        try {
+          const errJson = await res.json()
+          detail = errJson.detail?.message || errJson.detail || detail
         } catch (_) {}
-        
         throw new Error(detail)
       }
 
@@ -209,19 +213,14 @@ function FileUploadTab({ session, onSuccess, onClose }) {
       if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0)
         throw new Error('الـ AI مرجعش أسئلة صالحة — تأكد إن الملف فيه MCQs')
 
-      setParsed(data)
-      setStatus('done')
-      setStatusMsg('')
-
+      setParsed(data); setStatus('done'); setStatusMsg('')
     } catch (err) {
-      setStatus('error')
-      setStatusMsg(err.message)
+      setStatus('error'); setStatusMsg(err.message)
     }
   }
 
   const handleDrop = useCallback((e) => {
-    e.preventDefault()
-    setDragOver(false)
+    e.preventDefault(); setDragOver(false)
     processFile(e.dataTransfer.files[0])
   }, [])
 
@@ -239,93 +238,115 @@ function FileUploadTab({ session, onSuccess, onClose }) {
         source_filename: sourceData?.filename || null,
         created_at:      serverTimestamp(),
       })
-      onSuccess()
-      onClose()
+      onSuccess(); onClose()
     } catch (e) {
-      setStatus('error')
-      setStatusMsg('خطأ في الحفظ: ' + e.message)
+      setStatus('error'); setStatusMsg('خطأ في الحفظ: ' + e.message)
       setSaving(false)
     }
   }
 
   const reset = () => {
-    setStatus('idle')
-    setStatusMsg('')
-    setParsed(null)
+    setStatus('idle'); setStatusMsg(''); setParsed(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   return (
-    <div className="space-y-5">
-      {/* Drop zone — hide when processing or done */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Drop zone */}
       {status === 'idle' && (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all select-none
-            ${dragOver ? 'border-primary bg-primary/10 scale-[1.01]' : 'border-gray-600 hover:border-primary/60 hover:bg-gray-800/40'}`}
+          style={{
+            border: `2px dashed ${dragOver ? 'var(--ink)' : 'var(--rule-strong)'}`,
+            borderRadius: 4, padding: '40px 24px', textAlign: 'center', cursor: 'pointer',
+            background: dragOver ? 'color-mix(in srgb, var(--ink) 4%, var(--paper))' : 'var(--paper-2)',
+            transition: 'all 150ms', userSelect: 'none',
+          }}
         >
           <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPTED}
-            className="hidden"
+            ref={fileInputRef} type="file" accept={ACCEPTED}
+            style={{ display: 'none' }}
             onChange={(e) => processFile(e.target.files[0])}
           />
-          <div className="text-5xl mb-3">📂</div>
-          <p className="ar text-gray-200 font-bold text-lg">اسحب الملف هنا أو انقر للاختيار</p>
-          <p className="text-gray-500 text-sm mt-2 font-mono">PDF · PPTX · DOCX · TXT · صورة</p>
-          <p className="ar text-gray-600 text-[10px] mt-3 bg-gray-900/50 py-1 px-2 rounded border border-gray-800/50">
-            نظام المعالجة الذكي: Gemini 3.1 & 2.5 & 2 + Gemma 4 <br/> 
-            (يتم التبديل تلقائياً في حال فشل النموذج الأساسي لضمان الدقة)
+          <Upload size={28} style={{ color: 'var(--ink-3)', margin: '0 auto 12px' }} />
+          <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 15, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>
+            اسحب الملف هنا أو انقر للاختيار
+          </p>
+          <p className="folio" style={{ color: 'var(--ink-4)', marginBottom: 14 }}>
+            PDF · PPTX · DOCX · TXT · IMAGE
+          </p>
+          <p className="ar" style={{
+            fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink-4)',
+            border: '1px solid var(--rule)', padding: '6px 12px', display: 'inline-block',
+          }}>
+            Gemini 3.1 & 2.5 & 2 + Gemma 4 — تبديل تلقائي عند الفشل
           </p>
         </div>
       )}
 
-      {/* Processing state */}
+      {/* Processing */}
       {status === 'uploading' && (
-        <div className="border border-primary/30 bg-primary/5 rounded-xl p-8 text-center space-y-4">
-          <div className="flex justify-center">
-            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-          <p className="ar text-primary font-bold">{statusMsg}</p>
-          <p className="ar text-gray-500 text-xs">لا تغلق النافذة</p>
+        <div style={{
+          border: '1px solid var(--rule)', borderRadius: 4, padding: '40px 24px',
+          textAlign: 'center', background: 'var(--paper-2)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+        }}>
+          <Loader2 size={28} className="animate-spin" style={{ color: 'var(--ink)' }} />
+          <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink-2)' }}>{statusMsg}</p>
+          <p className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>لا تغلق النافذة</p>
         </div>
       )}
 
-      {/* Error state */}
+      {/* Error */}
       {status === 'error' && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5 space-y-3">
-          <p className="ar text-red-400 font-bold">❌ {statusMsg}</p>
-          <button
-            onClick={reset}
-            className="ar text-sm text-gray-400 hover:text-white underline transition-colors"
-          >
-            ← حاول مرة تانية
+        <div style={{
+          border: '1px solid var(--alert)', borderRadius: 4, padding: '16px',
+          background: 'color-mix(in srgb, var(--alert) 6%, var(--paper))',
+          display: 'flex', flexDirection: 'column', gap: 10,
+        }}>
+          <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--alert)' }}>{statusMsg}</p>
+          <button onClick={reset} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-3)',
+            textDecoration: 'underline', alignSelf: 'flex-start', padding: 0,
+          }} className="ar">
+            حاول مرة تانية
           </button>
         </div>
       )}
 
-      {/* Success — show preview + save */}
+      {/* Done — preview + save */}
       {status === 'done' && parsed && (
         <>
           <QuestionsPreview data={parsed} />
-          <div className="flex gap-3">
+          <div style={{ display: 'flex', gap: 8 }}>
             <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 bg-primary text-background font-bold py-3 rounded-xl hover:bg-[#00D4FF] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              onClick={handleSave} disabled={saving}
+              style={{
+                flex: 1, padding: '12px 0',
+                background: saving ? 'var(--paper-2)' : 'var(--ink)',
+                color: saving ? 'var(--ink-3)' : 'var(--paper)',
+                border: '1px solid var(--ink)', borderRadius: 4,
+                fontFamily: 'var(--sans)', fontWeight: 500, fontSize: 14,
+                cursor: saving ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                opacity: saving ? 0.6 : 1, transition: 'all 150ms',
+              }}
             >
-              {saving ? (
-                <><div className="w-4 h-4 border-2 border-background border-t-transparent rounded-full animate-spin" /> جاري الحفظ...</>
-              ) : '💾 حفظ في بنك الأسئلة'}
+              {saving
+                ? <><Loader2 size={15} className="animate-spin" /><span className="ar">جاري الحفظ...</span></>
+                : <span className="ar">حفظ في بنك الأسئلة</span>
+              }
             </button>
-            <button
-              onClick={reset}
-              className="px-5 py-3 bg-gray-800 text-gray-400 rounded-xl hover:bg-gray-700 transition-all font-bold text-sm"
-            >
+            <button onClick={reset} style={{
+              padding: '12px 20px', background: 'var(--paper-2)',
+              border: '1px solid var(--rule)', borderRadius: 4,
+              fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-3)',
+              cursor: 'pointer', transition: 'all 150ms',
+            }} className="ar">
               إعادة
             </button>
           </div>
@@ -337,12 +358,12 @@ function FileUploadTab({ session, onSuccess, onClose }) {
 
 // ── JSON Upload Tab ────────────────────────────────────────────────────────────
 function JsonUploadTab({ session, onSuccess, onClose }) {
-  const [text, setText]     = useState('')
-  const [parsed, setParsed] = useState(null)
-  const [errors, setErrors] = useState([])
-  const [saving, setSaving] = useState(false)
+  const [text, setText]         = useState('')
+  const [parsed, setParsed]     = useState(null)
+  const [errors, setErrors]     = useState([])
+  const [saving, setSaving]     = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const fileInputRef        = useRef(null)
+  const fileInputRef            = useRef(null)
 
   const parseText = useCallback((raw) => {
     setErrors([]); setParsed(null)
@@ -361,17 +382,13 @@ function JsonUploadTab({ session, onSuccess, onClose }) {
     if (!file || !file.name.endsWith('.json')) { setErrors(['يُسمح فقط بملفات .json']); return }
     try {
       const raw = await readFileAsText(file)
-      setText(raw)
-      parseText(raw)
-    } catch (e) {
-      setErrors([e.message])
-    }
+      setText(raw); parseText(raw)
+    } catch (e) { setErrors([e.message]) }
   }
 
   const handleTextChange = (e) => {
     const val = e.target.value
-    setText(val)
-    parseText(val)
+    setText(val); parseText(val)
   }
 
   const handleDrop = useCallback((e) => {
@@ -396,60 +413,77 @@ function JsonUploadTab({ session, onSuccess, onClose }) {
 
   const reset = () => { setText(''); setParsed(null); setErrors([]) }
 
-  return (
-    <div className="space-y-4">
+  const borderColor = dragOver ? 'var(--ink)'
+    : parsed ? 'var(--success)'
+    : errors.length ? 'var(--alert)'
+    : 'var(--rule-strong)'
 
-      {/* Textarea — paste or type directly */}
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <label className="text-xs text-gray-500 font-bold tracking-widest uppercase">
-            الصق JSON هنا أو اكتبه مباشرة
-          </label>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-600 font-mono">أو</span>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
-            >
-              📄 رفع ملف .json
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={(e) => loadFile(e.target.files[0])}
-            />
-          </div>
-        </div>
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          className={`rounded-xl border-2 transition-colors ${
-            dragOver ? 'border-primary bg-primary/5' : parsed ? 'border-green-500/40' : errors.length ? 'border-red-500/40' : 'border-gray-700 focus-within:border-primary/60'
-          }`}
-        >
-          <textarea
-            value={text}
-            onChange={handleTextChange}
-            placeholder={'{\n  "title": "اسم البنك",\n  "questions": [...]\n}'}
-            rows={10}
-            spellCheck={false}
-            className="w-full bg-transparent rounded-xl px-4 py-3 text-gray-300 font-mono text-xs focus:outline-none resize-none placeholder-gray-700"
-          />
-        </div>
-        {text && (
-          <button onClick={reset} className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-1 font-mono">
-            ✕ مسح
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Label + file button */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="folio" style={{ color: 'var(--ink-4)' }}>الصق JSON هنا أو اكتبه مباشرة</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'none', border: '1px solid var(--rule)', borderRadius: 4,
+              padding: '4px 10px', cursor: 'pointer',
+              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: 'var(--ink-3)', transition: 'all 150ms',
+            }}
+          >
+            <FileJson size={12} /> رفع .json
           </button>
-        )}
+          <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }}
+            onChange={(e) => loadFile(e.target.files[0])} />
+        </div>
       </div>
+
+      {/* Textarea */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        style={{ border: `2px dashed ${borderColor}`, borderRadius: 4, transition: 'border-color 150ms' }}
+      >
+        <textarea
+          value={text}
+          onChange={handleTextChange}
+          placeholder={'{\n  "title": "اسم البنك",\n  "questions": [...]\n}'}
+          rows={10}
+          spellCheck={false}
+          style={{
+            width: '100%', background: 'var(--paper-2)', borderRadius: 4,
+            padding: '12px 14px', color: 'var(--ink)', fontFamily: 'var(--mono)',
+            fontSize: 12, outline: 'none', resize: 'none', border: 'none',
+            boxSizing: 'border-box',
+          }}
+        />
+      </div>
+      {text && (
+        <button onClick={reset} style={{
+          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+          fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)',
+          letterSpacing: '0.06em', textTransform: 'uppercase', alignSelf: 'flex-start',
+        }}>
+          CLEAR ×
+        </button>
+      )}
 
       {/* Errors */}
       {errors.length > 0 && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 space-y-1">
-          {errors.map((e, i) => <p key={i} className="text-red-400 text-sm font-mono">❌ {e}</p>)}
+        <div style={{
+          border: '1px solid var(--alert)', borderRadius: 4, padding: '14px 16px',
+          background: 'color-mix(in srgb, var(--alert) 6%, var(--paper))',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          {errors.map((e, i) => (
+            <p key={i} className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--alert)', margin: 0 }}>
+              {e}
+            </p>
+          ))}
         </div>
       )}
 
@@ -457,9 +491,20 @@ function JsonUploadTab({ session, onSuccess, onClose }) {
       {parsed && (
         <>
           <QuestionsPreview data={parsed} />
-          <button onClick={handleSave} disabled={saving}
-            className="w-full bg-primary text-background font-bold py-3 rounded-xl hover:bg-[#00D4FF] transition-all disabled:opacity-50">
-            {saving ? '⏳ جاري الحفظ...' : '💾 حفظ في بنك الأسئلة'}
+          <button onClick={handleSave} disabled={saving} style={{
+            width: '100%', padding: '12px 0',
+            background: saving ? 'var(--paper-2)' : 'var(--ink)',
+            color: saving ? 'var(--ink-3)' : 'var(--paper)',
+            border: '1px solid var(--ink)', borderRadius: 4,
+            fontFamily: 'var(--sans)', fontWeight: 500, fontSize: 14,
+            cursor: saving ? 'not-allowed' : 'pointer',
+            opacity: saving ? 0.6 : 1, transition: 'all 150ms',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}>
+            {saving
+              ? <><Loader2 size={15} className="animate-spin" /><span className="ar">جاري الحفظ...</span></>
+              : <span className="ar">حفظ في بنك الأسئلة</span>
+            }
           </button>
         </>
       )}
@@ -470,24 +515,53 @@ function JsonUploadTab({ session, onSuccess, onClose }) {
 // ── AI Prompt Tab ──────────────────────────────────────────────────────────────
 function AiPromptTab() {
   const [copied, setCopied] = useState(false)
-  const copy = () => { navigator.clipboard.writeText(AI_PROMPT); setCopied(true); setTimeout(() => setCopied(false), 2500) }
+  const copy = () => {
+    navigator.clipboard.writeText(AI_PROMPT)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
-        <p className="ar text-amber-300 text-sm font-bold mb-1">📋 لو عايز تستخدم AI خارجي</p>
-        <ol className="ar text-gray-300 text-sm space-y-1 list-decimal list-inside">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Instruction card */}
+      <div style={{
+        border: '1px solid var(--gold)', borderRadius: 4, padding: '14px 16px',
+        background: 'color-mix(in srgb, var(--gold) 6%, var(--paper))',
+      }}>
+        <div className="folio" style={{ color: 'var(--gold)', marginBottom: 10 }}>لو عايز تستخدم AI خارجي</div>
+        <ol className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-2)', margin: 0, padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <li>انسخ البرومت أدناه</li>
           <li>افتح ChatGPT أو Gemini أو Claude</li>
           <li>أرسل البرومت مع ملفك (PDF / PPTX / صورة)</li>
           <li>الـ AI هيرجعلك JSON جاهز — ارفعه من تاب "JSON"</li>
         </ol>
       </div>
-      <div className="relative">
-        <pre className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-xs text-gray-300 font-mono overflow-auto max-h-64 whitespace-pre-wrap">{AI_PROMPT}</pre>
-        <button onClick={copy} className={`absolute top-3 right-3 px-3 py-1 rounded-lg text-xs font-bold transition-all
-          ${copied ? 'bg-green-500/20 text-green-400 border border-green-500/40' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600'}`}>
-          {copied ? '✅ تم النسخ!' : '📋 نسخ'}
+
+      {/* Prompt block */}
+      <div style={{ position: 'relative' }}>
+        <pre style={{
+          border: '1px solid var(--rule)', borderRadius: 4,
+          padding: '16px 14px', margin: 0,
+          fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-2)',
+          background: 'var(--paper-2)', overflowX: 'auto', maxHeight: 260,
+          whiteSpace: 'pre-wrap', overflowY: 'auto', lineHeight: 1.6,
+        }}>
+          {AI_PROMPT}
+        </pre>
+        <button
+          onClick={copy}
+          style={{
+            position: 'absolute', top: 10, right: 10,
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '5px 10px', borderRadius: 4, cursor: 'pointer',
+            fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
+            border: `1px solid ${copied ? 'var(--success)' : 'var(--rule)'}`,
+            background: copied ? 'color-mix(in srgb, var(--success) 8%, var(--paper))' : 'var(--paper)',
+            color: copied ? 'var(--success)' : 'var(--ink-3)',
+            transition: 'all 150ms',
+          }}
+        >
+          {copied ? <><Check size={11} /> COPIED</> : <><Copy size={11} /> COPY</>}
         </button>
       </div>
     </div>
@@ -500,33 +574,66 @@ export default function UploadQuestionsModal({ onClose, onSuccess }) {
   const { session }   = useAuth()
 
   const tabs = [
-    { id: 'file', label: '✨ رفع ملف بالـ AI' },
-    { id: 'json', label: '📄 رفع JSON' },
-    { id: 'prompt', label: '📋 البرومت' },
+    { id: 'file',   label: 'رفع ملف بالـ AI' },
+    { id: 'json',   label: 'رفع JSON' },
+    { id: 'prompt', label: 'البرومت' },
   ]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl bg-[#0D1321] border border-gray-700 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }}
+      />
 
+      {/* Panel */}
+      <div style={{
+        position: 'relative', width: '100%', maxWidth: 640,
+        background: 'var(--paper)', color: 'var(--ink)',
+        borderTop: '3px double var(--rule-strong)',
+        border: '1px solid var(--rule)',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.25)',
+        overflow: 'hidden',
+      }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold font-display text-white">رفع بنك أسئلة</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none transition-colors">×</button>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px', borderBottom: '1px solid var(--rule)',
+        }}>
+          <div>
+            <div className="folio" style={{ color: 'var(--ink-4)', marginBottom: 2 }}>QUESTION BANK</div>
+            <h2 className="ar" style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 20, margin: 0 }}>
+              رفع بنك أسئلة
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: '1px solid var(--rule)', borderRadius: 4,
+              padding: '6px 10px', cursor: 'pointer', color: 'var(--ink-3)',
+              display: 'flex', alignItems: 'center',
+            }}
+          >
+            <X size={15} />
+          </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-700">
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--rule)' }}>
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex-1 py-3 text-sm font-bold transition-all ${
-                tab === t.id
-                  ? 'text-primary border-b-2 border-primary bg-primary/5'
-                  : 'text-gray-400 hover:text-gray-200'
-              }`}
+              style={{
+                flex: 1, padding: '11px 0',
+                fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase',
+                border: 'none', borderBottom: tab === t.id ? '2px solid var(--ink)' : '2px solid transparent',
+                background: 'none', cursor: 'pointer',
+                color: tab === t.id ? 'var(--ink)' : 'var(--ink-4)',
+                transition: 'all 150ms',
+              }}
+              className="ar"
             >
               {t.label}
             </button>
@@ -534,7 +641,7 @@ export default function UploadQuestionsModal({ onClose, onSuccess }) {
         </div>
 
         {/* Content */}
-        <div className="p-6 max-h-[70vh] overflow-y-auto">
+        <div style={{ padding: 20, maxHeight: '70vh', overflowY: 'auto' }}>
           {tab === 'file'   && <FileUploadTab   session={session} onSuccess={onSuccess} onClose={onClose} />}
           {tab === 'json'   && <JsonUploadTab   session={session} onSuccess={onSuccess} onClose={onClose} />}
           {tab === 'prompt' && <AiPromptTab />}

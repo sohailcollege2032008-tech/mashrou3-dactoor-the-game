@@ -1,14 +1,5 @@
-/**
- * TournamentCountdown.jsx
- * Full-screen countdown shown during phase transitions and round breaks.
- * Props:
- *   durationMs  {number}  total countdown time in ms
- *   label       {string}  title text shown above the number
- *   onComplete  {fn}      called when countdown reaches 0
- */
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Timer } from 'lucide-react'
 
 export default function TournamentCountdown({ durationMs, label, onComplete }) {
   const [remaining, setRemaining] = useState(Math.ceil(durationMs / 1000))
@@ -28,58 +19,70 @@ export default function TournamentCountdown({ durationMs, label, onComplete }) {
   }, [remaining, onComplete])
 
   const pct = total > 0 ? remaining / total : 0
-  const circumference = 2 * Math.PI * 54   // r=54
+  const circumference = 2 * Math.PI * 54
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm">
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      background: 'color-mix(in srgb, var(--paper) 96%, transparent)',
+      backdropFilter: 'blur(2px)',
+    }}>
+      <div style={{ borderTop: '1px solid var(--rule)', width: 280, marginBottom: 40 }} />
       <motion.div
-        initial={{ opacity: 0, scale: 0.8 }}
+        initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="flex flex-col items-center gap-6"
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28 }}
       >
-        {/* Label */}
-        <p className="ar text-xl font-bold text-gray-300">{label}</p>
+        <p className="folio ar" style={{ color: 'var(--ink-3)', letterSpacing: '0.14em' }}>{label}</p>
 
-        {/* Circle progress */}
-        <div className="relative w-40 h-40">
-          <svg className="absolute inset-0 -rotate-90" width="160" height="160">
-            <circle cx="80" cy="80" r="54" fill="none" stroke="#1f2937" strokeWidth="10" />
+        <div style={{ position: 'relative', width: 160, height: 160 }}>
+          <svg style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} width="160" height="160">
+            <circle cx="80" cy="80" r="54" fill="none" stroke="var(--rule)" strokeWidth="8" />
             <circle
               cx="80" cy="80" r="54"
               fill="none"
-              stroke="#00B8D9"
-              strokeWidth="10"
+              stroke={pct > 0.5 ? 'var(--ink)' : pct > 0.25 ? 'var(--burgundy)' : 'var(--alert)'}
+              strokeWidth="8"
               strokeLinecap="round"
               strokeDasharray={circumference}
               strokeDashoffset={circumference * (1 - pct)}
-              style={{ transition: 'stroke-dashoffset 1s linear' }}
+              style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.5s' }}
             />
           </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <Timer size={20} className="text-primary mb-1" />
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          }}>
             <AnimatePresence mode="wait">
               <motion.span
                 key={remaining}
-                initial={{ opacity: 0, y: -10 }}
+                initial={{ opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="text-5xl font-black text-white tabular-nums"
+                exit={{ opacity: 0, y: 12 }}
+                style={{
+                  fontFamily: 'var(--serif)', fontSize: 64, fontWeight: 400,
+                  color: 'var(--ink)', lineHeight: 1, letterSpacing: '-0.03em',
+                }}
               >
                 {remaining}
               </motion.span>
             </AnimatePresence>
+            <div className="folio" style={{ color: 'var(--ink-4)', marginTop: 2, fontSize: 9, letterSpacing: '0.12em' }}>
+              SEC
+            </div>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="w-64 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+        <div style={{ width: 280, height: 2, background: 'var(--rule)', borderRadius: 1, overflow: 'hidden' }}>
           <motion.div
-            className="h-full bg-primary rounded-full"
+            style={{ height: '100%', background: 'var(--ink)', borderRadius: 1 }}
             animate={{ width: `${pct * 100}%` }}
             transition={{ duration: 1, ease: 'linear' }}
           />
         </div>
       </motion.div>
+      <div style={{ borderTop: '1px solid var(--rule)', width: 280, marginTop: 40 }} />
     </div>
   )
 }

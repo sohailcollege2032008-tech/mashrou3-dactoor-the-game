@@ -37,20 +37,19 @@ function HostSpectatorView({ tournamentId, duelId, match, tournament, onBack }) 
 
   if (!duel) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 size={28} className="text-primary animate-spin" />
+      <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={24} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
       </div>
     )
   }
 
-  const qi             = duel.current_question_index ?? 0
-  const question       = duel.questions?.[qi]
-  const answers        = duel.answers?.[qi] || {}
-  const correctReveal  = answers.correct_reveal ?? null
-  const isRevealing    = duel.status === 'revealing'
-  const isFinished     = duel.status === 'finished'
-  const playerUids     = Object.keys(duel.players || {})
-  // Respect match order: player_a on the right, player_b on the left
+  const qi            = duel.current_question_index ?? 0
+  const question      = duel.questions?.[qi]
+  const answers       = duel.answers?.[qi] || {}
+  const correctReveal = answers.correct_reveal ?? null
+  const isRevealing   = duel.status === 'revealing'
+  const isFinished    = duel.status === 'finished'
+  const playerUids    = Object.keys(duel.players || {})
   const uidA = match?.player_a_uid || playerUids[0]
   const uidB = match?.player_b_uid || playerUids[1]
   const playerA = duel.players?.[uidA]
@@ -59,113 +58,141 @@ function HostSpectatorView({ tournamentId, duelId, match, tournament, onBack }) 
   const ansB = answers[uidB]
 
   const renderPanel = (player, answer) => {
-    if (!player) return <div className="flex-1" />
+    if (!player) return <div style={{ flex: 1 }} />
     const hasAnswered = answer?.selected_choice !== undefined && answer?.selected_choice !== null
     return (
-      <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
         {/* Player header */}
-        <div className="flex items-center justify-center gap-2 px-2 py-1.5 bg-gray-800 rounded-xl">
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: '8px 10px', border: '1px solid var(--rule)', background: 'var(--paper-2)',
+          borderRadius: 4,
+        }}>
           {player.avatar_url && (
-            <img src={player.avatar_url} className="w-6 h-6 rounded-full flex-shrink-0" alt="" />
+            <img src={player.avatar_url} style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0 }} alt="" />
           )}
-          <span className="ar font-bold text-white text-xs truncate">{player.nickname}</span>
-          <span className="font-mono font-black text-primary text-sm tabular-nums flex-shrink-0">
+          <span className="ar" style={{ fontFamily: 'var(--serif)', fontSize: 13, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {player.nickname}
+          </span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--navy)', flexShrink: 0 }}>
             {player.score ?? 0}
           </span>
         </div>
+
         {/* Choices */}
-        <div className="space-y-1">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {question?.choices?.map((choice, idx) => {
             const isSelected = hasAnswered && answer.selected_choice === idx
             const isCorrect  = isRevealing && idx === correctReveal
             const isWrong    = isRevealing && isSelected && !isCorrect
+
+            let borderColor = 'var(--rule)'
+            let bg = 'var(--paper-2)'
+            let textColor = 'var(--ink-3)'
+
+            if (isCorrect)       { borderColor = 'var(--success)'; bg = 'color-mix(in srgb, var(--success) 10%, var(--paper))'; textColor = 'var(--success)' }
+            else if (isWrong)    { borderColor = 'var(--alert)';   bg = 'color-mix(in srgb, var(--alert) 8%, var(--paper))';   textColor = 'var(--alert)' }
+            else if (isSelected) { borderColor = 'var(--navy)';    bg = 'color-mix(in srgb, var(--navy) 8%, var(--paper))';   textColor = 'var(--navy)' }
+
             return (
-              <div key={idx} className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl border text-xs transition-all ${
-                isCorrect  ? 'bg-green-500/20 border-green-500/50 text-green-300 font-bold' :
-                isWrong    ? 'bg-red-500/20 border-red-500/50 text-red-400' :
-                isSelected ? 'bg-primary/15 border-primary/40 text-primary font-bold' :
-                'bg-gray-800/60 border-gray-700/40 text-gray-500'
-              }`}>
-                <span className={`w-5 h-5 rounded-md text-[10px] font-black flex items-center justify-center flex-shrink-0 ${
-                  isCorrect ? 'bg-green-500 text-black' :
-                  isWrong   ? 'bg-red-500 text-white' :
-                  isSelected ? 'bg-primary text-background' :
-                  'bg-gray-700 text-gray-400'
-                }`}>
+              <div key={idx} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '7px 10px', border: `1px solid ${borderColor}`,
+                background: bg, borderRadius: 4, transition: 'all 150ms',
+              }}>
+                <span style={{
+                  width: 20, height: 20, borderRadius: 2, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
+                  background: isCorrect ? 'var(--success)' : isWrong ? 'var(--alert)' : isSelected ? 'var(--navy)' : 'var(--rule)',
+                  color: (isCorrect || isWrong || isSelected) ? 'white' : 'var(--ink-4)',
+                }}>
                   {String.fromCharCode(65 + idx)}
                 </span>
-                <span className="leading-tight truncate">{choice}</span>
+                <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: textColor, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {choice}
+                </span>
               </div>
             )
           })}
         </div>
-        {/* Status line */}
-        <div className={`text-center text-[10px] font-bold py-1 rounded-lg ${
-          hasAnswered
-            ? isRevealing
-              ? (ansA && uidA === Object.keys(duel.players)[playerUids.indexOf(uidA)]
-                  ? (answers[uidA]?.selected_choice === correctReveal ? 'text-green-400' : 'text-red-400')
-                  : 'text-gray-500')
-              : 'text-primary'
-            : 'text-gray-600 animate-pulse'
-        }`}>
-          {isFinished ? '🏁' : hasAnswered ? '✓ أجاب' : 'ينتظر…'}
+
+        {/* Status */}
+        <div className="folio" style={{
+          textAlign: 'center', fontSize: 9, padding: '4px 0',
+          color: isFinished ? 'var(--ink-4)' : hasAnswered ? 'var(--success)' : 'var(--ink-4)',
+        }}>
+          {isFinished ? 'DONE' : hasAnswered ? 'ANSWERED' : 'WAITING…'}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background text-white flex flex-col" dir="rtl">
+    <div style={{ minHeight: '100vh', background: 'var(--paper)', color: 'var(--ink)', display: 'flex', flexDirection: 'column' }} dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900/80">
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 16px', borderBottom: '1px solid var(--rule)',
+        background: 'var(--paper-2)',
+      }}>
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-gray-400 hover:text-white text-xs font-bold transition-colors"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-3)',
+          }}
         >
           <ArrowRight size={14} />
           <span className="ar">الـ Bracket</span>
         </button>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-yellow-400 font-bold ar">👁 مشاهدة المباراة</span>
-          <span className="text-xs text-gray-600 font-mono">{qi + 1}/{duel.total_questions}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span className="ar folio" style={{ color: 'var(--gold)', fontSize: 9 }}>SPECTATING</span>
+          <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>{qi + 1}/{duel.total_questions}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <Timer size={12} className="text-gray-500" />
-          <span className="text-xs text-gray-500 font-mono">
-            {isRevealing ? '✓' : isFinished ? '🏁' : duel.status === 'waiting' ? '…' : ''}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Timer size={12} style={{ color: 'var(--ink-4)' }} />
+          <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>
+            {isRevealing ? 'REVEAL' : isFinished ? 'DONE' : duel.status === 'waiting' ? 'WAIT' : 'LIVE'}
           </span>
         </div>
       </div>
 
       {/* Question */}
-      <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/40">
-        <p className="ar text-white font-bold text-sm text-center leading-relaxed">
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', background: 'var(--paper-2)' }}>
+        <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 500, color: 'var(--ink)', textAlign: 'center', lineHeight: 1.6, margin: 0 }}>
           {question?.question || '—'}
         </p>
         {question?.image_url && (
           <img
             src={question.image_url}
             alt=""
-            className="mt-2 w-full max-h-32 object-contain rounded-xl border border-gray-700"
+            style={{
+              marginTop: 10, width: '100%', maxHeight: 130,
+              objectFit: 'contain', border: '1px solid var(--rule)', borderRadius: 4,
+            }}
           />
         )}
       </div>
 
       {/* Split panels */}
-      <div className="flex-1 flex gap-2 p-3 overflow-y-auto">
+      <div style={{ flex: 1, display: 'flex', gap: 10, padding: 14, overflowY: 'auto' }}>
         {renderPanel(playerA, ansA)}
-        <div className="w-px bg-gray-800 self-stretch mx-1" />
+        <div style={{ width: 1, background: 'var(--rule)', alignSelf: 'stretch', flexShrink: 0 }} />
         {renderPanel(playerB, ansB)}
       </div>
 
       {/* Score footer */}
-      <div className="flex items-center justify-between px-6 py-3 border-t border-gray-800 bg-gray-900/80">
-        <span className="font-mono font-black text-2xl text-primary tabular-nums">{playerA?.score ?? 0}</span>
-        <span className="text-gray-600 font-bold text-sm">
-          {isFinished ? '🏁 انتهت' : isRevealing ? '🔍 الإجابة' : '⚔️ جارية'}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 24px', borderTop: '1px solid var(--rule)', background: 'var(--paper-2)',
+      }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 28, fontWeight: 700, color: 'var(--navy)' }}>{playerA?.score ?? 0}</span>
+        <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>
+          {isFinished ? 'FINISHED' : isRevealing ? 'REVEAL' : 'LIVE'}
         </span>
-        <span className="font-mono font-black text-2xl text-primary tabular-nums">{playerB?.score ?? 0}</span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 28, fontWeight: 700, color: 'var(--navy)' }}>{playerB?.score ?? 0}</span>
       </div>
     </div>
   )
@@ -191,10 +218,8 @@ export default function TournamentDuelWrapper() {
   const [tournament,  setTournament]  = useState(null)
   const [duelId,      setDuelId]      = useState(null)
   const [error,       setError]       = useState(null)
-
-  // Post-match results screen
-  const [matchResult,    setMatchResult]    = useState(null) // set after finish → shows results
-  const [autoNavSeconds, setAutoNavSeconds] = useState(null) // countdown to auto-navigate
+  const [matchResult,    setMatchResult]    = useState(null)
+  const [autoNavSeconds, setAutoNavSeconds] = useState(null)
 
   useEffect(() => {
     if (!tournamentId || !matchId) return
@@ -208,22 +233,16 @@ export default function TournamentDuelWrapper() {
 
         const t = { id: tSnap.id, ...tSnap.data() }
         const m = { match_id: mSnap.id, ...mSnap.data() }
-
         if (!m.duel_id) throw new Error('لم تبدأ المباراة بعد')
 
-        setTournament(t)
-        setMatch(m)
-        setDuelId(m.duel_id)
-        setReady(true)
+        setTournament(t); setMatch(m); setDuelId(m.duel_id); setReady(true)
       } catch (e) {
-        console.error(e)
-        setError(e.message)
+        console.error(e); setError(e.message)
       }
     }
     load()
   }, [tournamentId, matchId])
 
-  // Auto-navigate from results screen
   useEffect(() => {
     if (matchResult === null || autoNavSeconds === null) return
     if (autoNavSeconds <= 0) {
@@ -234,27 +253,21 @@ export default function TournamentDuelWrapper() {
     return () => clearTimeout(t)
   }, [matchResult, autoNavSeconds, tournamentId, navigate])
 
-  // uid of the currently logged-in user
   const uid = session?.uid
-  // Is this user one of the two players in this match (not an observer/host)?
   const isPlayerInMatch = ready && match &&
     (match.player_a_uid === uid || match.player_b_uid === uid)
 
-  // Called by DuelGame when the duel finishes
   const handleFinished = useCallback(async () => {
-    // Host-observer: go back to bracket without writing results.
     if (!isPlayerInMatch) {
       navigate(`/tournament/${tournamentId}/bracket`, { replace: true })
       return
     }
-
     if (!match || !duelId || !tournament) {
       navigate(`/tournament/${tournamentId}/wait`, { replace: true })
       return
     }
 
     try {
-      // Read final duel state from RTDB
       const duelSnap = await get(rtdbRef(rtdb, `tournament_duels/${tournamentId}/${duelId}`))
       const duelData = duelSnap.val()
 
@@ -273,8 +286,6 @@ export default function TournamentDuelWrapper() {
         tieBreaker = null
       } else if (scoreA === scoreB) {
         if (scoreA === 0) {
-          // Both zero → use FFA rank (lower rank number = better seeding)
-          // This is the last-resort fallback after all tiebreaker questions were used
           const [ffaA, ffaB] = await Promise.all([
             getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uidA)),
             getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uidB)),
@@ -285,7 +296,6 @@ export default function TournamentDuelWrapper() {
           loserUid   = winnerUid === uidA ? uidB : uidA
           tieBreaker = 'ffa_rank'
         } else {
-          // Equal non-zero scores after tiebreaker questions exhausted → speed
           const result = resolveMatchTie(duelData, playerUids)
           winnerUid  = result.winnerUid
           loserUid   = result.loserUid
@@ -297,7 +307,6 @@ export default function TournamentDuelWrapper() {
         tieBreaker = null
       }
 
-      // Write result to Firestore match doc
       const matchRef = doc(db, 'tournaments', tournamentId, 'bracket_matches', matchId)
       await updateDoc(matchRef, {
         status:         'finished',
@@ -312,9 +321,6 @@ export default function TournamentDuelWrapper() {
       const winnerName = winnerUid === match.player_a_uid
         ? match.player_a_name : match.player_b_name
 
-      // Advance winner to next match — best-effort (bracket host button also handles this).
-      // Players lack permission to update the next match until they're listed in it,
-      // so permission errors here are expected and non-critical.
       if (match.next_match_id) {
         try {
           const nextRef  = doc(db, 'tournaments', tournamentId, 'bracket_matches', match.next_match_id)
@@ -327,14 +333,9 @@ export default function TournamentDuelWrapper() {
             await updateDoc(nextRef, updates)
           }
         } catch (e) {
-          // Expected: player not yet listed in next match → no write permission.
-          // TournamentBracket "advance round" button propagates winners authoritatively.
           console.warn('[Bracket] Could not advance winner client-side:', e.code || e.message)
         }
       } else {
-        // Final match — try to mark tournament finished.
-        // Players lack update permission on the tournament doc; host's TournamentBracket
-        // button is the authoritative path for status: 'finished'.
         try {
           await updateDoc(doc(db, 'tournaments', tournamentId), {
             winner_uid:  winnerUid,
@@ -346,9 +347,8 @@ export default function TournamentDuelWrapper() {
         }
       }
 
-      // ── Write tournament game history for the current player ────────────────
-      const myScore      = duelData.players?.[uid]?.score ?? 0
-      const oppUid       = playerUids.find(u => u !== uid)
+      const myScore       = duelData.players?.[uid]?.score ?? 0
+      const oppUid        = playerUids.find(u => u !== uid)
       const opponentScore = duelData.players?.[oppUid]?.score ?? 0
       const opponentName  = uid === match.player_a_uid
         ? match.player_b_name : match.player_a_name
@@ -376,12 +376,9 @@ export default function TournamentDuelWrapper() {
         console.error('Failed to write tournament match history:', e)
       }
 
-      // ── Write tournament_summary for players whose journey is now over ───────
-      // Loser's journey always ends here. Winner's ends only at the final.
       const shouldWriteSummary = (uid === loserUid) || (!match.next_match_id && uid === winnerUid)
       if (shouldWriteSummary) {
         try {
-          // Collect all this player's finished bracket matches for this tournament
           const allMatchesSnap = await getDocs(
             collection(db, 'tournaments', tournamentId, 'bracket_matches')
           )
@@ -407,7 +404,6 @@ export default function TournamentDuelWrapper() {
             }
           })
 
-          // FFA rank + score
           const ffaSnap = await getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uid))
           const ffaData = ffaSnap.exists() ? ffaSnap.data() : {}
           const ffaAll  = await getDocs(collection(db, 'tournaments', tournamentId, 'ffa_results'))
@@ -416,15 +412,10 @@ export default function TournamentDuelWrapper() {
           const highestRound = myMatches.length > 0 ? Math.max(...myMatches.map(m => m.round)) : null
 
           let finalResult
-          if (!match.next_match_id && uid === winnerUid) {
-            finalResult = 'champion'
-          } else if (match.round === tRounds) {
-            finalResult = 'finalist'
-          } else if (match.round === tRounds - 1) {
-            finalResult = 'semi_finalist'
-          } else {
-            finalResult = 'eliminated_bracket'
-          }
+          if (!match.next_match_id && uid === winnerUid) finalResult = 'champion'
+          else if (match.round === tRounds)              finalResult = 'finalist'
+          else if (match.round === tRounds - 1)          finalResult = 'semi_finalist'
+          else                                           finalResult = 'eliminated_bracket'
 
           await setDoc(
             doc(db, 'profiles', uid, 'game_history', `t_${tournamentId}_summary`),
@@ -448,7 +439,6 @@ export default function TournamentDuelWrapper() {
         }
       }
 
-      // ── Show results screen instead of immediate navigation ─────────────────
       setMatchResult({
         isWinner:      winnerUid === uid,
         myScore,
@@ -467,13 +457,24 @@ export default function TournamentDuelWrapper() {
     }
   }, [isPlayerInMatch, match, duelId, tournament, tournamentId, matchId, navigate, uid])
 
-  // ── Error screen ─────────────────────────────────────────────────────────
+  // ── Error ─────────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-6" dir="rtl">
-        <p className="ar text-red-400 text-center">{error}</p>
-        <button onClick={() => navigate(`/tournament/${tournamentId}/wait`)} className="ar px-6 py-2.5 rounded-xl bg-gray-800 text-white text-sm">
-          عودة
+      <div style={{
+        minHeight: '100vh', background: 'var(--paper)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 16, padding: 24,
+      }} dir="rtl">
+        <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 15, color: 'var(--alert)', textAlign: 'center' }}>{error}</p>
+        <button
+          onClick={() => navigate(`/tournament/${tournamentId}/wait`)}
+          style={{
+            padding: '10px 24px', border: '1px solid var(--rule)', borderRadius: 4,
+            background: 'var(--paper-2)', color: 'var(--ink-3)',
+            fontFamily: 'var(--sans)', fontSize: 14, cursor: 'pointer',
+          }}
+        >
+          <span className="ar">عودة</span>
         </button>
       </div>
     )
@@ -482,8 +483,8 @@ export default function TournamentDuelWrapper() {
   // ── Loading ───────────────────────────────────────────────────────────────
   if (!ready) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 size={32} className="text-primary animate-spin" />
+      <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={28} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
       </div>
     )
   }
@@ -494,72 +495,106 @@ export default function TournamentDuelWrapper() {
     const isWinner   = matchResult.isWinner
     const isFinal    = matchResult.isFinal
 
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6" dir="rtl">
-        <div className="w-full max-w-sm space-y-5">
+    const outcomeColor    = isWinner ? 'var(--gold)' : 'var(--alert)'
+    const outcomeBorder   = isWinner ? 'var(--gold)' : 'var(--alert)'
+    const outcomeBg       = isWinner
+      ? 'color-mix(in srgb, var(--gold) 6%, var(--paper))'
+      : 'color-mix(in srgb, var(--alert) 6%, var(--paper))'
 
-          {/* Tournament + round label */}
-          <div className="text-center">
-            <p className="text-sm font-bold text-primary ar">🏆 {tournament?.title}</p>
-            <p className="text-xs text-gray-500 ar mt-0.5">{roundLabel}</p>
+    const outcomeText = isFinal
+      ? (isWinner ? 'أنت بطل البطولة' : 'المركز الثاني')
+      : (isWinner ? 'تأهلت للجولة القادمة' : 'خرجت من البطولة')
+
+    return (
+      <div className="paper-grain" style={{
+        minHeight: '100vh', background: 'var(--paper)', color: 'var(--ink)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
+      }} dir="rtl">
+        <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Tournament label */}
+          <div style={{ textAlign: 'center' }}>
+            <div className="folio" style={{ color: 'var(--ink-4)', marginBottom: 4 }}>TOURNAMENT</div>
+            <p className="ar" style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>
+              {tournament?.title}
+            </p>
+            <p className="ar folio" style={{ color: 'var(--ink-4)', marginTop: 4, fontSize: 9 }}>{roundLabel}</p>
           </div>
 
           {/* Outcome card */}
-          <div className={`flex flex-col items-center gap-3 py-8 rounded-2xl border ${
-            isWinner
-              ? 'bg-yellow-500/10 border-yellow-500/30'
-              : 'bg-red-500/10 border-red-500/30'
-          }`}>
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+            padding: '32px 24px', border: `1px solid ${outcomeBorder}`, borderTop: `3px solid ${outcomeBorder}`,
+            background: outcomeBg, borderRadius: 4,
+          }}>
             {isWinner
-              ? <Trophy size={52} className="text-yellow-400" />
-              : <XCircle size={52} className="text-red-400" />
+              ? <Trophy size={48} style={{ color: outcomeColor }} />
+              : <XCircle size={48} style={{ color: outcomeColor }} />
             }
-            <p className={`text-2xl font-black ar ${isWinner ? 'text-yellow-400' : 'text-red-400'}`}>
-              {isFinal
-                ? (isWinner ? '🏆 أنت بطل البطولة!' : 'المركز الثاني 🥈')
-                : (isWinner ? 'تأهلت للجولة القادمة! ✅' : 'خرجت من البطولة ❌')
-              }
+            <p className="ar" style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 500, color: outcomeColor, margin: 0, textAlign: 'center' }}>
+              {outcomeText}
             </p>
             {matchResult.hadTiebreaker && !matchResult.tieBreaker && (
-              <p className="text-xs text-orange-400 ar">⚡ تم البت بسؤال فاصل</p>
+              <p className="ar folio" style={{ color: 'var(--gold)', fontSize: 9 }}>تم البت بسؤال فاصل</p>
             )}
             {matchResult.tieBreaker === 'speed' && (
-              <p className="text-xs text-gray-400 ar">⚡ فاز بالسرعة</p>
+              <p className="ar folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>فاز بالسرعة</p>
             )}
             {matchResult.tieBreaker === 'ffa_rank' && (
-              <p className="text-xs text-gray-400 ar">🏅 فاز بترتيب مرحلة التصفيات</p>
+              <p className="ar folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>فاز بترتيب مرحلة التصفيات</p>
             )}
             {matchResult.tieBreaker === 'random' && (
-              <p className="text-xs text-gray-400 ar">🎲 فاز بالقرعة</p>
+              <p className="ar folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>فاز بالقرعة</p>
             )}
           </div>
 
           {/* Score comparison */}
-          <div className="flex gap-3 items-stretch">
-            <div className="flex-1 bg-gray-900 border border-gray-800 rounded-2xl p-4 text-center">
-              <p className="text-xs text-gray-400 ar mb-1">أنت</p>
-              <p className="text-4xl font-black font-mono text-primary tabular-nums">{matchResult.myScore}</p>
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: 12 }}>
+            <div style={{
+              flex: 1, border: '1px solid var(--rule)', borderRadius: 4,
+              padding: '16px 12px', textAlign: 'center', background: 'var(--paper-2)',
+            }}>
+              <div className="folio" style={{ color: 'var(--ink-4)', marginBottom: 8, fontSize: 9 }}>أنت</div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 40, fontWeight: 700, color: 'var(--ink)' }}>
+                {matchResult.myScore}
+              </div>
             </div>
-            <div className="flex items-center text-gray-600 font-bold text-sm">vs</div>
-            <div className="flex-1 bg-gray-900 border border-gray-800 rounded-2xl p-4 text-center">
-              <p className="text-xs text-gray-400 ar mb-1 truncate">{matchResult.opponentName || 'خصمك'}</p>
-              <p className="text-4xl font-black font-mono text-white tabular-nums">{matchResult.opponentScore}</p>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>VS</span>
+            </div>
+            <div style={{
+              flex: 1, border: '1px solid var(--rule)', borderRadius: 4,
+              padding: '16px 12px', textAlign: 'center', background: 'var(--paper-2)',
+            }}>
+              <div className="ar folio" style={{ color: 'var(--ink-4)', marginBottom: 8, fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {matchResult.opponentName || 'خصمك'}
+              </div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 40, fontWeight: 700, color: 'var(--ink)' }}>
+                {matchResult.opponentScore}
+              </div>
             </div>
           </div>
 
-          {/* Continue button with countdown */}
+          {/* Continue button */}
           <button
             onClick={() => navigate(`/tournament/${tournamentId}/wait`, { replace: true })}
-            className="w-full py-3.5 rounded-2xl bg-primary/10 border border-primary/30 text-primary font-bold ar text-sm active:scale-95 transition-all"
+            style={{
+              width: '100%', padding: '14px 0',
+              border: '1px solid var(--rule)', borderRadius: 4,
+              background: 'var(--paper-2)', color: 'var(--ink-2)',
+              fontFamily: 'var(--sans)', fontSize: 14, cursor: 'pointer',
+              transition: 'all 150ms',
+            }}
           >
-            متابعة ({autoNavSeconds}ث)
+            <span className="ar">متابعة ({autoNavSeconds}ث)</span>
           </button>
         </div>
       </div>
     )
   }
 
-  // ── Host spectator: split-screen showing both players in real time ─────────
+  // ── Host spectator view ───────────────────────────────────────────────────
   if (!isPlayerInMatch) {
     return (
       <HostSpectatorView

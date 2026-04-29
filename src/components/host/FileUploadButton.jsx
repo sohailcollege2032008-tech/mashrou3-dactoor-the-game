@@ -2,13 +2,14 @@ import React, { useState, useRef } from 'react'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
+import { Loader2 } from 'lucide-react'
 
-const CLOUD_RUN_URL = import.meta.env.VITE_CLOUD_RUN_URL   // e.g. https://dactoor-processor-xxxx-uc.a.run.app
+const CLOUD_RUN_URL = import.meta.env.VITE_CLOUD_RUN_URL
 const API_SECRET    = import.meta.env.VITE_CLOUD_RUN_SECRET || ''
 
 export default function FileUploadButton({ onUploadSuccess }) {
   const [loading, setLoading]   = useState(false)
-  const [progress, setProgress] = useState('')   // human-readable status
+  const [progress, setProgress] = useState('')
   const fileInputRef            = useRef(null)
   const { session }             = useAuth()
 
@@ -22,41 +23,30 @@ export default function FileUploadButton({ onUploadSuccess }) {
     }
 
     setLoading(true)
-    setProgress('⏫ جاري رفع الملف...')
+    setProgress('جاري رفع الملف...')
 
     try {
-      // ── Send file to Cloud Run ──────────────────────────────────────────────
       const formData = new FormData()
       formData.append('file', file)
-
-      setProgress('🤖 Gemini بيحلل الملف...')
+      setProgress('Gemini بيحلل الملف...')
 
       const res = await fetch(`${CLOUD_RUN_URL}/process`, {
         method: 'POST',
-        headers: {
-          ...(API_SECRET ? { 'x-api-secret': API_SECRET } : {}),
-        },
+        headers: API_SECRET ? { 'x-api-secret': API_SECRET } : {},
         body: formData,
       })
 
       if (!res.ok) {
         let detail = `Server error ${res.status}`
-        try {
-          const errJson = await res.json()
-          detail = errJson.detail || detail
-        } catch (_) {}
+        try { const errJson = await res.json(); detail = errJson.detail || detail } catch (_) {}
         throw new Error(detail)
       }
 
       const data = await res.json()
-
-      if (!data.title || !Array.isArray(data.questions) || data.questions.length === 0) {
+      if (!data.title || !Array.isArray(data.questions) || data.questions.length === 0)
         throw new Error('الـ AI مرجعش أسئلة صالحة — تأكد إن الملف فيه MCQs')
-      }
 
-      // ── Save to Firestore ───────────────────────────────────────────────────
-      setProgress('💾 جاري الحفظ في Firestore...')
-
+      setProgress('جاري الحفظ...')
       await addDoc(collection(db, 'question_sets'), {
         host_id:         session.uid,
         title:           data.title,
@@ -68,7 +58,6 @@ export default function FileUploadButton({ onUploadSuccess }) {
       })
 
       onUploadSuccess()
-
     } catch (err) {
       console.error('[FileUploadButton]', err)
       alert('خطأ: ' + err.message)
@@ -91,16 +80,22 @@ export default function FileUploadButton({ onUploadSuccess }) {
       <button
         onClick={() => fileInputRef.current.click()}
         disabled={loading}
-        className="bg-primary text-background font-bold px-6 py-3 rounded-xl hover:bg-[#00D4FF] hover:scale-105 active:scale-95 transition-all outline-none disabled:opacity-60 disabled:scale-100"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '10px 20px',
+          background: loading ? 'var(--paper-2)' : 'var(--ink)',
+          color: loading ? 'var(--ink-3)' : 'var(--paper)',
+          border: '1px solid var(--ink)',
+          borderRadius: 4, cursor: loading ? 'not-allowed' : 'pointer',
+          fontFamily: 'var(--sans)', fontWeight: 500, fontSize: 14,
+          letterSpacing: '0.01em', transition: 'all 150ms',
+          opacity: loading ? 0.7 : 1,
+        }}
       >
-        {loading ? (
-          <span className="flex items-center gap-2">
-            <span className="w-4 h-4 border-2 border-background border-t-transparent rounded-full animate-spin" />
-            {progress || 'جاري المعالجة...'}
-          </span>
-        ) : (
-          'Upload Bank (PDF / PPTX / صورة)'
-        )}
+        {loading
+          ? <><Loader2 size={14} className="animate-spin" /><span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{progress || 'جاري...'}</span></>
+          : 'Upload Bank (PDF / PPTX / صورة)'
+        }
       </button>
     </div>
   )

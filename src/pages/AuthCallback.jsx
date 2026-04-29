@@ -2,8 +2,6 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 
-// Firebase uses popup auth - no redirect callback needed.
-// This page just waits for auth state and redirects accordingly.
 export default function AuthCallback() {
   const navigate = useNavigate()
   const { session, profile, loading } = useAuthStore()
@@ -20,8 +18,26 @@ export default function AuthCallback() {
   }, [session, profile, loading, navigate])
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-background">
-      <div className="text-primary animate-pulse text-2xl font-bold font-sans">جاري التحقق من الهوية...</div>
+    <div className="paper-grain" style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh', background: 'var(--paper)', color: 'var(--ink)',
+    }}>
+      <style>{`@keyframes mr-spin-slow { to { transform: rotate(360deg) } }`}</style>
+      <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none"
+          style={{ animation: 'mr-spin-slow 2.4s linear infinite' }}>
+          <circle cx="26" cy="26" r="24" stroke="var(--rule)" strokeWidth="1.5" fill="none" />
+          <circle cx="26" cy="26" r="24" stroke="var(--ink)" strokeWidth="1.5" fill="none"
+            strokeDasharray="150 151" strokeLinecap="round" />
+          <text x="26" y="32" textAnchor="middle"
+            style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 500, fill: 'var(--ink)' }}>
+            MR
+          </text>
+        </svg>
+        <div className="folio" style={{ color: 'var(--ink-3)', letterSpacing: '0.16em' }}>
+          VERIFYING IDENTITY…
+        </div>
+      </div>
     </div>
   )
 }

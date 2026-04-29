@@ -2,16 +2,16 @@ import { useState, useEffect, useCallback } from 'react'
 import { ref, get } from 'firebase/database'
 import {
   collection, getDocs, orderBy, limit,
-  query as fsQuery, doc, getDoc
+  query as fsQuery,
 } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronUp, RefreshCw, Trophy, Gamepad2, Swords } from 'lucide-react'
+import { ChevronDown, ChevronUp, RefreshCw, Trophy, Gamepad2, Swords, Loader2 } from 'lucide-react'
 
 const TABS = [
-  { id: 'games',       label: 'Games',       icon: Gamepad2 },
-  { id: 'tournaments', label: 'Tournaments',  icon: Trophy },
-  { id: 'duels',       label: 'Duels',        icon: Swords },
+  { id: 'games',       label: 'Games',      icon: Gamepad2 },
+  { id: 'tournaments', label: 'Tournaments', icon: Trophy },
+  { id: 'duels',       label: 'Duels',       icon: Swords },
 ]
 
 function fmt(ts) {
@@ -20,102 +20,157 @@ function fmt(ts) {
   return d.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-function Badge({ color = 'gray', children }) {
-  const palette = {
-    green:  'bg-green-500/20 text-green-400 border-green-500/30',
-    red:    'bg-red-500/20 text-red-400 border-red-500/30',
-    yellow: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-    blue:   'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    cyan:   'bg-primary/20 text-primary border-primary/30',
-    gray:   'bg-gray-700/60 text-gray-400 border-gray-600/40',
-  }
+function statusStyle(s) {
+  if (!s) return { color: 'var(--ink-4)', borderColor: 'var(--rule)' }
+  if (s === 'finished')                              return { color: 'var(--success)', borderColor: 'var(--success)' }
+  if (s === 'playing' || s === 'question' || s === 'bracket') return { color: 'var(--navy)',    borderColor: 'var(--navy)' }
+  if (s === 'lobby'   || s === 'waiting'  || s === 'registration') return { color: 'var(--gold)', borderColor: 'var(--gold)' }
+  if (s === 'ffa'     || s === 'revealing')          return { color: 'var(--burgundy)', borderColor: 'var(--burgundy)' }
+  return { color: 'var(--ink-4)', borderColor: 'var(--rule)' }
+}
+
+function StatusBadge({ status }) {
+  const st = statusStyle(status)
   return (
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${palette[color]}`}>
-      {children}
+    <span className="folio" style={{
+      color: st.color, border: `1px solid ${st.borderColor}`,
+      padding: '1px 8px', fontSize: 9,
+    }}>
+      {(status || '?').toUpperCase()}
     </span>
   )
 }
 
-function statusColor(s) {
-  if (!s) return 'gray'
-  if (s === 'finished') return 'green'
-  if (s === 'playing' || s === 'question' || s === 'bracket') return 'cyan'
-  if (s === 'lobby' || s === 'waiting' || s === 'registration') return 'yellow'
-  if (s === 'ffa' || s === 'revealing') return 'blue'
-  return 'gray'
+// ── Info + Section helpers ─────────────────────────────────────────────────────
+function Info({ label, value, mono = false }) {
+  return (
+    <div>
+      <div className="folio" style={{ color: 'var(--ink-4)', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontFamily: mono ? 'var(--mono)' : 'var(--sans)', fontSize: mono ? 11 : 13, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {value ?? '—'}
+      </div>
+    </div>
+  )
 }
 
-// ── Game Log Card ──────────────────────────────────────────────────────────────
+function Section({ label, children }) {
+  return (
+    <div>
+      <div className="folio" style={{ color: 'var(--ink-4)', marginBottom: 8, paddingBottom: 4, borderBottom: '1px solid var(--rule)' }}>{label}</div>
+      {children}
+    </div>
+  )
+}
+
+function groupByRound(matches) {
+  const map = {}
+  matches.forEach(m => {
+    const r = m.round ?? 0
+    if (!map[r]) map[r] = []
+    map[r].push(m)
+  })
+  return Object.entries(map).sort(([a], [b]) => Number(a) - Number(b))
+}
+
+// ── Game Card ──────────────────────────────────────────────────────────────────
 function GameCard({ room }) {
   const [open, setOpen] = useState(false)
-  const players = Object.values(room.players || {})
-  const sorted  = [...players].sort((a, b) => (b.score || 0) - (a.score || 0))
-  const qCount  = room.questions?.questions?.length ?? '?'
+  const players  = Object.values(room.players || {})
+  const sorted   = [...players].sort((a, b) => (b.score || 0) - (a.score || 0))
+  const qCount   = room.questions?.questions?.length ?? '?'
   const deckTitle = room.questions?.title || room.title || '—'
 
   return (
-    <div className="bg-gray-900/60 border border-gray-800 rounded-xl overflow-hidden">
+    <div style={{ border: '1px solid var(--rule)', background: 'var(--paper-2)', overflow: 'hidden' }}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-800/40 transition-colors text-left"
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer',
+          textAlign: 'left',
+        }}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <Badge color={statusColor(room.status)}>{room.status || '?'}</Badge>
-          <span className="font-bold text-white truncate">{room.title || room.code}</span>
-          <span className="text-gray-500 font-mono text-xs hidden sm:block">#{room.code}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+          <StatusBadge status={room.status} />
+          <span style={{ fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {room.title || room.code}
+          </span>
+          <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9, flexShrink: 0 }}>#{room.code}</span>
         </div>
-        <div className="flex items-center gap-4 text-sm text-gray-400 shrink-0">
-          <span>{players.length} players</span>
-          <span>{qCount} Qs</span>
-          <span className="hidden md:block">{fmt(room.created_at)}</span>
-          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0, marginLeft: 12 }}>
+          <span className="folio" style={{ color: 'var(--ink-3)', fontSize: 9 }}>{players.length} PLAYERS</span>
+          <span className="folio" style={{ color: 'var(--ink-3)', fontSize: 9 }}>{qCount} QS</span>
+          <span style={{ color: 'var(--ink-4)' }}>
+            {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </span>
         </div>
       </button>
 
       {open && (
-        <div className="border-t border-gray-800 px-5 py-4 space-y-4">
+        <div style={{ borderTop: '1px solid var(--rule)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           {/* Meta */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <Info label="Deck" value={deckTitle} mono />
-            <Info label="Questions" value={qCount} />
-            <Info label="Created" value={fmt(room.created_at)} />
-            <Info label="Host ID" value={room.host_id} mono />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+            <Info label="DECK" value={deckTitle} mono />
+            <Info label="QUESTIONS" value={qCount} />
+            <Info label="CREATED" value={fmt(room.created_at)} />
+            <Info label="HOST ID" value={room.host_id} mono />
           </div>
 
           {/* Config */}
           {room.config && (
-            <div>
-              <p className="text-xs uppercase tracking-widest text-gray-500 mb-2">Config</p>
-              <div className="flex flex-wrap gap-2">
-                {room.config.timer_seconds != null && <Badge color="gray">Timer: {room.config.timer_seconds}s</Badge>}
-                {room.config.scoring_mode && <Badge color="gray">Mode: {room.config.scoring_mode}</Badge>}
-                {room.config.shuffle_questions && <Badge color="blue">Shuffle Qs</Badge>}
-                {room.config.shuffle_choices && <Badge color="blue">Shuffle Choices</Badge>}
-                {room.config.auto_mode && <Badge color="cyan">Auto Mode</Badge>}
-                {room.config.auto_accept && <Badge color="green">Auto Accept</Badge>}
+            <Section label="CONFIG">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {room.config.timer_seconds != null && (
+                  <span className="folio" style={{ color: 'var(--ink-3)', border: '1px solid var(--rule)', padding: '1px 8px', fontSize: 9 }}>
+                    TIMER: {room.config.timer_seconds}s
+                  </span>
+                )}
+                {room.config.scoring_mode && (
+                  <span className="folio" style={{ color: 'var(--ink-3)', border: '1px solid var(--rule)', padding: '1px 8px', fontSize: 9 }}>
+                    MODE: {room.config.scoring_mode}
+                  </span>
+                )}
+                {room.config.shuffle_questions && (
+                  <span className="folio" style={{ color: 'var(--navy)', border: '1px solid var(--navy)', padding: '1px 8px', fontSize: 9 }}>
+                    SHUFFLE QS
+                  </span>
+                )}
+                {room.config.auto_accept && (
+                  <span className="folio" style={{ color: 'var(--success)', border: '1px solid var(--success)', padding: '1px 8px', fontSize: 9 }}>
+                    AUTO ACCEPT
+                  </span>
+                )}
               </div>
-            </div>
+            </Section>
           )}
 
           {/* Leaderboard */}
           {sorted.length > 0 && (
-            <div>
-              <p className="text-xs uppercase tracking-widest text-gray-500 mb-2">Final Leaderboard</p>
-              <div className="space-y-1">
+            <Section label="FINAL LEADERBOARD">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {sorted.map((p, i) => (
-                  <div key={p.user_id || i} className="flex items-center gap-3 text-sm py-1.5 px-3 rounded-lg bg-gray-800/40">
-                    <span className="w-6 text-gray-500 font-mono text-xs text-right">{i + 1}</span>
-                    <span className={`font-bold truncate flex-1 ${i === 0 ? 'text-yellow-400' : 'text-white'}`}>
+                  <div key={p.user_id || i} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '8px 12px', border: '1px solid var(--rule)',
+                    background: i === 0 ? 'color-mix(in srgb, var(--gold) 5%, var(--paper))' : 'var(--paper)',
+                  }}>
+                    <span className="folio" style={{ color: 'var(--ink-4)', width: 20, textAlign: 'right', fontSize: 9 }}>{i + 1}</span>
+                    <span style={{
+                      fontFamily: 'var(--serif)', fontSize: 14, color: i === 0 ? 'var(--gold)' : 'var(--ink)',
+                      flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
                       {p.nickname || p.user_id}
                     </span>
-                    <span className="font-mono text-primary">{p.score ?? 0} pts</span>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--ink-2)' }}>
+                      {p.score ?? 0} pts
+                    </span>
                     {p.correct_count != null && (
-                      <span className="text-gray-400 text-xs">{p.correct_count} correct</span>
+                      <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>{p.correct_count} CORRECT</span>
                     )}
                   </div>
                 ))}
               </div>
-            </div>
+            </Section>
           )}
         </div>
       )}
@@ -123,45 +178,59 @@ function GameCard({ room }) {
   )
 }
 
-// ── Tournament Log Card ────────────────────────────────────────────────────────
+// ── Tournament Card ────────────────────────────────────────────────────────────
 function TournamentCard({ t, expanded, onExpand, detail }) {
   const loading = expanded && !detail
 
   return (
-    <div className="bg-gray-900/60 border border-gray-800 rounded-xl overflow-hidden">
+    <div style={{ border: '1px solid var(--rule)', background: 'var(--paper-2)', overflow: 'hidden' }}>
       <button
         onClick={onExpand}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-800/40 transition-colors text-left"
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+        }}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <Badge color={statusColor(t.status)}>{t.status || '?'}</Badge>
-          <span className="font-bold text-white truncate">{t.title || t.id}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+          <StatusBadge status={t.status} />
+          <span style={{ fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {t.title || t.id}
+          </span>
         </div>
-        <div className="flex items-center gap-4 text-sm text-gray-400 shrink-0">
-          <span className="hidden md:block">{fmt(t.created_at)}</span>
-          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0, marginLeft: 12 }}>
+          <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>{fmt(t.created_at)}</span>
+          <span style={{ color: 'var(--ink-4)' }}>
+            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </span>
         </div>
       </button>
 
       {expanded && (
-        <div className="border-t border-gray-800 px-5 py-4 space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <Info label="Deck" value={t.deck_title || t.deck_id || '—'} mono />
-            <Info label="Top Cut" value={t.actual_top_cut ?? '—'} />
-            <Info label="Rounds" value={t.total_rounds ?? '—'} />
-            <Info label="Created by" value={t.created_by} mono />
+        <div style={{ borderTop: '1px solid var(--rule)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+            <Info label="DECK"     value={t.deck_title || t.deck_id || '—'} mono />
+            <Info label="TOP CUT"  value={t.actual_top_cut ?? '—'} />
+            <Info label="ROUNDS"   value={t.total_rounds ?? '—'} />
+            <Info label="HOST ID"  value={t.host_id} mono />
           </div>
 
-          {loading && <p className="text-primary animate-pulse text-sm font-mono">Loading details…</p>}
+          {loading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ink-3)' }}>
+              <Loader2 size={13} className="animate-spin" />
+              <span className="folio" style={{ fontSize: 9 }}>LOADING DETAILS…</span>
+            </div>
+          )}
 
           {detail && (
             <>
-              {/* Registrations */}
               {detail.registrations?.length > 0 && (
-                <Section label={`Registrations (${detail.registrations.length})`}>
-                  <div className="flex flex-wrap gap-2">
+                <Section label={`REGISTRATIONS (${detail.registrations.length})`}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {detail.registrations.map(r => (
-                      <span key={r.id} className="px-2.5 py-1 bg-gray-800 rounded-lg text-xs text-gray-300">
+                      <span key={r.id} style={{
+                        fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink-2)',
+                        border: '1px solid var(--rule)', padding: '3px 10px',
+                      }}>
                         {r.nickname || r.id}
                       </span>
                     ))}
@@ -169,44 +238,67 @@ function TournamentCard({ t, expanded, onExpand, detail }) {
                 </Section>
               )}
 
-              {/* FFA Results */}
               {detail.ffa_results?.length > 0 && (
-                <Section label="FFA Results">
-                  <div className="space-y-1">
+                <Section label="FFA RESULTS">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {detail.ffa_results.map((p, i) => (
-                      <div key={p.id || i} className="flex items-center gap-3 text-sm py-1.5 px-3 rounded-lg bg-gray-800/40">
-                        <span className="w-5 text-gray-500 font-mono text-xs text-right">#{p.rank ?? i + 1}</span>
-                        <span className={`font-bold flex-1 truncate ${p.advanced ? 'text-green-400' : 'text-white'}`}>
+                      <div key={p.id || i} style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '8px 12px', border: '1px solid var(--rule)',
+                        background: p.advanced ? 'color-mix(in srgb, var(--success) 5%, var(--paper))' : 'var(--paper)',
+                      }}>
+                        <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9, width: 20, textAlign: 'right' }}>
+                          #{p.rank ?? i + 1}
+                        </span>
+                        <span style={{
+                          fontFamily: 'var(--serif)', fontSize: 14, flex: 1,
+                          color: p.advanced ? 'var(--success)' : 'var(--ink)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
                           {p.nickname || p.uid}
                         </span>
-                        <span className="font-mono text-primary">{p.score ?? 0} pts</span>
-                        {p.correct_count != null && <span className="text-gray-400 text-xs">{p.correct_count}✓</span>}
-                        {p.advanced && <Badge color="green">Advanced</Badge>}
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--ink-2)' }}>{p.score ?? 0} pts</span>
+                        {p.correct_count != null && (
+                          <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>{p.correct_count} CORRECT</span>
+                        )}
+                        {p.advanced && (
+                          <span className="folio" style={{ color: 'var(--success)', border: '1px solid var(--success)', padding: '1px 6px', fontSize: 9 }}>ADVANCED</span>
+                        )}
                       </div>
                     ))}
                   </div>
                 </Section>
               )}
 
-              {/* Bracket Matches by Round */}
               {detail.bracket_matches?.length > 0 && (
-                <Section label="Bracket Matches">
+                <Section label="BRACKET MATCHES">
                   {groupByRound(detail.bracket_matches).map(([round, matches]) => (
-                    <div key={round} className="mb-3">
-                      <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Round {round}</p>
-                      <div className="space-y-1">
+                    <div key={round} style={{ marginBottom: 12 }}>
+                      <div className="folio" style={{ color: 'var(--ink-4)', fontSize: 9, marginBottom: 6 }}>ROUND {round}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {matches.map(m => (
-                          <div key={m.id} className="flex items-center gap-2 text-sm py-1.5 px-3 rounded-lg bg-gray-800/40">
-                            <Badge color={statusColor(m.status)}>{m.status || '?'}</Badge>
-                            <span className={m.winner_uid === m.player_a_uid ? 'text-green-400 font-bold' : 'text-gray-300'}>
+                          <div key={m.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '8px 12px', border: '1px solid var(--rule)', background: 'var(--paper)',
+                          }}>
+                            <StatusBadge status={m.status} />
+                            <span style={{
+                              fontFamily: 'var(--sans)', fontSize: 13,
+                              color: m.winner_uid === m.player_a_uid ? 'var(--success)' : 'var(--ink-2)',
+                              fontWeight: m.winner_uid === m.player_a_uid ? 600 : 400,
+                            }}>
                               {m.player_a_name || m.player_a_uid || '?'}
                             </span>
-                            <span className="text-gray-600">vs</span>
-                            <span className={m.winner_uid === m.player_b_uid ? 'text-green-400 font-bold' : 'text-gray-300'}>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-4)' }}>vs</span>
+                            <span style={{
+                              fontFamily: 'var(--sans)', fontSize: 13,
+                              color: m.winner_uid === m.player_b_uid ? 'var(--success)' : 'var(--ink-2)',
+                              fontWeight: m.winner_uid === m.player_b_uid ? 600 : 400,
+                            }}>
                               {m.player_b_name || m.player_b_uid || '?'}
                             </span>
                             {m.player_a_score != null && (
-                              <span className="ml-auto text-primary font-mono text-xs">
+                              <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)' }}>
                                 {m.player_a_score} – {m.player_b_score}
                               </span>
                             )}
@@ -225,7 +317,7 @@ function TournamentCard({ t, expanded, onExpand, detail }) {
   )
 }
 
-// ── Duel Log Card ──────────────────────────────────────────────────────────────
+// ── Duel Card ──────────────────────────────────────────────────────────────────
 function DuelCard({ duel }) {
   const [open, setOpen] = useState(false)
   const players = Object.values(duel.players || {})
@@ -233,7 +325,6 @@ function DuelCard({ duel }) {
 
   function outcome() {
     if (duel.forfeit_by) {
-      const loser = players.find(p => p.user_id === duel.forfeit_by)
       const winner = players.find(p => p.user_id !== duel.forfeit_by)
       return `${winner?.nickname || '?'} wins (forfeit)`
     }
@@ -245,45 +336,61 @@ function DuelCard({ duel }) {
   }
 
   return (
-    <div className="bg-gray-900/60 border border-gray-800 rounded-xl overflow-hidden">
+    <div style={{ border: '1px solid var(--rule)', background: 'var(--paper-2)', overflow: 'hidden' }}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-800/40 transition-colors text-left"
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+        }}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <Badge color={statusColor(duel.status)}>{duel.status || '?'}</Badge>
-          <span className="font-bold text-white truncate">
-            {pa?.nickname || '?'} <span className="text-gray-500">vs</span> {pb?.nickname || '?'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+          <StatusBadge status={duel.status} />
+          <span style={{ fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {pa?.nickname || '?'} <span style={{ color: 'var(--ink-4)', fontWeight: 400, fontSize: 13 }}>vs</span> {pb?.nickname || '?'}
           </span>
         </div>
-        <div className="flex items-center gap-4 text-sm text-gray-400 shrink-0">
-          <span className="hidden sm:block text-xs truncate max-w-32">{duel.deck_title || '—'}</span>
-          <span className="hidden md:block">{fmt(duel.created_at)}</span>
-          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0, marginLeft: 12 }}>
+          <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {duel.deck_title || '—'}
+          </span>
+          <span style={{ color: 'var(--ink-4)' }}>
+            {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </span>
         </div>
       </button>
 
       {open && (
-        <div className="border-t border-gray-800 px-5 py-4 space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <Info label="Deck" value={duel.deck_title || duel.deck_id || '—'} mono />
-            <Info label="Questions" value={duel.total_questions ?? duel.questions?.length ?? '?'} />
-            <Info label="Outcome" value={outcome()} />
-            <Info label="Created" value={fmt(duel.created_at)} />
+        <div style={{ borderTop: '1px solid var(--rule)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+            <Info label="DECK"      value={duel.deck_title || duel.deck_id || '—'} mono />
+            <Info label="QUESTIONS" value={duel.total_questions ?? duel.questions?.length ?? '?'} />
+            <Info label="OUTCOME"   value={outcome()} />
+            <Info label="CREATED"   value={fmt(duel.created_at)} />
           </div>
 
-          {/* Players scores */}
           {players.length > 0 && (
-            <Section label="Scores">
-              <div className="space-y-1">
-                {[...players].sort((a,b)=>(b.score||0)-(a.score||0)).map((p, i) => (
-                  <div key={p.user_id || i} className="flex items-center gap-3 text-sm py-1.5 px-3 rounded-lg bg-gray-800/40">
-                    <span className={`font-bold flex-1 ${i===0 ? 'text-yellow-400' : 'text-white'}`}>
+            <Section label="SCORES">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {[...players].sort((a, b) => (b.score || 0) - (a.score || 0)).map((p, i) => (
+                  <div key={p.user_id || i} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '8px 12px', border: '1px solid var(--rule)',
+                    background: i === 0 ? 'color-mix(in srgb, var(--gold) 5%, var(--paper))' : 'var(--paper)',
+                  }}>
+                    <span style={{
+                      fontFamily: 'var(--serif)', fontSize: 14, flex: 1,
+                      color: i === 0 ? 'var(--gold)' : 'var(--ink)',
+                    }}>
                       {p.nickname || p.user_id}
                     </span>
-                    <span className="font-mono text-primary">{p.score ?? 0} pts</span>
-                    {duel.forfeit_by === p.user_id && <Badge color="red">Forfeit</Badge>}
-                    {duel.surrender_by === p.user_id && <Badge color="yellow">Surrender</Badge>}
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--ink-2)' }}>{p.score ?? 0} pts</span>
+                    {duel.forfeit_by === p.user_id && (
+                      <span className="folio" style={{ color: 'var(--alert)', border: '1px solid var(--alert)', padding: '1px 6px', fontSize: 9 }}>FORFEIT</span>
+                    )}
+                    {duel.surrender_by === p.user_id && (
+                      <span className="folio" style={{ color: 'var(--gold)', border: '1px solid var(--gold)', padding: '1px 6px', fontSize: 9 }}>SURRENDER</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -295,43 +402,14 @@ function DuelCard({ duel }) {
   )
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-function Info({ label, value, mono = false }) {
-  return (
-    <div>
-      <p className="text-xs text-gray-500 uppercase tracking-widest mb-0.5">{label}</p>
-      <p className={`text-sm text-gray-200 truncate ${mono ? 'font-mono text-xs' : ''}`}>{value ?? '—'}</p>
-    </div>
-  )
-}
-
-function Section({ label, children }) {
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-widest text-gray-500 mb-2">{label}</p>
-      {children}
-    </div>
-  )
-}
-
-function groupByRound(matches) {
-  const map = {}
-  matches.forEach(m => {
-    const r = m.round ?? 0
-    if (!map[r]) map[r] = []
-    map[r].push(m)
-  })
-  return Object.entries(map).sort(([a],[b]) => Number(a) - Number(b))
-}
-
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function OwnerLogs() {
-  const [activeTab, setActiveTab] = useState('games')
+  const [activeTab,   setActiveTab]   = useState('games')
   const [games,       setGames]       = useState(null)
   const [tournaments, setTournaments] = useState(null)
   const [duels,       setDuels]       = useState(null)
   const [loading,     setLoading]     = useState(false)
-  const [tDetail,     setTDetail]     = useState({})   // { [tId]: { ffa_results, bracket_matches, registrations } }
+  const [tDetail,     setTDetail]     = useState({})
   const [expandedT,   setExpandedT]   = useState(null)
 
   const loadGames = useCallback(async () => {
@@ -391,7 +469,6 @@ export default function OwnerLogs() {
     } catch (e) { console.error(e) }
   }, [tDetail])
 
-  // Load data when switching tabs
   useEffect(() => {
     if (activeTab === 'games'       && games       === null) loadGames()
     if (activeTab === 'tournaments' && tournaments === null) loadTournaments()
@@ -413,49 +490,70 @@ export default function OwnerLogs() {
   const currentData = activeTab === 'games' ? games : activeTab === 'tournaments' ? tournaments : duels
 
   return (
-    <div className="min-h-screen bg-background text-white p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="paper-grain" style={{ minHeight: '100vh', background: 'var(--paper)', color: 'var(--ink)', padding: '0 0 64px' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 24px' }}>
 
         {/* Header */}
-        <header className="flex flex-wrap justify-between items-center gap-4 bg-gray-900/50 p-5 rounded-2xl border border-gray-800 backdrop-blur-sm">
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '28px 0 20px', borderBottom: '2px solid var(--ink)', flexWrap: 'wrap', gap: 12,
+        }}>
           <div>
-            <h1 className="text-2xl font-display font-bold text-primary">Activity Logs</h1>
-            <p className="text-gray-400 text-sm mt-1 font-sans">Full audit trail — games, tournaments, duels</p>
+            <div className="folio" style={{ color: 'var(--ink-4)', marginBottom: 4 }}>OWNER PANEL</div>
+            <h1 style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 28, margin: 0, letterSpacing: '-0.015em' }}>
+              Activity Logs
+            </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
-              onClick={handleRefresh}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all text-sm font-bold disabled:opacity-50"
+              onClick={handleRefresh} disabled={loading}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px', border: '1px solid var(--rule)', borderRadius: 4,
+                background: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+                fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase',
+                color: 'var(--ink-3)', opacity: loading ? 0.5 : 1, transition: 'all 150ms',
+              }}
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
               Refresh
             </button>
             <Link
               to="/owner/dashboard"
-              className="px-4 py-2 rounded-lg bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700 transition-all text-sm"
+              style={{
+                padding: '8px 14px', border: '1px solid var(--rule)', borderRadius: 4,
+                fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase',
+                color: 'var(--ink-3)', textDecoration: 'none', transition: 'all 150ms',
+              }}
             >
-              ← Dashboard
+              Dashboard
             </Link>
           </div>
-        </header>
+        </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-900/50 p-1 rounded-xl border border-gray-800">
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--rule)', marginTop: 28, marginBottom: 20 }}>
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                activeTab === id
-                  ? 'bg-primary text-background shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-              }`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px',
+                border: 'none', borderBottom: activeTab === id ? '2px solid var(--ink)' : '2px solid transparent',
+                background: 'none', cursor: 'pointer',
+                fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase',
+                color: activeTab === id ? 'var(--ink)' : 'var(--ink-4)',
+                transition: 'all 150ms',
+              }}
             >
-              <Icon size={15} />
+              <Icon size={13} />
               {label}
               {activeTab === id && currentData != null && (
-                <span className="bg-background/30 text-xs px-1.5 py-0.5 rounded-full font-mono">
+                <span style={{
+                  fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink-3)',
+                  background: 'var(--paper-2)', border: '1px solid var(--rule)',
+                  padding: '0 5px', borderRadius: 10,
+                }}>
                   {currentData.length}
                 </span>
               )}
@@ -464,27 +562,31 @@ export default function OwnerLogs() {
         </div>
 
         {/* Content */}
-        <div className="space-y-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {loading && currentData === null ? (
-            <div className="text-center py-16 text-primary animate-pulse font-mono">Loading logs…</div>
+            <div style={{ textAlign: 'center', padding: '64px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <Loader2 size={16} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
+              <span className="folio" style={{ color: 'var(--ink-4)' }}>LOADING LOGS…</span>
+            </div>
           ) : currentData?.length === 0 ? (
-            <div className="text-center py-16 text-gray-600 font-mono">No {activeTab} found.</div>
+            <div style={{ textAlign: 'center', padding: '64px 0' }}>
+              <p style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 16, color: 'var(--ink-3)' }}>
+                No {activeTab} found.
+              </p>
+            </div>
           ) : (
             <>
               {activeTab === 'games' && games?.map(room => (
                 <GameCard key={room.code} room={room} />
               ))}
-
               {activeTab === 'tournaments' && tournaments?.map(t => (
                 <TournamentCard
-                  key={t.id}
-                  t={t}
+                  key={t.id} t={t}
                   expanded={expandedT === t.id}
                   onExpand={() => handleExpandTournament(t.id)}
                   detail={tDetail[t.id] || null}
                 />
               ))}
-
               {activeTab === 'duels' && duels?.map(duel => (
                 <DuelCard key={duel.id} duel={duel} />
               ))}

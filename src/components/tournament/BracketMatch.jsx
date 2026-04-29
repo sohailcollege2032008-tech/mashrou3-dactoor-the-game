@@ -1,22 +1,23 @@
 /**
  * BracketMatch.jsx
  * Single match node in the bracket tree.
- * Uses inline styles for html2canvas compatibility (no Tailwind CSS vars).
+ * Uses inline styles throughout for html2canvas compatibility (no Tailwind CSS vars).
  */
 import React from 'react'
 import { Trophy, Shuffle } from 'lucide-react'
 
 const COLORS = {
-  bg:          '#111827',   // gray-900
-  bgHighlight: '#0A1628',   // dark navy
-  border:      '#374151',   // gray-700
-  borderWin:   '#00B8D9',   // primary cyan
-  text:        '#f9fafb',   // gray-50
-  textMuted:   '#6b7280',   // gray-500
-  green:       '#22c55e',
-  cyan:        '#00B8D9',
-  yellow:      '#f59e0b',
-  random:      '#a78bfa',   // violet
+  bg:          '#1C1A14',   // dark paper-2
+  bgHighlight: '#26231B',   // dark paper-3
+  border:      '#3A362C',   // dark rule
+  borderWin:   '#B08944',   // gold (winner)
+  borderActive:'#9C3B2E',   // burgundy (live)
+  text:        '#F4F1EA',   // light paper (ink on dark)
+  textMuted:   '#6F6C63',   // ink-3
+  gold:        '#B08944',
+  burgundy:    '#9C3B2E',
+  success:     '#3C6E47',
+  random:      '#7A5CA0',   // muted violet
 }
 
 export default function BracketMatch({ match, compact = false }) {
@@ -35,9 +36,9 @@ export default function BracketMatch({ match, compact = false }) {
       return (
         <div style={{
           padding: '6px 10px', display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', opacity: 0.4
+          justifyContent: 'space-between', opacity: 0.4,
         }}>
-          <span style={{ color: COLORS.textMuted, fontSize: compact ? 11 : 12 }}>TBD</span>
+          <span style={{ color: COLORS.textMuted, fontSize: compact ? 11 : 12, fontFamily: 'Georgia, serif' }}>TBD</span>
         </div>
       )
     }
@@ -46,15 +47,16 @@ export default function BracketMatch({ match, compact = false }) {
       <div style={{
         padding: compact ? '5px 8px' : '7px 10px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: highlight ? 'rgba(0,184,217,0.10)' : 'transparent',
-        borderRadius: 6,
+        background: highlight ? 'rgba(176,137,68,0.12)' : 'transparent',
+        borderRadius: 4,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {highlight && <Trophy size={12} color={COLORS.cyan} />}
+          {highlight && <Trophy size={12} color={COLORS.gold} />}
           <span style={{
-            color: highlight ? COLORS.cyan : COLORS.text,
+            color: highlight ? COLORS.gold : COLORS.text,
             fontWeight: highlight ? 700 : 400,
             fontSize: compact ? 11 : 13,
+            fontFamily: 'Georgia, serif',
             maxWidth: compact ? 80 : 110,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
@@ -63,9 +65,10 @@ export default function BracketMatch({ match, compact = false }) {
         </div>
         {score !== null && score !== undefined && (
           <span style={{
-            color: highlight ? COLORS.cyan : COLORS.textMuted,
+            color: highlight ? COLORS.gold : COLORS.textMuted,
             fontWeight: highlight ? 700 : 500,
             fontSize: compact ? 11 : 13,
+            fontFamily: 'monospace',
             minWidth: 20, textAlign: 'right',
           }}>
             {score}
@@ -75,24 +78,24 @@ export default function BracketMatch({ match, compact = false }) {
     )
   }
 
-  const borderColor = done ? COLORS.borderWin : active ? COLORS.yellow : COLORS.border
+  const borderColor = done ? COLORS.borderWin : active ? COLORS.borderActive : COLORS.border
 
   return (
     <div style={{
       background: COLORS.bg,
       border: `1px solid ${borderColor}`,
-      borderRadius: 10,
+      borderRadius: 6,
       minWidth: compact ? 140 : 180,
       overflow: 'hidden',
-      boxShadow: done ? `0 0 10px rgba(0,184,217,0.15)` : 'none',
+      boxShadow: done ? `0 0 12px rgba(176,137,68,0.15)` : 'none',
     }}>
-      {/* Status badge */}
       {active && (
         <div style={{
-          background: COLORS.yellow + '22', padding: '2px 8px',
-          textAlign: 'center', fontSize: 10, color: COLORS.yellow, fontWeight: 700,
+          background: 'rgba(156,59,46,0.18)', padding: '2px 8px',
+          textAlign: 'center', fontSize: 10, color: COLORS.burgundy,
+          fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.08em',
         }}>
-          🔴 LIVE
+          LIVE
         </div>
       )}
 
@@ -101,27 +104,26 @@ export default function BracketMatch({ match, compact = false }) {
         score={player_a_score} isWinner={winner_uid === player_a_uid}
       />
 
-      {/* Divider */}
       <div style={{ height: 1, background: COLORS.border, margin: '0 8px' }} />
 
       {isBye
-        ? <div style={{ padding: '7px 10px', color: COLORS.textMuted, fontSize: 12 }}>BYE</div>
+        ? <div style={{ padding: '7px 10px', color: COLORS.textMuted, fontSize: 12, fontFamily: 'monospace' }}>BYE</div>
         : <PlayerRow
             uid={player_b_uid} name={player_b_name}
             score={player_b_score} isWinner={winner_uid === player_b_uid}
           />
       }
 
-      {/* Tie-breaker badge */}
       {done && tie_broken_by && (
         <div style={{
           padding: '2px 8px', textAlign: 'center', fontSize: 10,
-          color: tie_broken_by === 'random' ? COLORS.random : COLORS.green,
-          background: (tie_broken_by === 'random' ? COLORS.random : COLORS.green) + '18',
+          color: tie_broken_by === 'random' ? COLORS.random : COLORS.success,
+          background: (tie_broken_by === 'random' ? COLORS.random : COLORS.success) + '18',
+          fontFamily: 'monospace', letterSpacing: '0.06em',
         }}>
           {tie_broken_by === 'random'
-            ? <><Shuffle size={9} style={{ display:'inline', marginRight: 4 }} />Random</>
-            : '⚡ Speed'}
+            ? <><Shuffle size={9} style={{ display: 'inline', marginRight: 4 }} />RANDOM</>
+            : '⚡ SPEED'}
         </div>
       )}
     </div>

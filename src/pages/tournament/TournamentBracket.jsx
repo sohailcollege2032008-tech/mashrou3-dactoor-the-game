@@ -33,6 +33,35 @@ function getRoundName(round, totalRounds) {
   return `الجولة ${round}`
 }
 
+function MatchStatusBadge({ status, winnerName }) {
+  if (status === 'finished') return (
+    <span style={{
+      fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--success)',
+      border: '1px solid var(--success)', padding: '2px 8px',
+    }} className="ar">
+      فاز {winnerName}
+    </span>
+  )
+  if (status === 'active') return (
+    <span style={{
+      fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.06em',
+      textTransform: 'uppercase', color: 'var(--gold)',
+      border: '1px solid var(--gold)', padding: '2px 8px',
+    }}>
+      LIVE
+    </span>
+  )
+  return (
+    <span style={{
+      fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.06em',
+      textTransform: 'uppercase', color: 'var(--ink-4)',
+      border: '1px solid var(--rule)', padding: '2px 8px',
+    }}>
+      PENDING
+    </span>
+  )
+}
+
 export default function TournamentBracket() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
@@ -49,22 +78,16 @@ export default function TournamentBracket() {
   const [countdownLabel, setCountdownLabel] = useState('')
   const [countdownMs, setCountdownMs] = useState(0)
   const [error,       setError]       = useState(null)
-  // Round question assignment panel
   const [showQPanel,      setShowQPanel]      = useState(false)
-  // End tournament confirmation
   const [showEndConfirm,  setShowEndConfirm]  = useState(false)
   const [ending,          setEnding]          = useState(false)
-  // Live scores for active bracket duels: { [duelId]: { [uid]: { score, nickname } } }
   const [liveDuels,       setLiveDuels]       = useState({})
-  // Player presence in waiting room
   const [waitingPresence, setWaitingPresence] = useState({})
 
-  // Auto-pilot refs (prevent double-firing)
-  const autoLaunchedRef   = useRef(new Set())   // match IDs already auto-launched
-  const autoAdvancedRef   = useRef(null)         // round number already auto-advanced
-  const autoFinishedRef   = useRef(false)        // whether we auto-finished the tournament
+  const autoLaunchedRef   = useRef(new Set())
+  const autoAdvancedRef   = useRef(null)
+  const autoFinishedRef   = useRef(false)
 
-  // Subscribe to tournament
   useEffect(() => {
     if (!tournamentId) return
     const unsub = onSnapshot(doc(db, 'tournaments', tournamentId), snap => {
@@ -73,7 +96,6 @@ export default function TournamentBracket() {
     return () => unsub()
   }, [tournamentId])
 
-  // Subscribe to bracket matches
   useEffect(() => {
     if (!tournamentId) return
     const unsub = onSnapshot(
@@ -83,7 +105,6 @@ export default function TournamentBracket() {
     return () => unsub()
   }, [tournamentId])
 
-  // Subscribe to player presence in waiting room
   useEffect(() => {
     if (!tournamentId) return
     const unsub = onValue(rtdbRef(rtdb, `tournament_presence/${tournamentId}`), snap => {
@@ -92,7 +113,6 @@ export default function TournamentBracket() {
     return () => unsub()
   }, [tournamentId])
 
-  // Fetch FFA results once
   useEffect(() => {
     if (!tournamentId) return
     getDocs(collection(db, 'tournaments', tournamentId, 'ffa_results'))
@@ -100,7 +120,6 @@ export default function TournamentBracket() {
       .catch(console.error)
   }, [tournamentId])
 
-  // Fetch deck questions
   useEffect(() => {
     if (!tournament?.deck_id) return
     getDoc(doc(db, 'question_sets', tournament.deck_id))
@@ -108,7 +127,6 @@ export default function TournamentBracket() {
       .catch(console.error)
   }, [tournament?.deck_id])
 
-  // Subscribe to live player scores for active matches in current round
   useEffect(() => {
     const activeMatches = matches.filter(
       m => m.status === 'active' && m.duel_id &&
@@ -124,14 +142,12 @@ export default function TournamentBracket() {
     return () => unsubs.forEach(u => u())
   }, [matches, tournament?.current_round, tournamentId])
 
-  // Generate bracket when we have FFA results and no matches yet
   useEffect(() => {
     if (!tournament || matches.length > 0 || ffaResults.length < 2 || generating) return
     if (tournament.status !== 'bracket') return
     generateBracket()
   }, [tournament, matches.length, ffaResults.length])
 
-  // ── Auto-start: launch any pending match that has both players filled ────────
   const launchablePendingKey = matches
     .filter(m => m.status === 'pending' && m.player_a_uid && m.player_b_uid)
     .map(m => m.match_id).sort().join(',')
@@ -156,7 +172,6 @@ export default function TournamentBracket() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [launchablePendingKey, tournament?.status])
 
-  // ── Auto-advance: start break countdown when a round completes ───────────────
   useEffect(() => {
     if (!tournament || tournament.status !== 'bracket') return
     const tRounds    = tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)
@@ -165,8 +180,8 @@ export default function TournamentBracket() {
     const allDone    = rMatches.length > 0 && rMatches.every(m => m.status === 'finished')
 
     if (!allDone || cRound >= tRounds) return
-    if (autoAdvancedRef.current === cRound) return  // already started for this round
-    if (showCountdown) return                        // countdown already running
+    if (autoAdvancedRef.current === cRound) return
+    if (showCountdown) return
 
     autoAdvancedRef.current = cRound
     setCountdownLabel(`استراحة قبل الجولة ${cRound + 1}`)
@@ -179,10 +194,9 @@ export default function TournamentBracket() {
     showCountdown,
   ])
 
-  // ── Auto-finish: mark tournament done when final match is over ──────────────
   useEffect(() => {
     if (!tournament || tournament.status !== 'bracket') return
-    if (tournament.winner_uid) return  // already resolved
+    if (tournament.winner_uid) return
     const tRounds  = tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)
     const cRound   = tournament.current_round || 1
     if (cRound !== tRounds) return
@@ -227,7 +241,6 @@ export default function TournamentBracket() {
     }
   }, [generating, ffaResults, tournament, tournamentId])
 
-  // Extracted advance-round logic reused by both the manual button and auto-advance
   const doAdvanceRound = useCallback(async (currentRnd, roundMatchList) => {
     const batch = writeBatch(db)
     for (const m of roundMatchList) {
@@ -245,19 +258,15 @@ export default function TournamentBracket() {
     await batch.commit()
   }, [tournamentId])
 
-  // Called when the break countdown finishes — auto-advance if triggered by automation
   const handleCountdownComplete = useCallback(() => {
     setShowCountdown(false)
-    // If we set autoAdvancedRef to the current round, advance now
     if (autoAdvancedRef.current !== null) {
       const rnd = autoAdvancedRef.current
-      // Snapshot current roundMatches at callback time via closure
       doAdvanceRound(rnd, matches.filter(m => m.round === rnd))
         .catch(console.error)
     }
   }, [doAdvanceRound, matches])
 
-  // Export bracket as image
   const exportImage = useCallback(async () => {
     if (!bracketRef.current || exporting) return
     setExporting(true)
@@ -282,24 +291,18 @@ export default function TournamentBracket() {
     }
   }, [bracketRef, exporting, tournamentId, tournament?.current_round])
 
-  // Launch a specific match duel
   const launchMatch = useCallback(async (match) => {
     if (!match || match.status !== 'pending') return
     if (!match.player_a_uid || !match.player_b_uid) return setError('لاعب غير محدد في هذه المباراة')
 
     try {
-      // Fetch deck questions fresh at launch time — don't rely on deckQs state
-      // which may be stale or unpopulated (race between useEffect and button click).
-      const deckSnap  = await getDoc(doc(db, 'question_sets', tournament.deck_id))
+      const deckSnap    = await getDoc(doc(db, 'question_sets', tournament.deck_id))
       const freshDeckQs = deckSnap.data()?.questions?.questions || []
       if (freshDeckQs.length === 0) throw new Error('لا توجد أسئلة في الـ Deck')
 
       const questions = getQuestionsForRound(match.round, tournament, freshDeckQs, 5)
       if (questions.length === 0) throw new Error('لا توجد أسئلة لهذه الجولة')
 
-      // Reserve tiebreaker questions: prefer questions not in the main set.
-      // If the deck is too small to spare any, fall back to re-using deck questions
-      // so the array is never empty (an empty array prevents tiebreaker from firing).
       const usedTexts = new Set(questions.map(q => q?.question).filter(Boolean))
       const unusedQs  = freshDeckQs.filter(q => q && !usedTexts.has(q.question))
         .sort(() => Math.random() - 0.5)
@@ -307,7 +310,6 @@ export default function TournamentBracket() {
         ? unusedQs.slice(0, 3)
         : [...freshDeckQs].sort(() => Math.random() - 0.5).slice(0, 3)
 
-      // Strip correct index before writing to RTDB (same as regular duels)
       const newDuelRef = push(rtdbRef(rtdb, `tournament_duels/${tournamentId}`))
       const duelId = newDuelRef.key
       const safeQuestions    = await stripCorrectForRtdb(questions, duelId)
@@ -323,7 +325,6 @@ export default function TournamentBracket() {
         deck_title:           tournament.deck_title,
         questions:            safeQuestions,
         total_questions:      safeQuestions.length,
-        // Tiebreaker reserve — guaranteed non-empty; appended by DuelGame on tied scores
         tiebreaker_questions: safeTiebreakers,
         tiebreaker_used:      0,
         is_tiebreaker:        false,
@@ -352,7 +353,6 @@ export default function TournamentBracket() {
         answers: {},
       })
 
-      // Update match status in Firestore
       await updateDoc(
         doc(db, 'tournaments', tournamentId, 'bracket_matches', match.match_id),
         { duel_id: duelId, status: 'active' }
@@ -363,13 +363,10 @@ export default function TournamentBracket() {
     }
   }, [tournament, tournamentId, ffaResults])
 
-  // End tournament manually
   const endTournament = useCallback(async () => {
     if (ending) return
-    setEnding(true)
-    setError(null)
+    setEnding(true); setError(null)
     try {
-      // Compute totalRounds inline to avoid TDZ (it's declared later in render)
       const tRounds    = tournament?.total_rounds || Math.log2(tournament?.actual_top_cut || 8)
       const finalMatch = matches.find(m => m.round === tRounds && m.status === 'finished')
       const winnerUid  = finalMatch?.winner_uid || tournament?.winner_uid || null
@@ -385,7 +382,6 @@ export default function TournamentBracket() {
     }
   }, [ending, matches, tournament, tournamentId, navigate])
 
-  // Save round question assignment
   const saveAssignment = useCallback(async (newAssignments) => {
     try {
       await updateDoc(doc(db, 'tournaments', tournamentId), { round_questions: newAssignments })
@@ -393,23 +389,22 @@ export default function TournamentBracket() {
     setShowQPanel(false)
   }, [tournamentId])
 
+  // Loading
   if (!tournament) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 size={32} className="text-primary animate-spin" />
+      <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={28} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
       </div>
     )
   }
 
-  const totalRounds = tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)
+  const totalRounds  = tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)
   const currentRound = tournament.current_round || 1
   const roundMatches = matches.filter(m => m.round === currentRound)
-  const pendingMatches = roundMatches.filter(m => m.status === 'pending')
   const allRoundDone = roundMatches.length > 0 && roundMatches.every(m => m.status === 'finished')
 
   return (
-    <div className="min-h-screen bg-background text-white" dir="rtl">
-      {/* Phase-transition countdown overlay */}
+    <div className="paper-grain" style={{ minHeight: '100vh', background: 'var(--paper)', color: 'var(--ink)' }} dir="rtl">
       {showCountdown && (
         <TournamentCountdown
           durationMs={countdownMs}
@@ -417,8 +412,6 @@ export default function TournamentBracket() {
           onComplete={handleCountdownComplete}
         />
       )}
-
-      {/* Round question assignment full-screen panel */}
       {showQPanel && (
         <QuestionAssignmentPanel
           deckQs={deckQs}
@@ -432,119 +425,169 @@ export default function TournamentBracket() {
         />
       )}
 
-      <div className="p-4 max-w-6xl mx-auto">
+      <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 20px 64px' }}>
+
         {/* Header */}
-        <div className="flex items-center justify-between mb-6 mt-4">
-          <div className="flex items-center gap-3">
-            <Trophy size={22} className="text-primary" />
-            <h1 className="ar text-xl font-bold">{tournament.title}</h1>
-            <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-semibold">
-              الجولة {currentRound} / {totalRounds}
-            </span>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '24px 0 18px', borderBottom: '2px solid var(--ink)',
+          flexWrap: 'wrap', gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <Trophy size={18} style={{ color: 'var(--gold)', flexShrink: 0 }} />
+            <div>
+              <h1 className="ar" style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 20, margin: 0, letterSpacing: '-0.01em' }}>
+                {tournament.title}
+              </h1>
+              <div className="folio" style={{ color: 'var(--ink-4)', marginTop: 2, fontSize: 9 }}>
+                الجولة {currentRound} / {totalRounds}
+              </div>
+            </div>
           </div>
           <button
             onClick={exportImage}
             disabled={exporting || matches.length === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800 border border-gray-700 text-gray-300 hover:text-white hover:border-primary/50 transition-all text-sm disabled:opacity-40"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', border: '1px solid var(--rule)', borderRadius: 4,
+              background: 'none', cursor: exporting || matches.length === 0 ? 'not-allowed' : 'pointer',
+              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: 'var(--ink-3)', opacity: exporting || matches.length === 0 ? 0.4 : 1,
+              transition: 'all 150ms',
+            }}
           >
-            {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-            <span className="ar">تصدير صورة</span>
+            {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+            تصدير صورة
           </button>
         </div>
 
+        {/* Error */}
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-4 text-center">
-            <p className="ar text-red-400 text-sm">{error}</p>
-            <button onClick={() => setError(null)} className="ar text-xs text-red-500 mt-1">إغلاق</button>
+          <div style={{
+            border: '1px solid var(--alert)', borderRadius: 4, padding: '12px 16px',
+            background: 'color-mix(in srgb, var(--alert) 6%, var(--paper))',
+            marginTop: 16, textAlign: 'center',
+          }}>
+            <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--alert)', marginBottom: 6 }}>{error}</p>
+            <button onClick={() => setError(null)} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--alert)', letterSpacing: '0.06em',
+            }}>
+              DISMISS
+            </button>
           </div>
         )}
 
         {/* Bracket tree */}
-        {generating ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <Loader2 size={40} className="text-primary animate-spin" />
-            <p className="ar text-gray-400">جاري توليد الـ Bracket…</p>
-          </div>
-        ) : matches.length > 0 ? (
-          <div className="overflow-x-auto mb-6">
-            <BracketTree
-              matches={matches}
-              totalRounds={totalRounds}
-              bracketRef={bracketRef}
-              tournamentTitle={tournament.title}
-            />
-          </div>
-        ) : (
-          <div className="text-center py-12 text-gray-600 ar">
-            جاري تحميل نتائج FFA لتوليد الـ Bracket…
-          </div>
-        )}
+        <div style={{ marginTop: 24, marginBottom: 24 }}>
+          {generating ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', gap: 16 }}>
+              <Loader2 size={32} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
+              <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink-3)' }}>جاري توليد الـ Bracket…</p>
+            </div>
+          ) : matches.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <BracketTree
+                matches={matches}
+                totalRounds={totalRounds}
+                bracketRef={bracketRef}
+                tournamentTitle={tournament.title}
+              />
+            </div>
+          ) : (
+            <p className="ar" style={{ textAlign: 'center', padding: '48px 0', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--ink-3)', fontSize: 15 }}>
+              جاري تحميل نتائج FFA لتوليد الـ Bracket…
+            </p>
+          )}
+        </div>
 
-        {/* Round Question Management */}
+        {/* Round question assignment */}
         {tournament.status === 'bracket' && totalRounds > 0 && (
           <button
             onClick={() => setShowQPanel(true)}
-            className="w-full flex items-center justify-between bg-gray-900 border border-gray-800 hover:border-primary/50 rounded-2xl px-5 py-4 mb-4 transition-all group"
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 16px', border: '1px solid var(--rule)',
+              background: 'var(--paper-2)', cursor: 'pointer',
+              borderRadius: 4, marginBottom: 12, transition: 'all 150ms',
+            }}
           >
-            <div className="flex items-center gap-2">
-              <Settings size={15} className="text-primary" />
-              <span className="ar text-sm font-bold text-white">تخصيص أسئلة الجولات</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Settings size={14} style={{ color: 'var(--ink-3)' }} />
+              <span className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink)' }}>تخصيص أسئلة الجولات</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {Object.values(tournament.round_questions || {}).some(a => a.length > 0) ? (
-                <span className="ar text-[11px] text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
-                  {Object.values(tournament.round_questions).flat().length} سؤال مخصص
+                <span className="ar folio" style={{ color: 'var(--navy)', border: '1px solid var(--navy)', padding: '1px 8px', fontSize: 9 }}>
+                  {Object.values(tournament.round_questions).flat().length} مخصص
                 </span>
               ) : (
-                <span className="ar text-[11px] text-gray-600">تلقائي</span>
+                <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>AUTO</span>
               )}
-              <span className="text-gray-600 group-hover:text-primary transition-colors text-xs">←</span>
+              <ChevronRight size={14} style={{ color: 'var(--ink-4)' }} />
             </div>
           </button>
         )}
 
-        {/* ── End Tournament ────────────────────────────────────────────── */}
+        {/* End tournament */}
         {tournament.status !== 'finished' && (
-          <div className="mt-4 mb-2">
+          <div style={{ marginBottom: 20 }}>
             {!showEndConfirm ? (
               <button
                 onClick={() => setShowEndConfirm(true)}
-                className="w-full py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-bold ar flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors"
+                style={{
+                  width: '100%', padding: '12px 0',
+                  border: '1px solid var(--alert)', borderRadius: 4,
+                  background: 'color-mix(in srgb, var(--alert) 5%, var(--paper))',
+                  cursor: 'pointer', color: 'var(--alert)',
+                  fontFamily: 'var(--sans)', fontSize: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  transition: 'all 150ms',
+                }}
               >
-                <Flag size={15} />
-                إنهاء البطولة يدوياً
+                <Flag size={14} />
+                <span className="ar">إنهاء البطولة يدوياً</span>
               </button>
             ) : (
-              <div className="bg-red-500/10 border border-red-500/40 rounded-2xl p-4 space-y-3">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle size={15} className="text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="ar text-sm text-red-300 leading-relaxed">
+              <div style={{
+                border: '1px solid var(--alert)', borderRadius: 4, padding: '16px',
+                background: 'color-mix(in srgb, var(--alert) 5%, var(--paper))',
+                display: 'flex', flexDirection: 'column', gap: 14,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <AlertTriangle size={14} style={{ color: 'var(--alert)', flexShrink: 0, marginTop: 2 }} />
+                  <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, margin: 0 }}>
                     هتنهي البطولة الآن وتحولها لـ "منتهية". اللاعبون لن يتمكنوا من الاستمرار. هل أنت متأكد؟
                   </p>
                 </div>
-                {error && (
-                  <p className="ar text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2">
-                    ⚠ {error}
-                  </p>
-                )}
-                <div className="flex gap-3">
+                <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => { setShowEndConfirm(false); setError(null) }}
                     disabled={ending}
-                    className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm ar font-bold hover:bg-gray-700 transition-colors disabled:opacity-40"
+                    style={{
+                      flex: 1, padding: '10px 0', border: '1px solid var(--rule)', borderRadius: 4,
+                      background: 'var(--paper-2)', color: 'var(--ink-3)',
+                      fontFamily: 'var(--sans)', fontSize: 13, cursor: 'pointer',
+                      opacity: ending ? 0.4 : 1,
+                    }}
                   >
-                    تراجع
+                    <span className="ar">تراجع</span>
                   </button>
                   <button
                     onClick={endTournament}
                     disabled={ending}
-                    className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 text-sm ar font-bold hover:bg-red-500/30 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                    style={{
+                      flex: 1, padding: '10px 0',
+                      border: '1px solid var(--alert)', borderRadius: 4,
+                      background: 'color-mix(in srgb, var(--alert) 10%, var(--paper))',
+                      color: 'var(--alert)', fontFamily: 'var(--sans)', fontSize: 13,
+                      cursor: ending ? 'not-allowed' : 'pointer',
+                      opacity: ending ? 0.6 : 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}
                   >
-                    {ending
-                      ? <Loader2 size={14} className="animate-spin" />
-                      : <Flag size={14} />
-                    }
-                    نعم، أنهِ البطولة
+                    {ending ? <Loader2 size={13} className="animate-spin" /> : <Flag size={13} />}
+                    <span className="ar">نعم، أنهِ البطولة</span>
                   </button>
                 </div>
               </div>
@@ -554,10 +597,19 @@ export default function TournamentBracket() {
 
         {/* Round controls */}
         {tournament.status === 'bracket' && matches.length > 0 && (
-          <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800 space-y-4">
-            <h2 className="ar font-bold text-white">مباريات {getRoundName(currentRound, totalRounds)}</h2>
+          <div style={{ border: '1px solid var(--rule)', borderRadius: 4, overflow: 'hidden' }}>
+            {/* Round header */}
+            <div style={{
+              padding: '12px 16px', borderBottom: '1px solid var(--rule)',
+              background: 'var(--paper-2)',
+            }}>
+              <h2 className="ar" style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 17, margin: 0 }}>
+                مباريات {getRoundName(currentRound, totalRounds)}
+              </h2>
+            </div>
 
-            <div className="space-y-2">
+            {/* Match list */}
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
               {roundMatches.map(match => {
                 const live = match.duel_id ? (liveDuels[match.duel_id] || {}) : {}
                 const liveA = live[match.player_a_uid]
@@ -565,45 +617,63 @@ export default function TournamentBracket() {
                 const hasLive = match.status === 'active' && (liveA || liveB)
 
                 return (
-                  <div key={match.match_id} className="bg-gray-800 rounded-xl overflow-hidden">
-                    <div className="flex items-center gap-3 px-3 py-2.5">
-                      {/* Player names + live scores */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-white text-sm truncate">{match.player_a_name || 'TBD'}</span>
+                  <div key={match.match_id} style={{ border: '1px solid var(--rule)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                      background: 'var(--paper-2)',
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontFamily: 'var(--serif)', fontSize: 14, color: 'var(--ink)', fontWeight: 500 }}>
+                            {match.player_a_name || 'TBD'}
+                          </span>
                           {hasLive && (
-                            <span className="font-mono text-xs font-black text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded-lg tabular-nums">
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>
                               {liveA?.score ?? 0}
                             </span>
                           )}
-                          <span className="text-gray-600 text-xs">vs</span>
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-4)' }}>vs</span>
                           {hasLive && (
-                            <span className="font-mono text-xs font-black text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded-lg tabular-nums">
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>
                               {liveB?.score ?? 0}
                             </span>
                           )}
-                          <span className="font-semibold text-white text-sm truncate">{match.player_b_name || 'TBD'}</span>
+                          <span style={{ fontFamily: 'var(--serif)', fontSize: 14, color: 'var(--ink)', fontWeight: 500 }}>
+                            {match.player_b_name || 'TBD'}
+                          </span>
                         </div>
                       </div>
 
-                      <StatusBadge status={match.status} winnerName={
+                      <MatchStatusBadge status={match.status} winnerName={
                         match.winner_uid === match.player_a_uid ? match.player_a_name : match.player_b_name
                       } />
 
                       {match.status === 'pending' && match.player_a_uid && match.player_b_uid && (
                         <button
                           onClick={() => launchMatch(match)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 text-primary border border-primary/40 text-xs font-bold hover:bg-primary/30 transition-colors ar"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 5,
+                            padding: '5px 12px', border: '1px solid var(--ink)',
+                            borderRadius: 4, background: 'var(--ink)', color: 'var(--paper)',
+                            fontFamily: 'var(--sans)', fontSize: 12, cursor: 'pointer',
+                          }}
                         >
-                          <Play size={12} /> ابدأ
+                          <Play size={11} />
+                          <span className="ar">ابدأ</span>
                         </button>
                       )}
                       {match.status === 'active' && match.duel_id && (
                         <button
                           onClick={() => navigate(`/tournament/${tournamentId}/duel/${match.match_id}`)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 text-xs font-bold ar"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 5,
+                            padding: '5px 12px', border: '1px solid var(--gold)',
+                            borderRadius: 4, background: 'color-mix(in srgb, var(--gold) 8%, var(--paper))',
+                            color: 'var(--gold)', fontFamily: 'var(--sans)', fontSize: 12, cursor: 'pointer',
+                          }}
                         >
-                          <ChevronRight size={12} /> شاهد
+                          <ChevronRight size={11} />
+                          <span className="ar">شاهد</span>
                         </button>
                       )}
                     </div>
@@ -612,48 +682,68 @@ export default function TournamentBracket() {
               })}
             </div>
 
-            {/* Player presence indicator */}
+            {/* Player presence */}
             {(() => {
               const connected = Object.values(waitingPresence).filter(p => p.connected).length
               const expected  = tournament.actual_top_cut || 0
               if (!connected) return null
               return (
-                <div className="flex items-center justify-center gap-2 text-xs text-gray-500 py-1">
-                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-                  <span className="ar">{connected} {expected ? `/ ${expected}` : ''} لاعب في غرفة الانتظار</span>
+                <div style={{
+                  borderTop: '1px solid var(--rule)', padding: '8px 16px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  background: 'var(--paper-2)',
+                }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }} />
+                  <span className="ar folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>
+                    {connected} {expected ? `/ ${expected}` : ''} لاعب في غرفة الانتظار
+                  </span>
                 </div>
               )
             })()}
 
-            {/* Advance to next round — auto-triggered via useEffect; button is manual fallback */}
+            {/* Advance to next round */}
             {allRoundDone && currentRound < totalRounds && !showCountdown && (
-              <button
-                onClick={() => {
-                  autoAdvancedRef.current = currentRound
-                  setCountdownLabel(`استراحة قبل الجولة ${currentRound + 1}`)
-                  setCountdownMs(tournament.round_break_time || 30000)
-                  setShowCountdown(true)
-                }}
-                className="w-full py-3 rounded-xl bg-primary text-background font-black ar flex items-center justify-center gap-2 hover:bg-[#00D4FF] active:scale-95 transition-all"
-              >
-                <ChevronRight size={18} />
-                انتقل للجولة {currentRound + 1}
-              </button>
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--rule)' }}>
+                <button
+                  onClick={() => {
+                    autoAdvancedRef.current = currentRound
+                    setCountdownLabel(`استراحة قبل الجولة ${currentRound + 1}`)
+                    setCountdownMs(tournament.round_break_time || 30000)
+                    setShowCountdown(true)
+                  }}
+                  style={{
+                    width: '100%', padding: '12px 0',
+                    background: 'var(--ink)', color: 'var(--paper)',
+                    border: '1px solid var(--ink)', borderRadius: 4,
+                    fontFamily: 'var(--sans)', fontWeight: 500, fontSize: 14,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    transition: 'all 150ms',
+                  }}
+                >
+                  <ChevronRight size={16} />
+                  <span className="ar">انتقل للجولة {currentRound + 1}</span>
+                </button>
+              </div>
             )}
 
+            {/* Final winner display */}
             {allRoundDone && currentRound === totalRounds && (() => {
               const finalMatch = matches.find(m => m.round === totalRounds && m.status === 'finished')
               const winnerName = finalMatch
                 ? (finalMatch.winner_uid === finalMatch.player_a_uid
-                    ? finalMatch.player_a_name
-                    : finalMatch.player_b_name)
+                    ? finalMatch.player_a_name : finalMatch.player_b_name)
                 : 'البطل'
               return (
-                <div className="text-center py-4">
-                  <Trophy size={40} className="text-yellow-400 mx-auto mb-2" />
-                  <p className="ar text-xl font-black text-yellow-400">🏆 {winnerName}</p>
-                  <p className="ar text-gray-400 text-sm mt-1">
-                    {tournament.status === 'finished' ? 'انتهت البطولة!' : 'جاري إنهاء البطولة…'}
+                <div style={{
+                  borderTop: '1px solid var(--rule)', padding: '28px 16px',
+                  textAlign: 'center', background: 'color-mix(in srgb, var(--gold) 5%, var(--paper))',
+                }}>
+                  <Trophy size={36} style={{ color: 'var(--gold)', margin: '0 auto 12px' }} />
+                  <p className="ar" style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 500, color: 'var(--gold)', margin: '0 0 4px' }}>
+                    {winnerName}
+                  </p>
+                  <p className="ar folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>
+                    {tournament.status === 'finished' ? 'انتهت البطولة' : 'جاري إنهاء البطولة…'}
                   </p>
                 </div>
               )
@@ -662,23 +752,5 @@ export default function TournamentBracket() {
         )}
       </div>
     </div>
-  )
-}
-
-function StatusBadge({ status, winnerName }) {
-  if (status === 'finished') return (
-    <span className="ar text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
-      ✓ {winnerName} فاز
-    </span>
-  )
-  if (status === 'active') return (
-    <span className="ar text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full animate-pulse">
-      🔴 جارية
-    </span>
-  )
-  return (
-    <span className="ar text-xs bg-gray-700 text-gray-500 px-2 py-0.5 rounded-full">
-      انتظار
-    </span>
   )
 }
