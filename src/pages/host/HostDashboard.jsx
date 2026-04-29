@@ -346,28 +346,52 @@ export default function HostDashboard() {
 
           {/* Section header */}
           <div style={{
-            borderBottom: '1px solid var(--rule)', padding: '14px 20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            borderBottom: '1px solid var(--rule)', padding: '20px 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
           }}>
             <h2 style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: 24, color: 'var(--ink)', margin: 0 }}>
               Question Banks
             </h2>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => navigate('/tournament/create')} style={{
-                padding: '9px 16px', border: '1px solid var(--gold)',
-                background: 'none', cursor: 'pointer',
-                fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
+                padding: '14px 28px', border: '2px solid var(--gold)',
+                background: 'color-mix(in srgb, var(--gold) 12%, var(--paper))', cursor: 'pointer',
+                fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, letterSpacing: '0.15em',
                 textTransform: 'uppercase', color: 'var(--gold)',
+                transition: 'all 140ms', position: 'relative', overflow: 'hidden',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'color-mix(in srgb, var(--gold) 22%, var(--paper))'
+                e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--gold) 120%, var(--gold))'
+                e.currentTarget.style.transform = 'translateY(-2px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'color-mix(in srgb, var(--gold) 12%, var(--paper))'
+                e.currentTarget.style.borderColor = 'var(--gold)'
+                e.currentTarget.style.transform = 'translateY(0)'
               }}>
-                CREATE TOURNAMENT
+                🏆 CREATE TOURNAMENT
               </button>
               <button onClick={() => setShowUpload(true)} style={{
-                padding: '9px 18px', border: '1px solid var(--ink)',
-                background: 'var(--ink)', cursor: 'pointer',
-                fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
+                padding: '14px 32px', border: 'none',
+                background: 'var(--ink)', borderBottom: '4px solid color-mix(in srgb, var(--ink) 60%, black)',
+                cursor: 'pointer',
+                fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, letterSpacing: '0.15em',
                 textTransform: 'uppercase', color: 'var(--paper)',
-              }}>
-                + UPLOAD BANK
+                transition: 'filter 140ms, transform 80ms',
+                boxShadow: 'var(--shadow-2)',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.filter = 'brightness(1.15)'
+                e.currentTarget.style.transform = 'translateY(-2px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.filter = 'brightness(1)'
+                e.currentTarget.style.transform = 'translateY(0)'
+              }}
+              onMouseDown={e => e.currentTarget.style.transform = 'translateY(0px)'}
+              onMouseUp={e => e.currentTarget.style.transform = 'translateY(-2px)'}>
+                ⬆ UPLOAD BANK
               </button>
             </div>
           </div>
