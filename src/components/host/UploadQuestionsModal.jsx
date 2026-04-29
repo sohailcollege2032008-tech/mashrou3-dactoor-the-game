@@ -633,6 +633,7 @@ export default function UploadQuestionsModal({ onClose, onSuccess }) {
                 background: 'none', cursor: 'pointer',
                 color: tab === t.id ? 'var(--ink)' : 'var(--ink-4)',
                 transition: 'all 150ms',
+                textAlign: 'center',
               }}
               className="ar"
             >
