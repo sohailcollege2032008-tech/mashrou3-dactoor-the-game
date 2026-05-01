@@ -16,9 +16,11 @@ import { useAuth } from '../../hooks/useAuth'
 import { findCorrectForDuel } from '../../utils/crypto'
 import { WifiOff, LogOut, Flag } from 'lucide-react'
 
-const QUESTION_DURATION_MS = 30_000
-const REVEAL_DURATION_MS   = 3_000
-const FORFEIT_TIMEOUT_S    = 120
+const QUESTION_DURATION_MS    = 30_000
+const REVEAL_DURATION_MS      = 3_000
+const FORFEIT_TIMEOUT_S       = 120
+const MIN_QUESTION_DISPLAY_MS = 800   // min local display before triggering reveal (catch-up guard)
+const MIN_REVEAL_DISPLAY_MS   = 1_500 // min local display before advancing to next question
 
 // ── Editorial player pill ─────────────────────────────────────────────────────
 function PlayerPill({ player, score, align = 'right' }) {
@@ -111,6 +113,8 @@ export default function DuelGame({
   const timerIntervalRef    = useRef(null)
   const revealTimerRef      = useRef(null)
   const countdownIntervalRef = useRef(null)
+  const questionLocalStartRef = useRef(0)
+  const revealLocalStartRef   = useRef(0)
 
   const serverNow = useCallback(() => Date.now() + serverOffsetRef.current, [])
 
@@ -186,7 +190,15 @@ export default function DuelGame({
     setHasAnswered(false)
     revealInProgressRef.current = false
     nextInProgressRef.current   = false
+    questionLocalStartRef.current = Date.now()
+    revealLocalStartRef.current   = 0
   }, [duel?.current_question_index])
+
+  useEffect(() => {
+    if (duel?.status === 'revealing' && revealLocalStartRef.current === 0) {
+      revealLocalStartRef.current = Date.now()
+    }
+  }, [duel?.status])
 
   useEffect(() => {
     if (!duel || duelPath === 'duels' || duel.status !== 'waiting') return
@@ -370,7 +382,10 @@ export default function DuelGame({
       if (pct <= 0) {
         clearInterval(timerIntervalRef.current)
         if (duelPath === 'duels') {
-          triggerReveal()
+          const localMs = questionLocalStartRef.current ? Date.now() - questionLocalStartRef.current : MIN_QUESTION_DISPLAY_MS
+          const delay   = Math.max(0, MIN_QUESTION_DISPLAY_MS - localMs)
+          if (delay > 0) setTimeout(triggerReveal, delay)
+          else           triggerReveal()
         } else if (!hasAnswered && !isObserver && uid) {
           const qi = duelRef.current?.current_question_index ?? 0
           update(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}/${uid}`), { uid, timed_out: true }).catch(console.error)
@@ -389,14 +404,22 @@ export default function DuelGame({
     const answers    = duel.answers?.[qi] || {}
     const playerUids = Object.keys(duel.players || {})
     const validAnswerCount = playerUids.filter(p => p in answers).length
-    if (playerUids.length >= 2 && validAnswerCount >= playerUids.length) triggerReveal()
+    if (playerUids.length >= 2 && validAnswerCount >= playerUids.length) {
+      const localMs = questionLocalStartRef.current ? Date.now() - questionLocalStartRef.current : MIN_QUESTION_DISPLAY_MS
+      const delay   = Math.max(0, MIN_QUESTION_DISPLAY_MS - localMs)
+      if (delay > 0) setTimeout(triggerReveal, delay)
+      else           triggerReveal()
+    }
   }, [duel?.answers, duel?.status, duel?.current_question_index, duelPath, triggerReveal])
 
   useEffect(() => {
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current)
     if (!duel || duel.status !== 'revealing' || !duel.reveal_started_at) return
-    const elapsed   = serverNow() - duel.reveal_started_at
-    const remaining = REVEAL_DURATION_MS - elapsed
+    const serverElapsed   = serverNow() - duel.reveal_started_at
+    const serverRemaining = REVEAL_DURATION_MS - serverElapsed
+    const localRevealMs   = revealLocalStartRef.current ? Date.now() - revealLocalStartRef.current : MIN_REVEAL_DISPLAY_MS
+    const localRemaining  = MIN_REVEAL_DISPLAY_MS - localRevealMs
+    const remaining       = Math.max(serverRemaining, localRemaining)
     if (remaining <= 0) { triggerNextOrFinish(); return }
     revealTimerRef.current = setTimeout(triggerNextOrFinish, remaining)
     return () => clearTimeout(revealTimerRef.current)

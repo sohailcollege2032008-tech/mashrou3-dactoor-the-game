@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ref as rtdbRef, onValue, update, remove } from 'firebase/database'
+import { ref as rtdbRef, onValue, update, remove, get } from 'firebase/database'
 import { doc, getDoc } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { fetchPlayedQuestions, applyDuelConfig, stripCorrectForRtdb } from '../../utils/duelUtils'
@@ -80,6 +80,9 @@ export default function DuelLobby() {
 
       const safeQuestions = await stripCorrectForRtdb(questions, duelId)
 
+      const offsetSnap = await get(rtdbRef(rtdb, '.info/serverTimeOffset'))
+      const offset = offsetSnap.exists() ? Number(offsetSnap.val()) : 0
+
       await update(rtdbRef(rtdb, `duels/${duelId}`), {
         [`players/${uid}`]: {
           uid,
@@ -90,7 +93,7 @@ export default function DuelLobby() {
         questions: safeQuestions,
         total_questions: safeQuestions.length,
         status: 'playing',
-        question_started_at: Date.now(),
+        question_started_at: Date.now() + offset,
       })
       await remove(rtdbRef(rtdb, `duel_queue/${duel.deck_id}/${duel.creator_uid}`))
     } catch (e) {

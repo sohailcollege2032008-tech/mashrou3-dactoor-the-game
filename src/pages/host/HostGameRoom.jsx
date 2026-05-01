@@ -404,6 +404,7 @@ export default function HostGameRoom() {
   const [profileModal, setProfileModal]   = useState(null)
   const notifiedAnswersRef = useRef(new Set())
   const roomStatusRef      = useRef(null)
+  const prevRoomRef        = useRef(null)
 
   // ── Host presence ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -434,15 +435,16 @@ export default function HostGameRoom() {
         })
       }
       roomStatusRef.current = data.status
-      setRoom(prev => {
-        if (prev && data.current_question_index !== prev.current_question_index) {
-          setAnswers([]); setRevealResult(null)
-        }
-        if (data.status === 'finished' && prev?.status !== 'finished') {
-          confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } })
-        }
-        return data
-      })
+      const prev = prevRoomRef.current
+      if (prev && data.current_question_index !== prev.current_question_index) {
+        setAnswers([])
+        setRevealResult(null)
+      }
+      if (data.status === 'finished' && prev?.status !== 'finished') {
+        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } })
+      }
+      prevRoomRef.current = data
+      setRoom(data)
     })
     return () => unsubRoom()
   }, [roomId, session])
