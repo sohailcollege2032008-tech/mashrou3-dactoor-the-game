@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Activity Logger - Tracks player behavior for cheating detection
  * Logs to browser localStorage for persistence
  */
@@ -9,7 +9,19 @@ class ActivityLogger {
     this.roomId = roomId
     this.logsKey = `activity_logs_${roomId}_${userId}`
     this.logs = this.loadLogs()
+    this._cleanupFns = []
     this.setupListeners()
+  }
+
+  /**
+   * Remove every listener/interval/console wrapper this instance installed.
+   * Prevents multi-game listener leaks and console.log chain growth.
+   */
+  teardown() {
+    ;(this._cleanupFns || []).forEach(fn => {
+      try { fn() } catch { /* ignore */ }
+    })
+    this._cleanupFns = []
   }
 
   /**
@@ -62,13 +74,18 @@ class ActivityLogger {
 
     // Method 1: Check for console override
     const originalLog = console.log
-    console.log = (...args) => {
+    const ourLog = (...args) => {
       if (!consoleOpened) {
         consoleOpened = true
         this.addLog('console_opened', { method: 'console_log' })
       }
       originalLog.apply(console, args)
     }
+    console.log = ourLog
+    this._cleanupFns.push(() => {
+      // Only restore if we are still the active wrapper (don't clobber a newer logger)
+      if (console.log === ourLog && originalLog) console.log = originalLog
+    })
 
     // Method 2: Detect if DevTools are open using screen size tricks
     let devToolsOpen = false
@@ -87,19 +104,22 @@ class ActivityLogger {
     }
 
     // Check periodically
-    setInterval(checkDevTools, 1000)
+    const interval = setInterval(checkDevTools, 1000)
+    this._cleanupFns.push(() => clearInterval(interval))
 
     // Detect page visibility changes
-    document.addEventListener('visibilitychange', () => {
+    const onVisibility = () => {
       if (document.hidden) {
         this.addLog('page_hidden')
       } else {
         this.addLog('page_visible')
       }
-    })
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    this._cleanupFns.push(() => document.removeEventListener('visibilitychange', onVisibility))
 
     // Detect keyboard shortcuts (F12, Ctrl+Shift+I, Ctrl+Shift+J, etc.)
-    document.addEventListener('keydown', (e) => {
+    const onKeydown = (e) => {
       if (
         e.key === 'F12' ||
         (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
@@ -117,29 +137,27 @@ class ActivityLogger {
       if (e.ctrlKey && e.key === 'c') {
         this.addLog('copy_command')
       }
-
-      // Detect right-click
-      if (e.button === 2 || e.key === 'ContextMenu') {
-        this.addLog('right_click_attempted')
-      }
-    })
+    }
+    document.addEventListener('keydown', onKeydown)
+    this._cleanupFns.push(() => document.removeEventListener('keydown', onKeydown))
 
     // Detect right-click context menu
-    document.addEventListener('contextmenu', (e) => {
+    const onContextMenu = (e) => {
       this.addLog('context_menu_opened', {
         x: e.clientX,
         y: e.clientY
       })
-    })
+    }
+    document.addEventListener('contextmenu', onContextMenu)
+    this._cleanupFns.push(() => document.removeEventListener('contextmenu', onContextMenu))
 
     // Track window focus
-    window.addEventListener('focus', () => {
-      this.addLog('window_focused')
-    })
-
-    window.addEventListener('blur', () => {
-      this.addLog('window_blurred')
-    })
+    const onFocus = () => { this.addLog('window_focused') }
+    const onBlur = () => { this.addLog('window_blurred') }
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur', onBlur)
+    this._cleanupFns.push(() => window.removeEventListener('focus', onFocus))
+    this._cleanupFns.push(() => window.removeEventListener('blur', onBlur))
   }
 
   /**
@@ -274,6 +292,11 @@ class ActivityLogger {
 let loggerInstance = null
 
 export function initActivityLogger(userId, roomId) {
+  // Tear down the previous session's listeners before installing a new logger,
+  // so multi-game sessions don't accumulate intervals/console wrappers.
+  if (loggerInstance) {
+    try { loggerInstance.teardown() } catch { /* ignore */ }
+  }
   loggerInstance = new ActivityLogger(userId, roomId)
   return loggerInstance
 }

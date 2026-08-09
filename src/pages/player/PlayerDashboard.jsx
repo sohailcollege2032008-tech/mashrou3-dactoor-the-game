@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+﻿import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { RotateCcw, Trophy, Zap, X, Bell, CheckCheck } from 'lucide-react'
@@ -9,6 +9,7 @@ import {
   doc, onSnapshot, getDoc, collection, query, orderBy, limit, updateDoc,
 } from 'firebase/firestore'
 import { db, rtdb } from '../../lib/firebase'
+import { getActiveTournamentIds, removeActiveTournamentId } from '../../utils/activeTournament'
 
 function formatDate() {
   const now = new Date()
@@ -143,23 +144,49 @@ export default function PlayerDashboard() {
   }, [uid])
 
   useEffect(() => {
-    const savedId = localStorage.getItem('activeTournamentId')
-    if (!savedId) return
-    const unsub = onSnapshot(doc(db, 'tournaments', savedId), snap => {
-      if (!snap.exists()) { localStorage.removeItem('activeTournamentId'); setActiveTournament(null); return }
-      setActiveTournament({ id: snap.id, ...snap.data() })
+    if (!uid) return
+    // Support multiple joined tournaments (multi-slot storage) — joining a new
+    // tournament must not hide a still-live one.
+    const docs = []
+    const unsubs = getActiveTournamentIds().map(id => {
+      return onSnapshot(doc(db, 'tournaments', id), snap => {
+        const idx = docs.findIndex(d => d.id === id)
+        if (snap.exists()) {
+          const entry = { id: snap.id, data: snap.data() }
+          if (idx >= 0) docs[idx] = entry; else docs.push(entry)
+        } else if (idx >= 0) {
+          docs.splice(idx, 1)
+        }
+        // Prefer the first LIVE tournament; prune vanished docs; fall back to
+        // the most recent (even finished) so the player can still see results.
+        const live = docs.find(d => ['registration', 'ffa', 'transition', 'bracket'].includes(d.data.status))
+        if (live) {
+          setActiveTournament({ id: live.id, ...live.data })
+          return
+        }
+        const idsNow = getActiveTournamentIds()
+        const kept = idsNow.filter(id => docs.some(d => d.id === id))
+        if (kept.length !== idsNow.length) {
+          localStorage.setItem('activeTournamentIds', JSON.stringify(kept))
+        }
+        const latest = [...docs].sort((a, b) =>
+          (b.data.created_at?.seconds || 0) - (a.data.created_at?.seconds || 0)
+        )[0]
+        setActiveTournament(latest ? { id: latest.id, ...latest.data } : null)
+      })
     })
-    return () => unsub()
-  }, [])
+    return () => unsubs.forEach(u => u())
+  }, [uid])
 
   useEffect(() => {
     if (!activeTournament || !uid) return
     if (!['bracket', 'finished'].includes(activeTournament.status)) return
-    getDoc(doc(db, 'tournaments', activeTournament.id, 'ffa_results', uid))
+    const tId = activeTournament.id
+    getDoc(doc(db, 'tournaments', tId, 'ffa_results', uid))
       .then(snap => {
         if (snap.exists() && snap.data().advanced === false) {
           setTournamentEliminated(true)
-          localStorage.removeItem('activeTournamentId')
+          removeActiveTournamentId(tId)
         }
       }).catch(() => {})
   }, [activeTournament?.status, activeTournament?.id, uid])
@@ -290,7 +317,7 @@ export default function PlayerDashboard() {
                   </p>
                 </div>
                 {activeTournament.status === 'finished' && (
-                  <button onClick={() => { localStorage.removeItem('activeTournamentId'); setActiveTournament(null) }}
+                  <button onClick={() => { removeActiveTournamentId(activeTournament?.id); setActiveTournament(null) }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', padding: 4 }}>
                     <X size={13} />
                   </button>

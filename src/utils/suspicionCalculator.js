@@ -220,7 +220,9 @@ export function analyzeGameSuspicions(gameResults) {
       suspectedCheaters: cheaters.length,
       suspiciousCount: suspicious.length,
       cleanCount: clean.length,
-      cheatingPercentage: Math.round((cheaters.length / playerSuspicions.length) * 100)
+      cheatingPercentage: playerSuspicions.length > 0
+        ? Math.round((cheaters.length / playerSuspicions.length) * 100)
+        : 0
     }
   }
 }

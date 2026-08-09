@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react'
+﻿import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   doc, onSnapshot, collection, getDoc, getDocs, setDoc, serverTimestamp,
@@ -6,6 +6,7 @@ import {
 import { ref as rtdbRef, get as rtdbGet, set as rtdbSet } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
+import { removeActiveTournamentId } from '../../utils/activeTournament'
 
 const STATUS_LABELS = {
   registration: 'Registration',
@@ -127,7 +128,7 @@ export default function TournamentPlayerWait() {
         .catch(() => {})
     }
     if (tournament.status === 'finished') {
-      localStorage.removeItem('activeTournamentId')
+      removeActiveTournamentId(tournamentId)
     }
   }, [tournament?.status, tournament?.ffa_room_id, navigate])
 

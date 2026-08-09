@@ -120,6 +120,47 @@ function ReviewModal({ duel, uid, onClose }) {
   )
 }
 
+// ── Player panel (module scope — must not be created during render) ──────────
+function PlayerPanel({ player, playerUid, score, isMe, playerProfiles, navigate }) {
+  if (!player && !playerUid) return null
+  const prof      = playerProfiles[playerUid] || {}
+  const nickname  = player?.nickname || prof.display_name || 'لاعب'
+  const avatarUrl = player?.avatar_url || prof.avatar_url || ''
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+      padding: '16px 12px', border: `1px solid ${isMe ? 'var(--ink)' : 'var(--rule)'}`,
+      background: isMe ? 'var(--paper-2)' : 'var(--paper)',
+    }}>
+      <button
+        onClick={() => playerUid && !isMe && navigate(`/player/profile/${playerUid}`)}
+        style={{ cursor: !isMe && playerUid ? 'pointer' : 'default', background: 'none', border: 'none', padding: 0 }}
+      >
+        <div style={{
+          width: 48, height: 48, borderRadius: '50%',
+          border: `2px solid ${isMe ? 'var(--ink)' : 'var(--rule)'}`,
+          overflow: 'hidden', background: 'var(--paper-3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {avatarUrl
+            ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <span style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 500, color: 'var(--ink)' }}>
+                {nickname[0]}
+              </span>
+          }
+        </div>
+      </button>
+      <p style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 500, color: 'var(--ink)', margin: 0, textAlign: 'center', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {nickname}
+      </p>
+      <p style={{ fontFamily: 'var(--mono)', fontSize: 28, fontWeight: 700, color: 'var(--ink)', margin: 0, lineHeight: 1 }}>
+        {score}
+      </p>
+      {isMe && <span className="folio" style={{ color: 'var(--ink-3)', letterSpacing: '0.15em', fontSize: 9 }}>YOU</span>}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function DuelResults() {
   const { duelId } = useParams()
@@ -155,12 +196,16 @@ export default function DuelResults() {
         }
       }
 
-      if (data && uid && data.deck_id && Array.isArray(data.questions)) {
+      // Only participants may view/write results — a visitor must not get a
+      // free read of another player's answers or a fake history entry.
+      const isParticipant = !!(uid && data?.players?.[uid])
+
+      if (isParticipant && data.deck_id && Array.isArray(data.questions)) {
         const playedTexts = data.questions.map(q => q.question).filter(Boolean)
         recordPlayedQuestions(uid, data.deck_id, playedTexts)
       }
 
-      if (data && uid && duelId) {
+      if (isParticipant && uid && duelId) {
         try {
           const players = data.players || {}
           const playerUids = Object.keys(players)
@@ -226,6 +271,27 @@ export default function DuelResults() {
     )
   }
 
+  /* ── Not a participant ───────────────────────────────────────────────────── */
+  if (uid && !(uid in (duel.players || {}))) {
+    return (
+      <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24, textAlign: 'center' }}>
+        <p className="folio" style={{ letterSpacing: '0.28em' }}>DUEL · RESULTS</p>
+        <h1 style={{ fontFamily: 'var(--serif)', fontSize: 'clamp(32px, 7vw, 52px)', fontWeight: 400, lineHeight: 1.0, letterSpacing: '-0.025em', margin: 0, color: 'var(--ink)' }}>
+          Not<br /><em style={{ fontWeight: 300, color: 'var(--alert)' }}>your duel.</em>
+        </h1>
+        <p className="ar" style={{ fontSize: 14, color: 'var(--ink-3)', margin: 0 }}>
+          هذه النتيجة خاصة بالمشاركين في الدويل
+        </p>
+        <button
+          onClick={() => navigate('/player/decks')}
+          style={{ padding: '12px 24px', background: 'var(--ink)', color: 'var(--paper)', border: '1px solid var(--ink)', fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+        >
+          ابدأ دويل جديد
+        </button>
+      </div>
+    )
+  }
+
   const players = duel.players || {}
   const playerUids = Object.keys(players)
   const me = uid ? players[uid] : null
@@ -252,46 +318,6 @@ export default function DuelResults() {
     lose_forfeit:  { headline: 'Defeat.',    sub: 'خسرت بالانسحاب', color: 'var(--alert)',   folio: 'LOSE — FORFEIT' },
     draw_surrender:{ headline: 'Draw.',      sub: 'تعادل بالاستسلام', color: 'var(--navy)',  folio: 'DRAW — SURRENDER' },
   }[outcome] ?? { headline: 'Finished.', sub: 'انتهت اللعبة', color: 'var(--ink-3)', folio: 'END' }
-
-  function PlayerPanel({ player, playerUid, score, isMe }) {
-    if (!player && !playerUid) return null
-    const prof      = playerProfiles[playerUid] || {}
-    const nickname  = player?.nickname || prof.display_name || 'لاعب'
-    const avatarUrl = player?.avatar_url || prof.avatar_url || ''
-    return (
-      <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-        padding: '16px 12px', border: `1px solid ${isMe ? 'var(--ink)' : 'var(--rule)'}`,
-        background: isMe ? 'var(--paper-2)' : 'var(--paper)',
-      }}>
-        <button
-          onClick={() => playerUid && !isMe && navigate(`/player/profile/${playerUid}`)}
-          style={{ cursor: !isMe && playerUid ? 'pointer' : 'default', background: 'none', border: 'none', padding: 0 }}
-        >
-          <div style={{
-            width: 48, height: 48, borderRadius: '50%',
-            border: `2px solid ${isMe ? 'var(--ink)' : 'var(--rule)'}`,
-            overflow: 'hidden', background: 'var(--paper-3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            {avatarUrl
-              ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <span style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 500, color: 'var(--ink)' }}>
-                  {nickname[0]}
-                </span>
-            }
-          </div>
-        </button>
-        <p style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 500, color: 'var(--ink)', margin: 0, textAlign: 'center', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {nickname}
-        </p>
-        <p style={{ fontFamily: 'var(--mono)', fontSize: 28, fontWeight: 700, color: 'var(--ink)', margin: 0, lineHeight: 1 }}>
-          {score}
-        </p>
-        {isMe && <span className="folio" style={{ color: 'var(--ink-3)', letterSpacing: '0.15em', fontSize: 9 }}>YOU</span>}
-      </div>
-    )
-  }
 
   return (
     <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
@@ -331,11 +357,11 @@ export default function DuelResults() {
 
           {/* ── Player panels ──────────────────────────────────────────── */}
           <div style={{ display: 'flex', gap: 0, marginBottom: 16 }}>
-            <PlayerPanel player={me} playerUid={uid} score={myScore} isMe={true} />
+            <PlayerPanel player={me} playerUid={uid} score={myScore} isMe={true} playerProfiles={playerProfiles} navigate={navigate} />
             <div style={{ display: 'flex', alignItems: 'center', padding: '0 10px', background: 'var(--paper)', border: '1px solid var(--rule)', borderLeft: 'none', borderRight: 'none' }}>
               <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)' }}>vs</span>
             </div>
-            <PlayerPanel player={opponent} playerUid={opponentUid} score={opponentScore} isMe={false} />
+            <PlayerPanel player={opponent} playerUid={opponentUid} score={opponentScore} isMe={false} playerProfiles={playerProfiles} navigate={navigate} />
           </div>
 
           {/* Deck info */}

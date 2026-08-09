@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ref as rtdbRef, onValue, update, remove, get } from 'firebase/database'
+import { ref as rtdbRef, onValue, remove, get, runTransaction } from 'firebase/database'
 import { doc, getDoc } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { fetchPlayedQuestions, applyDuelConfig, stripCorrectForRtdb } from '../../utils/duelUtils'
@@ -40,7 +40,7 @@ export default function DuelLobby() {
       setLoading(false)
     })
     return () => unsub()
-  }, [duelId, navigate])
+  }, [duelId, navigate, uid])
 
   const inviteLink = `${window.location.origin}/duel/lobby/${duelId}`
 
@@ -83,18 +83,31 @@ export default function DuelLobby() {
       const offsetSnap = await get(rtdbRef(rtdb, '.info/serverTimeOffset'))
       const offset = offsetSnap.exists() ? Number(offsetSnap.val()) : 0
 
-      await update(rtdbRef(rtdb, `duels/${duelId}`), {
-        [`players/${uid}`]: {
-          uid,
-          nickname: profile?.display_name || 'لاعب',
-          avatar_url: profile?.avatar_url || '',
-          score: 0,
-        },
-        questions: safeQuestions,
-        total_questions: safeQuestions.length,
-        status: 'playing',
-        question_started_at: Date.now() + offset,
+      // Atomic join: re-check status + player count INSIDE the transaction so two
+      // visitors can never both enter a 1v1 (no 3-player duels).
+      let joined = false
+      await runTransaction(rtdbRef(rtdb, `duels/${duelId}`), current => {
+        if (!current || current.status !== 'waiting') return undefined
+        if (Object.keys(current.players || {}).length >= 2) return undefined
+        joined = true
+        return {
+          ...current,
+          players: {
+            ...(current.players || {}),
+            [uid]: {
+              uid,
+              nickname: profile?.display_name || 'لاعب',
+              avatar_url: profile?.avatar_url || '',
+              score: 0,
+            },
+          },
+          questions: safeQuestions,
+          total_questions: safeQuestions.length,
+          status: 'playing',
+          question_started_at: Date.now() + offset,
+        }
       })
+      if (!joined) throw new Error('هذا الدويل بدأ بالفعل أو اكتمل — جرّب إنشاء دويل جديد')
       await remove(rtdbRef(rtdb, `duel_queue/${duel.deck_id}/${duel.creator_uid}`))
     } catch (e) {
       console.error(e)
@@ -108,7 +121,12 @@ export default function DuelLobby() {
     setCancelling(true)
     try {
       await remove(rtdbRef(rtdb, `duel_queue/${duel.deck_id}/${uid}`))
-      await remove(rtdbRef(rtdb, `duels/${duelId}`))
+      // Only delete a duel that is still waiting — never nuke a live game.
+      const snap = await get(rtdbRef(rtdb, `duels/${duelId}`))
+      const data = snap.val()
+      if (data && data.status === 'waiting') {
+        await remove(rtdbRef(rtdb, `duels/${duelId}`))
+      }
       navigate('/player/decks', { replace: true })
     } catch (e) {
       console.error(e)

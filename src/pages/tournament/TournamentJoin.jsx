@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+﻿import React, { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   collection, query, where, getDocs,
@@ -7,6 +7,7 @@ import {
 import { ref as rtdbRef, set } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
+import { addActiveTournamentId } from '../../utils/activeTournament'
 
 export default function TournamentJoin() {
   const navigate = useNavigate()
@@ -59,7 +60,7 @@ export default function TournamentJoin() {
         registered_at: Date.now(),
       })
 
-      localStorage.setItem('activeTournamentId', tDoc.id)
+      addActiveTournamentId(tDoc.id)
 
       setTournamentId(tDoc.id)
       setTournamentTitle(tournament.title)

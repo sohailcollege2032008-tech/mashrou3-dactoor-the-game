@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react'
+﻿import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
 import {
-  ref as rtdbRef, get as rtdbGet, push, set, remove, update, onValue
+  ref as rtdbRef, get as rtdbGet, push, set, remove, runTransaction, onValue
 } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { fetchPlayedQuestions, applyDuelConfig } from '../../utils/duelUtils'
+import { fetchPlayedQuestions, applyDuelConfig, stripCorrectForRtdb } from '../../utils/duelUtils'
 import { Search, X, Loader2, UserCheck, XCircle } from 'lucide-react'
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
@@ -92,9 +92,12 @@ function BottomSheet({ deck, config, onConfigChange, onClose, profile, session, 
       if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
       const newDuelRef = push(rtdbRef(rtdb, 'duels'))
       const duelId = newDuelRef.key
+      // Hash the correct answer indices so the Network tab can't reveal them
+      // (same protection as every other game path).
+      const safeQuestions = await stripCorrectForRtdb(questions, duelId)
       await set(newDuelRef, {
         creator_uid: uid, deck_id: deckId, deck_title: deck.title,
-        questions, total_questions: questions.length, config,
+        questions: safeQuestions, total_questions: safeQuestions.length, config,
         force_rtl: deckDoc.data()?.force_rtl || false,
         status: 'waiting', current_question_index: 0,
         question_started_at: null, reveal_started_at: null,
@@ -139,11 +142,29 @@ function BottomSheet({ deck, config, onConfigChange, onClose, profile, session, 
           ],
         }))
       if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
-      await update(rtdbRef(rtdb, `duels/${duelId}`), {
-        [`players/${uid}`]: { uid, nickname: profile?.display_name || 'لاعب', avatar_url: profile?.avatar_url || '', score: 0 },
-        questions, total_questions: questions.length,
-        status: 'playing', question_started_at: Date.now(),
+      const safeQuestions = await stripCorrectForRtdb(questions, duelId)
+      const offsetSnap = await rtdbGet(rtdbRef(rtdb, '.info/serverTimeOffset'))
+      const offset = offsetSnap.exists() ? Number(offsetSnap.val()) : 0
+      // Atomic join: re-check status + player count INSIDE the transaction so two
+      // joiners can never both enter a 1v1 (no 3-player duels).
+      let joined = false
+      await runTransaction(rtdbRef(rtdb, `duels/${duelId}`), current => {
+        if (!current || current.status !== 'waiting') return undefined
+        if (Object.keys(current.players || {}).length >= 2) return undefined
+        joined = true
+        return {
+          ...current,
+          players: {
+            ...(current.players || {}),
+            [uid]: { uid, nickname: profile?.display_name || 'لاعب', avatar_url: profile?.avatar_url || '', score: 0 },
+          },
+          questions: safeQuestions,
+          total_questions: safeQuestions.length,
+          status: 'playing',
+          question_started_at: Date.now() + offset,
+        }
       })
+      if (!joined) throw new Error('هذا الدويل بدأ بالفعل أو اكتمل — جرّب إنشاء دويل جديد')
       await remove(rtdbRef(rtdb, `duel_queue/${deckId}/${opponentUid}`))
       navigate(`/duel/lobby/${duelId}`)
     } catch (e) {
@@ -158,7 +179,14 @@ function BottomSheet({ deck, config, onConfigChange, onClose, profile, session, 
     setLoading(true)
     try {
       await remove(rtdbRef(rtdb, `duel_queue/${deckId}/${uid}`))
-      if (myQueueEntry.duel_id) await remove(rtdbRef(rtdb, `duels/${myQueueEntry.duel_id}`))
+      if (myQueueEntry.duel_id) {
+        // Only delete a duel that is still waiting — never nuke a live game.
+        const snap = await rtdbGet(rtdbRef(rtdb, `duels/${myQueueEntry.duel_id}`))
+        const duelData = snap.val()
+        if (duelData && duelData.status === 'waiting') {
+          await remove(rtdbRef(rtdb, `duels/${myQueueEntry.duel_id}`))
+        }
+      }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -524,7 +552,7 @@ export default function DeckBrowser() {
             <p className="folio">لا توجد Decks متاحة حالياً</p>
           </div>
         ) : (
-          filtered.map((deck, i) => (
+          filtered.map((deck) => (
             <button
               key={deck.id}
               onClick={() => setSelectedDeck(deck)}

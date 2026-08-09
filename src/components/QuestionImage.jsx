@@ -9,6 +9,15 @@ import { useState } from 'react'
 export default function QuestionImage({ src, alt = '', className = '' }) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError]   = useState(false)
+  const [prevSrc, setPrevSrc] = useState(src)
+
+  // Adjust state during render when src changes — a broken image for one
+  // question must not kill the images of every following question.
+  if (prevSrc !== src) {
+    setPrevSrc(src)
+    setLoaded(false)
+    setError(false)
+  }
 
   if (!src || error) return null
 

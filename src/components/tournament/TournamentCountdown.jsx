@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function TournamentCountdown({ durationMs, label, onComplete }) {
   const [remaining, setRemaining] = useState(Math.ceil(durationMs / 1000))
   const total = Math.ceil(durationMs / 1000)
-
-  useEffect(() => {
-    setRemaining(Math.ceil(durationMs / 1000))
-  }, [durationMs])
+  const firedRef = useRef(false)
 
   useEffect(() => {
     if (remaining <= 0) {
-      onComplete?.()
+      // Fire onComplete exactly once per countdown — re-renders with a fresh
+      // callback identity must not double-advance the bracket.
+      if (!firedRef.current) {
+        firedRef.current = true
+        onComplete?.()
+      }
       return
     }
     const t = setTimeout(() => setRemaining(r => r - 1), 1000)
