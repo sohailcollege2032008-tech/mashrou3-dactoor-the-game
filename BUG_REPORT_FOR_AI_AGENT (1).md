@@ -1,3 +1,9 @@
+﻿> # ⚠️ OUTDATED — Superseded (Next.js + Supabase era, April 2026)
+> This bug report describes the OLD Next.js/Supabase codebase which was fully migrated to
+> React/Vite + Firebase. It is kept for history only — do not apply any of these findings.
+
+---
+
 # Bug Report — Mashrou3 Dactoor THE GAME
 
 ## Context

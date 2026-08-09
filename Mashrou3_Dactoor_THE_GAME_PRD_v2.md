@@ -1,3 +1,10 @@
+﻿> # ⚠️ OUTDATED — SUPERSEDED (Supabase era, April 2026)
+> This PRD describes the OLD Supabase stack. The current system is Firebase (Auth + Firestore + RTDB + Storage)
+> with Python Cloud Functions and the tournament system. Read docs/ARCHITECTURE.md instead.
+> Keep this file only as historical reference.
+
+---
+
 # Mashrou3 Dactoor THE GAME — Technical PRD v2
 
 ## 1. Product Overview
