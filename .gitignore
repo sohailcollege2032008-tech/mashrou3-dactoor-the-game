@@ -26,3 +26,6 @@ dist-ssr
 # Service account key (test credentials â€” never commit)
 functions/sa-key.json
 functions/venv/
+
+# E2E test harness (contains tokens — never commit)
+scratch/tests/
