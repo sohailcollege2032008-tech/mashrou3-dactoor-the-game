@@ -194,6 +194,9 @@ export default function TournamentLobby() {
           timer_seconds:        timerSeconds,
           auto_accept:          true,
           shuffle_questions:    true,
+          auto_mode:            true,
+          auto_timer:           timerSeconds,
+          unattended_mode:      true,
         },
         created_at: Date.now(),
       })

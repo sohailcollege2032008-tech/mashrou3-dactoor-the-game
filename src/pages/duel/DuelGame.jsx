@@ -110,6 +110,7 @@ export default function DuelGame({
   const serverOffsetRef     = useRef(0)
   const revealInProgressRef = useRef(false)
   const nextInProgressRef   = useRef(false)
+  const hasAnsweredRef      = useRef(false)
   const timerIntervalRef    = useRef(null)
   const revealTimerRef      = useRef(null)
   const countdownIntervalRef = useRef(null)
@@ -188,6 +189,7 @@ export default function DuelGame({
     if (!duel) return
     setSelectedChoice(null)
     setHasAnswered(false)
+    hasAnsweredRef.current = false
     revealInProgressRef.current = false
     nextInProgressRef.current   = false
     questionLocalStartRef.current = Date.now()
@@ -381,15 +383,21 @@ export default function DuelGame({
       setTimerPct(pct)
       if (pct <= 0) {
         clearInterval(timerIntervalRef.current)
-        if (duelPath === 'duels') {
-          const localMs = questionLocalStartRef.current ? Date.now() - questionLocalStartRef.current : MIN_QUESTION_DISPLAY_MS
-          const delay   = Math.max(0, MIN_QUESTION_DISPLAY_MS - localMs)
-          if (delay > 0) setTimeout(triggerReveal, delay)
-          else           triggerReveal()
-        } else if (!hasAnswered && !isObserver && uid) {
-          const qi = duelRef.current?.current_question_index ?? 0
-          update(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}/${uid}`), { uid, timed_out: true }).catch(console.error)
+        // Hold the question for a minimum display time even when stale timestamps
+        // arrive (catch-up race guard), then reveal. In tournament duels this also
+        // guarantees progression when the opponent never answers — the reveal
+        // scores whoever submitted, and the CF fallback stays authoritative.
+        const localMs = questionLocalStartRef.current ? Date.now() - questionLocalStartRef.current : MIN_QUESTION_DISPLAY_MS
+        const delay   = Math.max(0, MIN_QUESTION_DISPLAY_MS - localMs)
+        const reveal  = () => {
+          if (duelPath !== 'duels' && !hasAnsweredRef.current && !isObserver && uid) {
+            const qi = duelRef.current?.current_question_index ?? 0
+            update(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}/${uid}`), { uid, timed_out: true }).catch(() => {})
+          }
+          triggerReveal()
         }
+        if (delay > 0) setTimeout(reveal, delay)
+        else           reveal()
       }
     }
     tick()
@@ -431,6 +439,7 @@ export default function DuelGame({
     const reactionTimeMs = serverNow() - startedAt
     setSelectedChoice(choiceIndex)
     setHasAnswered(true)
+    hasAnsweredRef.current = true
     const qi = duel.current_question_index
     try {
       await update(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}`), {

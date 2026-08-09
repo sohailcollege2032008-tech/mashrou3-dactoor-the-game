@@ -296,3 +296,93 @@ def on_tournament_reveal_started(event: db_fn.Event[db_fn.Change]) -> None:
 
     duel_ref.transaction(advance_fn)
     logger.info("[CF] Advanced duel — tournament=%s duel=%s", tournament_id, duel_id)
+
+# ── Function 3 ─────────────────────────────────────────────────────────────────
+
+@db_fn.on_value_written(
+    reference="rooms/{roomId}/status",
+    region="europe-west1",
+    memory=options.MemoryOption.MB_256,
+    timeout_sec=60,
+)
+def on_ffa_room_finished(event: db_fn.Event[db_fn.Change]) -> None:
+    """
+    Server-side FFA finalization for tournament rooms.
+
+    When a tournament FFA room flips to 'finished', write the ffa_results
+    subcollection + flip the tournament to the bracket phase.  This mirrors the
+    host-browser logic (HostGameRoom.writeTournamentFFAResults) so the
+    tournament progresses even when the host's tab is closed.
+    Idempotent: skips if ffa_results were already written (by the host client),
+    avoiding conflicting random tie-breaks at the cut.
+    """
+    after  = event.data.after
+    before = event.data.before
+    if after is None or before is None or before == after:
+        return
+    if after != "finished":
+        return
+
+    room_id = event.params["roomId"]
+    room = admin_db.reference(f"rooms/{room_id}").get()
+    if not room or not room.get("tournament_id"):
+        return
+    tournament_id = room["tournament_id"]
+
+    import random
+    from firebase_admin import firestore as admin_fs
+
+    fs = admin_fs.client()
+    tourn_ref = fs.collection("tournaments").document(tournament_id)
+    tourn = (tourn_ref.get().to_dict() or {})
+    if tourn.get("status") == "bracket" or tourn.get("status") == "finished":
+        return
+
+    # Skip if the host client already wrote results (avoid conflicting shuffles)
+    if len(tourn_ref.collection("ffa_results").limit(1).get()) > 0:
+        logger.info("[CF-FFA] ffa_results already present — skipping %s", tournament_id)
+        return
+
+    actual_top_cut = tourn.get("actual_top_cut") or 8
+
+    def _score(p):
+        return p.get("score") or 0
+    def _correct(p):
+        return p.get("correct_count") or 0
+    def _speed(p):
+        return p.get("total_reaction_ms") or 0
+
+    players = [p for p in (room.get("players") or {}).values() if p]
+    players.sort(key=lambda p: (-_score(p), -_correct(p), _speed(p)))
+
+    def _same(a, b):
+        return _score(a) == _score(b) and _correct(a) == _correct(b) and _speed(a) == _speed(b)
+
+    final_order = players
+    if len(players) > actual_top_cut:
+        cut_player  = players[actual_top_cut - 1]
+        next_player = players[actual_top_cut]
+        if _same(cut_player, next_player):
+            first_tied = next(i for i, p in enumerate(players) if _same(p, cut_player))
+            tied_group = [p for p in players if _same(p, cut_player)]
+            random.shuffle(tied_group)
+            final_order = players[:first_tied] + tied_group
+
+    batch = fs.batch()
+    for rank, p in enumerate(final_order, start=1):
+        uid = p.get("user_id") or p.get("uid")
+        if not uid:
+            continue
+        batch.set(tourn_ref.collection("ffa_results").document(uid), {
+            "uid": uid,
+            "nickname": p.get("nickname"),
+            "avatar_url": p.get("avatar_url"),
+            "score": _score(p),
+            "correct_count": _correct(p),
+            "total_reaction_ms": _speed(p),
+            "rank": rank,
+            "advanced": rank <= actual_top_cut,
+        })
+    batch.update(tourn_ref, {"status": "bracket", "current_round": 1})
+    batch.commit()
+    logger.info("[CF-FFA] tournament %s finalized → bracket", tournament_id)
