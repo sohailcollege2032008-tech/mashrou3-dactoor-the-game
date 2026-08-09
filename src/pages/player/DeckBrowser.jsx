@@ -143,8 +143,6 @@ function BottomSheet({ deck, config, onConfigChange, onClose, profile, session, 
         }))
       if (questions.length === 0) throw new Error('لا توجد أسئلة متاحة بعد تطبيق الإعدادات')
       const safeQuestions = await stripCorrectForRtdb(questions, duelId)
-      const offsetSnap = await rtdbGet(rtdbRef(rtdb, '.info/serverTimeOffset'))
-      const offset = offsetSnap.exists() ? Number(offsetSnap.val()) : 0
       // Atomic join: re-check status + player count INSIDE the transaction so two
       // joiners can never both enter a 1v1 (no 3-player duels).
       let joined = false
@@ -161,7 +159,7 @@ function BottomSheet({ deck, config, onConfigChange, onClose, profile, session, 
           questions: safeQuestions,
           total_questions: safeQuestions.length,
           status: 'playing',
-          question_started_at: Date.now() + offset,
+          question_started_at: Date.now(),
         }
       })
       if (!joined) throw new Error('هذا الدويل بدأ بالفعل أو اكتمل — جرّب إنشاء دويل جديد')

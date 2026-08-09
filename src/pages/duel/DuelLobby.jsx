@@ -80,9 +80,6 @@ export default function DuelLobby() {
 
       const safeQuestions = await stripCorrectForRtdb(questions, duelId)
 
-      const offsetSnap = await get(rtdbRef(rtdb, '.info/serverTimeOffset'))
-      const offset = offsetSnap.exists() ? Number(offsetSnap.val()) : 0
-
       // Atomic join: re-check status + player count INSIDE the transaction so two
       // visitors can never both enter a 1v1 (no 3-player duels).
       let joined = false
@@ -104,7 +101,7 @@ export default function DuelLobby() {
           questions: safeQuestions,
           total_questions: safeQuestions.length,
           status: 'playing',
-          question_started_at: Date.now() + offset,
+          question_started_at: Date.now(),
         }
       })
       if (!joined) throw new Error('هذا الدويل بدأ بالفعل أو اكتمل — جرّب إنشاء دويل جديد')
