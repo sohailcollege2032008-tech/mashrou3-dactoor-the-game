@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Sun, Moon } from 'lucide-react'
 
 function getInitialTheme() {
@@ -31,7 +31,7 @@ export default function ThemeToggle() {
       onClick={() => setDark(d => !d)}
       title={dark ? 'Light mode' : 'Dark mode'}
       className="
-        fixed bottom-16 right-5 z-40
+        fixed bottom-24 right-5 z-40
         w-8 h-8 flex items-center justify-center
         rounded-xl
         bg-black/40 backdrop-blur-sm

@@ -237,20 +237,20 @@ export default function PlayerDashboard() {
             fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
         </svg>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, justifyContent: 'flex-end' }}>
           {/* Bell */}
           <button
             onClick={() => { setShowNotifications(v => !v); if (!showNotifications) markAllRead() }}
             style={{
               position: 'relative', background: 'none', border: '1px solid var(--rule)',
-              padding: '6px 8px', cursor: 'pointer', color: 'var(--ink-3)',
+              padding: '7px 9px', cursor: 'pointer', color: 'var(--ink-3)',
               display: 'flex', alignItems: 'center',
             }}
           >
             <Bell size={14} />
             {unreadCount > 0 && (
               <span style={{
-                position: 'absolute', top: -5, right: -5,
+                position: 'absolute', top: -4, right: -4,
                 width: 16, height: 16, borderRadius: '50%',
                 background: 'var(--burgundy)', color: 'var(--paper)',
                 fontSize: 9, fontFamily: 'var(--mono)', fontWeight: 700,
@@ -370,8 +370,8 @@ export default function PlayerDashboard() {
         }}>
           <div>
             <div style={{
-              fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 300,
-              fontSize: 44, lineHeight: 1, color: 'color-mix(in srgb, var(--paper) 20%, transparent)', marginBottom: 10,
+              fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 400,
+              fontSize: 44, lineHeight: 1, color: 'color-mix(in srgb, var(--paper) 45%, transparent)', marginBottom: 10,
             }}>I.</div>
             <h2 style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--paper)', lineHeight: 1.1 }}>
               Join a Room
@@ -393,7 +393,7 @@ export default function PlayerDashboard() {
           <div>
             <div style={{
               fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 300,
-              fontSize: 44, lineHeight: 1, color: 'var(--burgundy)', opacity: 0.35, marginBottom: 10,
+              fontSize: 44, lineHeight: 1, color: 'var(--burgundy)', opacity: 0.55, marginBottom: 10,
             }}>II.</div>
             <h2 style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)', lineHeight: 1.1 }}>
               Open a Duel
@@ -415,7 +415,7 @@ export default function PlayerDashboard() {
           <div>
             <div style={{
               fontFamily: 'var(--serif)', fontStyle: 'italic', fontWeight: 300,
-              fontSize: 44, lineHeight: 1, color: 'var(--gold)', opacity: 0.35, marginBottom: 10,
+              fontSize: 44, lineHeight: 1, color: 'var(--gold)', opacity: 0.55, marginBottom: 10,
             }}>III.</div>
             <h2 style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)', lineHeight: 1.1 }}>
               Join a Tournament

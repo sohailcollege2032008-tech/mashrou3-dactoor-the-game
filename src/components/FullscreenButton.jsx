@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { Maximize2, Minimize2 } from 'lucide-react'
 
 /**
@@ -48,7 +48,7 @@ export default function FullscreenButton() {
       onClick={toggleFullscreen}
       title={isFullscreen ? 'تصغير الشاشة' : 'تكبير الشاشة'}
       className="
-        fixed bottom-5 right-5 z-40
+        fixed bottom-10 right-5 z-40
         w-8 h-8 flex items-center justify-center
         rounded-xl
         bg-black/40 backdrop-blur-sm
