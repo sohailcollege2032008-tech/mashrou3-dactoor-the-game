@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-09
 **Baseline:** production `med-royale.vercel.app` == git `f1045e2` (deployed 2026-05-01), verified byte-identical (built bundle matches live assets except CRLF).
-**Fixed & deployed:** commit `2aa6b86` on `med-royale` (auto-deployed to Vercel; live bundle `index-DO4s4582.js`).
+**Fixed & deployed:** commits `2aa6b86`, `bb7832e`, `1390c10`, `dc00ed5`, `45894c9` on `med-royale` (auto-deployed to Vercel; live bundle `index-BTSFwhDl.js`).
 **Backend:** Firebase project `mashrou3-dactoor` — 3 Python Cloud Functions deployed (europe-west1, python311).
 
 ---
@@ -85,9 +85,73 @@ npm i                      # firebase-admin, playwright, vitest
 npx playwright install chromium
 node identities.cjs --tokens   # mint test identities (owner/host/p01..p12)
 node suite-tournament.mjs      # full tournament E2E (≈12 min)
+node suite-duel.mjs            # 1v1 duels (join/surrender/forfeit/privacy)
+node suite-network.mjs         # Slow 4G + offline/reconnect duel
+node load-test.mjs             # 50-player room load test
 node suite-smoke.mjs / suite-visual.mjs
 node cleanup.cjs               # removes all test artifacts
 ```
+
+## 10. Round 2 (commit `1390c10`) — duel hardening & polish
+
+- **Duel join is now atomic** (`runTransaction` re-checks status + player count):
+  two visitors can no longer both enter a 1v1 → no 3-player duels (DeckBrowser
+  + DuelLobby).
+- Creator cancel only deletes a duel still `waiting` — never nukes a live game.
+- Created duels hash the correct answer (`correct_hash`) — no plain `correct`
+  in RTDB from the moment of creation.
+- **DuelResults privacy**: only participants may view results or write history;
+  outsiders get a "Not your duel" screen. PlayerPanel hoisted out of render.
+- QuestionImage resets per `src` (one broken image no longer kills later images).
+- TournamentCountdown fires `onComplete` once per countdown (ref guard).
+- activityLogger `teardown()` releases intervals/listeners/console wrapper on
+  new game sessions (no cross-game leaks).
+- `activeTournamentIds` multi-slot localStorage — joining tournament B no longer
+  hides live tournament A.
+- suspicionCalculator: no NaN cheating percentage with zero players.
+- eslint: added `react/jsx-uses-vars` (framer-motion false positives).
+
+## 11. Round 3 (commit `45894c9`) — CRITICAL discovery: invite-link joins were broken in production
+
+`get()` on the RTDB `.info/serverTimeOffset` path throws **"Invalid token in
+path"** in the modular SDK (only `onValue` supports `.info` paths). The
+DuelLobby join path read it before every join → **every invite-link join failed
+in production**. Removed the `.info` read (timing reconciles via DuelGame's own
+`onValue` offset + min-display guards). Verified end-to-end: invite join now
+works.
+
+## 12. Round 4 (commit `dc00ed5`) — mobile visual polish
+
+- PlayerDashboard: bell badge no longer collides with the avatar (gap 14px +
+  inset badge); section numerals strengthened (I 45% paper on the dark card,
+  II/III opacity 0.55).
+- Floating fullscreen/theme buttons raised (bottom-10 / bottom-24) so they no
+  longer sit on the dashboard footer.
+
+## 13. Round 5/6 — E2E suites (duel, network, load) — all PASS
+
+- **Duel suite**: create via DeckBrowser → invite join → play (scoring: first
+  correct 2pts, others 1pt; `correct_reveal` written) → Victory screen;
+  surrender → draw recorded; forfeit → recorded; 3rd player blocked with
+  "انتهت صلاحية الرابط"; non-participant blocked from results.
+- **Network suite** (CDP Slow 4G: 170ms RTT on one player):
+  - Question-arrival skew between players: **2ms**.
+  - Reaction-time fairness: player's `reaction_time_ms` ≈ wall-clock (network
+    latency did NOT inflate scores).
+  - Reveal fired 83ms after the last answer.
+  - Offline answer queued locally, flushed 1.2s after reconnect, duel completed.
+- **Load test** (50 players × 5 questions on one room, ranked scoring):
+  - 250 concurrent answer writes: **p95 = 276ms** — comfortably handles the
+    stated ~100 concurrent users.
+  - AUTO reveal + advance per question ~8-9s; final ranking math verified exact
+    (fastest correct 3pts, 2nd 2pts, 3rd 1pt, 4th+ 0).
+
+## 14. Final state
+
+- Full tournament E2E re-run on the final build: **all PASS** (FFA autopilot,
+  bracket, CF duels, advancement, champion, summaries).
+- All test artifacts removed from production (decks/tournaments/rooms/duels/
+  profiles/auth accounts); only pre-existing user data remains untouched.
 
 ## 9. Machine note (Windows dev)
 
