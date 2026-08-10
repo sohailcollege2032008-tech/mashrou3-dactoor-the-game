@@ -196,11 +196,11 @@ def parse_gemini_response(raw: str) -> dict:
 MODEL_FALLBACK_LIST = [
     "gemini-3.1-flash-lite-preview",
     "gemini-2.5-flash-lite",
-    "gemini-2-flash-lite",
-    "gemini-3-flash",
-    "gemini-2-flash",
-    "gemma-4-31b",
-    "gemma-4-26b"
+    "gemini-2.5-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it"
 ]
 
 SAFETY_SETTINGS = [
