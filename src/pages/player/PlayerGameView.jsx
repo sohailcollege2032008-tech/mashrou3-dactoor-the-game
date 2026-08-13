@@ -247,7 +247,7 @@ export default function PlayerGameView() {
         const qSetId  = data.question_set_id
         const hostUid = data.host_id
 
-        if (data.tournament_id) setAutoNavCountdown(5)
+        if (data.tournament_id) setAutoNavCountdown(12)
 
         if (qSetId && uid) {
           updateDoc(doc(db, 'profiles', uid), {

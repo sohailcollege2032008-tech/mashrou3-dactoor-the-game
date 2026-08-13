@@ -449,7 +449,7 @@ export default function TournamentDuelWrapper() {
         tieBreaker,
         hadTiebreaker: duelData.is_tiebreaker === true,
       })
-      setAutoNavSeconds(8)
+      setAutoNavSeconds(15)
 
     } catch (e) {
       console.error('Error writing match result:', e)
@@ -588,6 +588,19 @@ export default function TournamentDuelWrapper() {
             }}
           >
             <span className="ar">متابعة ({autoNavSeconds}ث)</span>
+          </button>
+          <button
+            onClick={() => navigate(`/tournament/${tournamentId}/wait`, { replace: true, state: { showBracket: true } })}
+            style={{
+              width: '100%', padding: '13px 0',
+              background: 'transparent', color: 'var(--ink-3)',
+              border: '1px solid var(--rule)', borderRadius: 4,
+              fontFamily: 'var(--sans)', fontSize: 13, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            <Trophy size={14} style={{ color: 'var(--gold)' }} />
+            <span className="ar">شاهد شجرة البطولة</span>
           </button>
         </div>
       </div>

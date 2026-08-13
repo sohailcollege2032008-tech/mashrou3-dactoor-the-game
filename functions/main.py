@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 initialize_app()
 
-REVEAL_DURATION_MS    = 3_000
+REVEAL_DURATION_MS    = 4_000
 BASE_PATH             = "tournament_duels"
 MIN_REACTION_MS       = 50        # below this = suspiciously fast / clock error
 MAX_REACTION_MS       = 65_000    # above this = question expired already

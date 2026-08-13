@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   doc, onSnapshot, collection, getDoc, getDocs, setDoc, serverTimestamp,
 } from 'firebase/firestore'
@@ -7,6 +7,9 @@ import { ref as rtdbRef, get as rtdbGet, set as rtdbSet } from 'firebase/databas
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { removeActiveTournamentId } from '../../utils/activeTournament'
+import { sortPlayers } from '../../utils/gameRunner'
+import BracketTree from '../../components/tournament/BracketTree'
+import { Loader2, Trophy, ChevronDown, ChevronUp } from 'lucide-react'
 
 const STATUS_LABELS = {
   registration: 'Registration',
@@ -19,12 +22,16 @@ const STATUS_LABELS = {
 export default function TournamentPlayerWait() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { session } = useAuth()
 
   const [tournament,    setTournament]    = useState(null)
+  const [allMatches,    setAllMatches]    = useState([])
   const [myMatch,       setMyMatch]       = useState(null)
   const [myResult,      setMyResult]      = useState(null)
   const [ffaEliminated, setFfaEliminated] = useState(false)
+  const [ffaResults,    setFfaResults]    = useState([])
+  const [showBracket,   setShowBracket]   = useState(location.state?.showBracket === true)
 
   const uid = session?.uid
   const ffaCheckedRef = useRef(false)
@@ -88,6 +95,7 @@ export default function TournamentPlayerWait() {
       collection(db, 'tournaments', tournamentId, 'bracket_matches'),
       snap => {
         const all = snap.docs.map(d => ({ match_id: d.id, ...d.data() }))
+        setAllMatches(all)
         const currentRound = tournament.current_round
         const mine = all.find(m =>
           m.round === currentRound &&
@@ -108,6 +116,19 @@ export default function TournamentPlayerWait() {
     )
     return () => unsub()
   }, [tournamentId, uid, tournament?.current_round])
+
+  // FFA results (rank + advanced) — visible to every player so they can see
+  // where they finished in the qualifiers phase.
+  useEffect(() => {
+    if (!tournamentId || !['bracket', 'finished'].includes(tournament?.status)) return
+    getDocs(collection(db, 'tournaments', tournamentId, 'ffa_results'))
+      .then(snap => {
+        const results = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+        const sorted = [...results].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+        setFfaResults(sorted)
+      })
+      .catch(() => {})
+  }, [tournamentId, tournament?.status])
 
   useEffect(() => {
     if (myMatch?.status === 'active' && myMatch?.duel_id) {
@@ -390,6 +411,90 @@ export default function TournamentPlayerWait() {
                   : 'جاري الاستعداد لمرحلة الـ Bracket…'}
               </p>
             </>
+          )}
+
+          {/* ── Tournament progress: FFA results + bracket (EVERY player) ── */}
+          {(tournament.status === 'bracket' || tournament.status === 'finished') && (
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+
+              {/* FFA qualifiers results */}
+              {ffaResults.length > 0 && (
+                <div style={{ border: '1px solid var(--rule)', marginBottom: 16 }}>
+                  <div style={{
+                    padding: '10px 14px', borderBottom: '1px solid var(--rule)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                    <span className="folio" style={{ letterSpacing: '0.18em' }}>التصفيات — FFA</span>
+                    <span className="folio" style={{ color: 'var(--ink-4)' }}>{ffaResults.length} لاعب</span>
+                  </div>
+                  {ffaResults.slice(0, 8).map((r, i) => {
+                    const isMe = r.uid === uid
+                    return (
+                      <div key={r.uid} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '8px 14px', borderBottom: '1px solid var(--rule)',
+                        background: isMe ? 'var(--paper-2)' : 'var(--paper)',
+                      }}>
+                        <span style={{
+                          fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700,
+                          color: i < 3 ? 'var(--gold)' : 'var(--ink-4)', minWidth: 26,
+                        }}>#{r.rank}</span>
+                        <span style={{
+                          fontFamily: 'var(--serif)', fontSize: 14, fontWeight: isMe ? 700 : 500,
+                          color: 'var(--ink)', flex: 1,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>{r.nickname}{isMe ? ' (أنت)' : ''}</span>
+                        {r.advanced && (
+                          <span className="folio" style={{ color: 'var(--success)', fontSize: 9, border: '1px solid var(--success)', padding: '1px 6px' }}>
+                            تأهل
+                          </span>
+                        )}
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)' }}>{r.score}</span>
+                      </div>
+                    )
+                  })}
+                  {ffaResults.length > 8 && (
+                    <p className="folio" style={{ textAlign: 'center', padding: 8, color: 'var(--ink-4)', fontSize: 9 }}>
+                      +{ffaResults.length - 8} آخرين
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Bracket tree */}
+              <button
+                onClick={() => setShowBracket(v => !v)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 16px', border: '1px solid var(--rule)', background: 'var(--paper-2)',
+                  cursor: 'pointer', color: 'var(--ink)', fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 600,
+                  marginBottom: 12,
+                }}
+              >
+                <span className="ar" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Trophy size={14} style={{ color: 'var(--gold)' }} />
+                  شجرة البطولة
+                </span>
+                {showBracket ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              </button>
+
+              {showBracket && (
+                <div style={{ overflowX: 'auto', marginBottom: 24, direction: 'ltr' }}>
+                  {allMatches.length > 0 ? (
+                    <BracketTree
+                      matches={allMatches}
+                      totalRounds={tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)}
+                      tournamentTitle={tournament.title}
+                    />
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: 24, color: 'var(--ink-4)' }}>
+                      <Loader2 size={18} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px', display: 'block' }} />
+                      <span className="ar folio">جاري تجهيز الشجرة…</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
         </div>

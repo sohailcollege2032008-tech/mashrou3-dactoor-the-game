@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+﻿import React, { useEffect, useState, useRef, useCallback } from 'react'
 import MathText from '../../components/common/MathText'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
@@ -17,7 +17,7 @@ import { findCorrectForDuel } from '../../utils/crypto'
 import { WifiOff, LogOut, Flag } from 'lucide-react'
 
 const QUESTION_DURATION_MS    = 30_000
-const REVEAL_DURATION_MS      = 3_000
+const REVEAL_DURATION_MS      = 4_000
 const FORFEIT_TIMEOUT_S       = 120
 const MIN_QUESTION_DISPLAY_MS = 800   // min local display before triggering reveal (catch-up guard)
 const MIN_REVEAL_DISPLAY_MS   = 1_500 // min local display before advancing to next question
@@ -322,7 +322,7 @@ export default function DuelGame({
     nextInProgressRef.current = true
 
     try {
-      const result = await runTransaction(
+      await runTransaction(
         rtdbRef(rtdb, `${duelPath}/${duelId}`),
         current => {
           if (!current || current.status !== 'revealing') return
