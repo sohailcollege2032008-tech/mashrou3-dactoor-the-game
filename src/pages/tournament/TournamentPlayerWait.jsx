@@ -32,9 +32,33 @@ export default function TournamentPlayerWait() {
   const [ffaEliminated, setFfaEliminated] = useState(false)
   const [ffaResults,    setFfaResults]    = useState([])
   const [showBracket,   setShowBracket]   = useState(location.state?.showBracket === true)
+  const [now,           setNow]           = useState(Date.now())
 
   const uid = session?.uid
   const ffaCheckedRef = useRef(false)
+
+  // Live tick for the phase countdown
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(id)
+  }, [])
+
+  // Phase countdown: FFA → bracket (round 1) or between rounds — shared with
+  // the host's bracket page so participants feel the pace too.
+  const phaseStart    = tournament?.phase_started_at || 0
+  const isRoundOne    = (tournament?.current_round || 1) === 1
+  const phaseWaitMs   = tournament
+    ? (isRoundOne ? (tournament.phase_transition_wait || 0) : (tournament.round_break_time || 0))
+    : 0
+  const remainingMs   = (phaseStart && phaseWaitMs) ? Math.max(0, phaseStart + phaseWaitMs - now) : 0
+  const inPhaseWait   = tournament?.status === 'bracket' && remainingMs > 0
+
+  const formatCountdown = (ms) => {
+    const total = Math.ceil(ms / 1000)
+    const m = Math.floor(total / 60)
+    const s = total % 60
+    return `${m}:${String(s).padStart(2, '0')}`
+  }
 
   useEffect(() => {
     if (!tournamentId || !uid) return
@@ -416,6 +440,28 @@ export default function TournamentPlayerWait() {
           {/* ── Tournament progress: FFA results + bracket (EVERY player) ── */}
           {(tournament.status === 'bracket' || tournament.status === 'finished') && (
             <div style={{ marginTop: 16, textAlign: 'right' }}>
+
+              {/* ── Phase countdown (the suspense moment) ─────────────── */}
+              {inPhaseWait && (
+                <div style={{
+                  border: '1px solid var(--gold)', borderTop: '3px solid var(--gold)',
+                  background: 'rgba(176,137,68,0.06)', padding: '24px 20px', marginBottom: 16,
+                  textAlign: 'center',
+                }}>
+                  <p className="folio" style={{ color: 'var(--gold)', letterSpacing: '0.22em', marginBottom: 10 }}>
+                    {isRoundOne ? 'PHASE II · BRACKET STARTS IN' : `ROUND ${(tournament.current_round || 1) + 1} STARTS IN`}
+                  </p>
+                  <p style={{
+                    fontFamily: 'var(--mono)', fontSize: 56, fontWeight: 700, color: 'var(--ink)',
+                    lineHeight: 1, margin: '0 0 8px', letterSpacing: '0.06em',
+                  }}>
+                    {formatCountdown(remainingMs)}
+                  </p>
+                  <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: 0 }}>
+                    {isRoundOne ? 'استعدوا — مباريات الإقصاء على وشك البدء! ⚡' : 'استعد للمباراة القادمة!'}
+                  </p>
+                </div>
+              )}
 
               {/* FFA qualifiers results */}
               {ffaResults.length > 0 && (

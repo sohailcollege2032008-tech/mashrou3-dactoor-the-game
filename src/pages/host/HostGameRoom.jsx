@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+﻿import React, { useEffect, useState, useRef, useCallback } from 'react'
 import MathText from '../../components/common/MathText'
 import { getDir } from '../../utils/rtlUtils'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -802,7 +802,7 @@ export default function HostGameRoom() {
         })
       })
       await batch.commit()
-      await updateDoc(doc(db, 'tournaments', tournamentId), { status: 'bracket', current_round: 1 })
+      await updateDoc(doc(db, 'tournaments', tournamentId), { status: 'bracket', current_round: 1, phase_started_at: Date.now() })
     } catch (err) { console.error('[Tournament] Failed to write FFA results:', err) }
   }, [players])
 

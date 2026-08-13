@@ -383,6 +383,6 @@ def on_ffa_room_finished(event: db_fn.Event[db_fn.Change]) -> None:
             "rank": rank,
             "advanced": rank <= actual_top_cut,
         })
-    batch.update(tourn_ref, {"status": "bracket", "current_round": 1})
+    batch.update(tourn_ref, {"status": "bracket", "current_round": 1, "phase_started_at": int(time.time() * 1000)})
     batch.commit()
     logger.info("[CF-FFA] tournament %s finalized → bracket", tournament_id)

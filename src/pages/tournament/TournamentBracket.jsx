@@ -87,6 +87,7 @@ export default function TournamentBracket() {
   const autoLaunchedRef   = useRef(new Set())
   const autoAdvancedRef   = useRef(null)
   const autoFinishedRef   = useRef(false)
+  const autoTransitionRef = useRef(false)
 
   useEffect(() => {
     if (!tournamentId) return
@@ -152,6 +153,19 @@ export default function TournamentBracket() {
     .filter(m => m.status === 'pending' && m.player_a_uid && m.player_b_uid)
     .map(m => m.match_id).sort().join(',')
 
+  // ── Phase-transition gate (FFA → bracket) ──────────────────────────────────
+  // Round-1 matches must NOT auto-launch until the configured
+  // phase_transition_wait has elapsed since phase_started_at (set when the
+  // FFA ended). Players see the same countdown on their wait page.
+  const transitionWaitMs = (() => {
+    if (!tournament || tournament.status !== 'bracket') return 0
+    if ((tournament.current_round || 1) !== 1) return 0
+    const start = tournament.phase_started_at || 0
+    const wait  = tournament.phase_transition_wait || 0
+    if (!start || !wait) return 0
+    return Math.max(0, start + wait - Date.now())
+  })()
+
   useEffect(() => {
     if (!launchablePendingKey || !tournament || tournament.status !== 'bracket') return
     const toAutoLaunch = matches.filter(m =>
@@ -162,6 +176,17 @@ export default function TournamentBracket() {
     )
     if (!toAutoLaunch.length) return
 
+    // Round 1 waits for the FFA → bracket transition window.
+    if (transitionWaitMs > 0) {
+      const t = setTimeout(() => {
+        toAutoLaunch.forEach(m => {
+          autoLaunchedRef.current.add(m.match_id)
+          launchMatch(m)
+        })
+      }, transitionWaitMs + 500)
+      return () => clearTimeout(t)
+    }
+
     const t = setTimeout(() => {
       toAutoLaunch.forEach(m => {
         autoLaunchedRef.current.add(m.match_id)
@@ -170,7 +195,25 @@ export default function TournamentBracket() {
     }, 1500)
     return () => clearTimeout(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [launchablePendingKey, tournament?.status])
+  }, [launchablePendingKey, tournament?.status, transitionWaitMs])
+
+  // ── Round-1 transition countdown (host side — players get the same one) ────
+  useEffect(() => {
+    if (!tournament || tournament.status !== 'bracket') return
+    if ((tournament.current_round || 1) !== 1) return
+    if (!tournament.phase_started_at || !tournament.phase_transition_wait) return
+    if (transitionWaitMs <= 0) return
+    if (autoTransitionRef.current) return
+    autoTransitionRef.current = true
+    setCountdownLabel('الانتقال لمرحلة الـ Bracket')
+    setCountdownMs(transitionWaitMs)
+    setShowCountdown(true)
+  }, [
+    tournament?.status,
+    tournament?.current_round,
+    transitionWaitMs,
+    showCountdown,
+  ])
 
   useEffect(() => {
     if (!tournament || tournament.status !== 'bracket') return
@@ -187,6 +230,8 @@ export default function TournamentBracket() {
     setCountdownLabel(`استراحة قبل الجولة ${cRound + 1}`)
     setCountdownMs(tournament.round_break_time || 30000)
     setShowCountdown(true)
+    // Tell the players the break has started so they can count down with us.
+    updateDoc(doc(db, 'tournaments', tournamentId), { phase_started_at: Date.now() }).catch(() => {})
   }, [
     matches.map(m => m.match_id + m.status).join(','),
     tournament?.current_round,
