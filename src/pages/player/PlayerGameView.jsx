@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react'
+﻿import React, { useEffect, useState, useRef } from 'react'
 import MathText from '../../components/common/MathText'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ref, onValue, get, set, runTransaction, onDisconnect } from 'firebase/database'
-import { doc, updateDoc, increment, getDoc, setDoc, serverTimestamp, collection } from 'firebase/firestore'
+import { ref, onValue, get, set, update, runTransaction, onDisconnect } from 'firebase/database'
+import { doc, updateDoc, increment, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
@@ -10,9 +10,74 @@ import { Trophy, WifiOff, Download, Loader2, Edit2, Check, X } from 'lucide-reac
 import confetti from 'canvas-confetti'
 import QuestionImage from '../../components/QuestionImage'
 import { signAnswer, validateReactionTime, verifyAnswerHash } from '../../utils/crypto'
-import { initActivityLogger, getActivityLogger, logActivity } from '../../utils/activityLogger'
+import { initActivityLogger, getActivityLogger } from '../../utils/activityLogger'
 import { getDir } from '../../utils/rtlUtils'
+import { sortPlayers } from '../../utils/gameRunner'
 import { useUnattendedGameRunner } from '../../hooks/useUnattendedGameRunner'
+
+// ── Full live leaderboard (bottom sheet, players see everyone's standings) ───
+function FullLeaderboard({ players, myId, onClose }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(26,26,26,0.55)' }} onClick={onClose} />
+      <div style={{
+        position: 'relative', background: 'var(--paper)', borderTop: '3px double var(--rule-strong)',
+        maxHeight: '75svh', display: 'flex', flexDirection: 'column',
+        animation: 'mr-slide-up 220ms var(--ease-out) both',
+      }}>
+        <style>{`@keyframes mr-slide-up { from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }`}</style>
+
+        <div style={{
+          padding: '12px 20px', borderBottom: '2px solid var(--ink)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span className="folio" style={{ letterSpacing: '0.18em' }}>LIVE LEADERBOARD</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em' }}>✕ CLOSE</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', padding: '6px 0' }}>
+          {players.length === 0 && (
+            <p className="ar" style={{ textAlign: 'center', padding: '24px', color: 'var(--ink-4)', fontSize: 13 }}>لا يوجد لاعبون بعد…</p>
+          )}
+          {players.map((p, i) => {
+            const isMe = p.user_id === myId
+            const rankColor = i === 0 ? 'var(--gold)' : i === 1 ? 'var(--ink-3)' : i === 2 ? 'var(--burgundy)' : 'var(--ink-4)'
+            return (
+              <div key={p.user_id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 20px', borderBottom: '1px solid var(--rule)',
+                background: isMe ? 'var(--paper-2)' : 'var(--paper)',
+              }}>
+                <span style={{
+                  fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: rankColor, minWidth: 34,
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}>
+                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''}
+                  #{i + 1}
+                </span>
+                {p.avatar_url ? (
+                  <img src={p.avatar_url} alt="" style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--rule)' }} />
+                ) : (
+                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--paper-3)', border: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--serif)', fontSize: 11, color: 'var(--ink)' }}>
+                    {(p.nickname || '?')[0]}
+                  </div>
+                )}
+                <span style={{
+                  fontFamily: 'var(--serif)', fontSize: 14, fontWeight: isMe ? 700 : 500, color: 'var(--ink)',
+                  flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {p.nickname}{isMe ? ' (أنت)' : ''}
+                </span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>{p.score}</span>
+                <span className="folio" style={{ fontSize: 9, color: 'var(--ink-4)', minWidth: 40, textAlign: 'left' }}>{p.correct_count}✓</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ── Mini leaderboard strip ────────────────────────────────────────────────────
 function MiniLeaderboard({ top5, myId, myRank, myScore, myNickname }) {
@@ -122,12 +187,12 @@ export default function PlayerGameView() {
 
   const [room, setRoom]               = useState(null)
   const [player, setPlayer]           = useState(null)
-  const [leaderboard, setLeaderboard] = useState([])
+  const [livePlayers, setLivePlayers] = useState([])
   const [selectedChoice, setSelectedChoice] = useState(null)
   const [answerLocked, setAnswerLocked]     = useState(false)
   const [revealedResult, setRevealedResult] = useState(null)
   const [hostOnline, setHostOnline]         = useState(true)
-  const [top5, setTop5]                     = useState([])
+  const [showFullBoard, setShowFullBoard]   = useState(false)
 
   const [autoNavCountdown, setAutoNavCountdown] = useState(null)
 
@@ -315,10 +380,15 @@ export default function PlayerGameView() {
     return () => unsub()
   }, [roomId, session])
 
+  // ── LIVE leaderboard: subscribe to all players so the standings update the
+  //    moment scores change (host's page does the same). top5 + my rank are
+  //    derived here — no stale reveal-only snapshot.
   useEffect(() => {
     if (!session) return
-    const unsub = onValue(ref(rtdb, `rooms/${roomId}/leaderboard/top5`), snap => {
-      setTop5(snap.exists() ? Object.values(snap.val()) : [])
+    const unsub = onValue(ref(rtdb, `rooms/${roomId}/players`), snap => {
+      const data = snap.val()
+      if (!data) { setLivePlayers([]); return }
+      setLivePlayers(Object.values(data))
     })
     return () => unsub()
   }, [roomId, session])
@@ -556,8 +626,27 @@ export default function PlayerGameView() {
   const currentQ = room.questions?.questions?.[room.current_question_index]
   const myId     = session?.uid
 
+  // Live standings (same comparator as gameRunner: score ↓, correct ↓, speed ↑)
+  const sortedPlayers = sortPlayers(
+    livePlayers.map(p => ({
+      user_id: p.user_id,
+      nickname: p.nickname || 'لاعب',
+      avatar_url: p.avatar_url,
+      score: p.score ?? 0,
+      correct_count: p.correct_count ?? 0,
+      total_reaction_ms: p.total_reaction_ms ?? 0,
+    }))
+  )
+  const liveTop5 = sortedPlayers.slice(0, 5).map((p, i) => ({ ...p, rank: i + 1 }))
+  const liveMyRank = myId ? (sortedPlayers.findIndex(p => p.user_id === myId) + 1) || null : null
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100svh', background: 'var(--paper)', overflow: 'hidden' }}>
+
+      {/* ── Full leaderboard modal ───────────────────────────────────── */}
+      {showFullBoard && (
+        <FullLeaderboard players={sortedPlayers} myId={myId} onClose={() => setShowFullBoard(false)} />
+      )}
 
       {/* ── Host offline banner ───────────────────────────────────────── */}
       {!hostOnline && room?.status !== 'finished' && !room?.config?.unattended_mode && (
@@ -674,7 +763,23 @@ export default function PlayerGameView() {
               </div>
             )}
 
-            <MiniLeaderboard top5={top5} myId={myId} myRank={player?.rank} myScore={player?.score} myNickname={player?.nickname} />
+            <MiniLeaderboard top5={liveTop5} myId={myId} myRank={liveMyRank ?? player?.rank} myScore={player?.score} myNickname={player?.nickname} />
+
+            {/* Full leaderboard toggle */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowFullBoard(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '7px 14px', border: '1px solid var(--rule)', background: 'var(--paper-2)',
+                  fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 600, color: 'var(--ink)',
+                  cursor: 'pointer', transition: 'all 150ms',
+                }}
+              >
+                <Trophy size={13} style={{ color: 'var(--gold)' }} />
+                <span className="ar">الترتيب الكامل ({sortedPlayers.length})</span>
+              </button>
+            </div>
 
             {/* Question card */}
             <div dir={getDir(currentQ.question, room.force_rtl)} style={{
@@ -769,7 +874,23 @@ export default function PlayerGameView() {
         {room.status === 'revealing' && currentQ && (
           <div style={{ width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-            <MiniLeaderboard top5={top5} myId={myId} myRank={player?.rank} myScore={player?.score} myNickname={player?.nickname} />
+            <MiniLeaderboard top5={liveTop5} myId={myId} myRank={liveMyRank ?? player?.rank} myScore={player?.score} myNickname={player?.nickname} />
+
+            {/* Full leaderboard toggle */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowFullBoard(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '7px 14px', border: '1px solid var(--rule)', background: 'var(--paper-2)',
+                  fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 600, color: 'var(--ink)',
+                  cursor: 'pointer', transition: 'all 150ms',
+                }}
+              >
+                <Trophy size={13} style={{ color: 'var(--gold)' }} />
+                <span className="ar">الترتيب الكامل ({sortedPlayers.length})</span>
+              </button>
+            </div>
 
             {/* Question (dimmed) */}
             <div dir={getDir(currentQ.question, room.force_rtl)} style={{
@@ -926,17 +1047,36 @@ export default function PlayerGameView() {
                 <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--ink-4)', marginLeft: 4 }}>pts</span>
               </p>
 
-              {/* Top 5 final */}
-              {top5.length > 0 && (
+              {/* Full final standings (everyone, not just top 5) */}
+              {sortedPlayers.length > 0 && (
                 <div style={{ border: '1px solid var(--rule)', marginBottom: 24 }}>
-                  {top5.map(p => (
+                  <div style={{
+                    padding: '8px 14px', borderBottom: '2px solid var(--ink)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  }}>
+                    <span className="folio" style={{ letterSpacing: '0.18em' }}>FINAL STANDINGS</span>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-4)' }}>{sortedPlayers.length} لاعب</span>
+                  </div>
+                  {sortedPlayers.map((p, i) => (
                     <div key={p.user_id} style={{
                       padding: '9px 14px', borderBottom: '1px solid var(--rule)',
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       background: p.user_id === myId ? 'var(--paper-2)' : 'var(--paper)',
                     }}>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)', minWidth: 20 }}>#{p.rank}</span>
-                      <span style={{ fontFamily: 'var(--serif)', fontSize: 14, color: 'var(--ink)', flex: 1, textAlign: 'left', marginLeft: 8 }}>{p.nickname}</span>
+                      <span style={{
+                        fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700,
+                        color: i === 0 ? 'var(--gold)' : i === 1 ? 'var(--ink-3)' : i === 2 ? 'var(--burgundy)' : 'var(--ink-4)',
+                        minWidth: 44,
+                      }}>
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''} #{i + 1}
+                      </span>
+                      <span style={{
+                        fontFamily: 'var(--serif)', fontSize: 14, color: 'var(--ink)',
+                        flex: 1, textAlign: 'left', marginLeft: 8, fontWeight: p.user_id === myId ? 700 : 500,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {p.nickname}{p.user_id === myId ? ' (أنت)' : ''}
+                      </span>
                       <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{p.score}</span>
                     </div>
                   ))}
