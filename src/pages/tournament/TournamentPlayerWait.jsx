@@ -189,6 +189,18 @@ export default function TournamentPlayerWait() {
     }
   }, [tournament?.status, tournament?.ffa_room_id, navigate])
 
+  const isEliminated = ffaEliminated || myResult === 'eliminated'
+  const isFinished   = tournament?.status === 'finished'
+  const amChampion   = isFinished && tournament?.winner_uid === uid
+
+  useEffect(() => {
+    if (amChampion) {
+      soundManager.playVictory()
+    } else if (isEliminated) {
+      soundManager.playDefeat()
+    }
+  }, [amChampion, isEliminated])
+
   /* ── Loading ────────────────────────────────────────────────────────────── */
   if (!tournament) {
     return (
@@ -205,23 +217,11 @@ export default function TournamentPlayerWait() {
     )
   }
 
-  const isEliminated = ffaEliminated || myResult === 'eliminated'
-  const isFinished   = tournament.status === 'finished'
-  const amChampion   = isFinished && tournament.winner_uid === uid
-
   // Right after the FFA (the round-1 transition window) it is the headline;
   // after that it stays out of the way until the tournament is over.
   const justAfterFfa      = tournament.status === 'bracket' && isRoundOne && inPhaseWait
   const showFfaStandings  = ffaResults.length > 0 && (justAfterFfa || isFinished)
   const ffaTableOpen      = justAfterFfa || (isFinished && showFfaTable)
-
-  useEffect(() => {
-    if (amChampion) {
-      soundManager.playVictory()
-    } else if (isEliminated) {
-      soundManager.playDefeat()
-    }
-  }, [amChampion, isEliminated])
 
   return (
     <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>

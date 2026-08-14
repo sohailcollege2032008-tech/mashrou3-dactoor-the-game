@@ -245,6 +245,33 @@ export default function DuelResults() {
     })
   }, [duelId, uid])
 
+  const players = duel?.players || {}
+  const playerUids = Object.keys(players)
+  const me = uid ? players[uid] : null
+  const opponentUid = playerUids.find(p => p !== uid)
+  const opponent = opponentUid ? players[opponentUid] : null
+
+  const myScore = me?.score ?? 0
+  const opponentScore = opponent?.score ?? 0
+
+  let outcome = 'tie'
+  if (me && opponent) {
+    if (myScore > opponentScore) outcome = 'win'
+    else if (myScore < opponentScore) outcome = 'lose'
+  }
+  if (duel?.forfeit_by === opponentUid) outcome = 'win_forfeit'
+  if (duel?.forfeit_by === uid) outcome = 'lose_forfeit'
+  if (duel?.surrender_by) outcome = 'draw_surrender'
+
+  useEffect(() => {
+    if (!duel || loading) return
+    if (outcome.startsWith('win')) {
+      soundManager.playVictory()
+    } else if (outcome.startsWith('lose')) {
+      soundManager.playDefeat()
+    }
+  }, [outcome, duel, loading])
+
   /* ── Loading ────────────────────────────────────────────────────────────── */
   if (loading) {
     return (
@@ -294,24 +321,6 @@ export default function DuelResults() {
     )
   }
 
-  const players = duel.players || {}
-  const playerUids = Object.keys(players)
-  const me = uid ? players[uid] : null
-  const opponentUid = playerUids.find(p => p !== uid)
-  const opponent = opponentUid ? players[opponentUid] : null
-
-  const myScore = me?.score ?? 0
-  const opponentScore = opponent?.score ?? 0
-
-  let outcome = 'tie'
-  if (me && opponent) {
-    if (myScore > opponentScore) outcome = 'win'
-    else if (myScore < opponentScore) outcome = 'lose'
-  }
-  if (duel.forfeit_by === opponentUid) outcome = 'win_forfeit'
-  if (duel.forfeit_by === uid) outcome = 'lose_forfeit'
-  if (duel.surrender_by) outcome = 'draw_surrender'
-
   const outcomeConfig = {
     win:           { headline: 'Victory.',   sub: 'فزت!',            color: 'var(--gold)',    folio: 'WIN' },
     lose:          { headline: 'Defeat.',    sub: 'خسرت.',           color: 'var(--alert)',   folio: 'LOSE' },
@@ -320,14 +329,6 @@ export default function DuelResults() {
     lose_forfeit:  { headline: 'Defeat.',    sub: 'خسرت بالانسحاب', color: 'var(--alert)',   folio: 'LOSE — FORFEIT' },
     draw_surrender:{ headline: 'Draw.',      sub: 'تعادل بالاستسلام', color: 'var(--navy)',  folio: 'DRAW — SURRENDER' },
   }[outcome] ?? { headline: 'Finished.', sub: 'انتهت اللعبة', color: 'var(--ink-3)', folio: 'END' }
-
-  useEffect(() => {
-    if (outcome.startsWith('win')) {
-      soundManager.playVictory()
-    } else if (outcome.startsWith('lose')) {
-      soundManager.playDefeat()
-    }
-  }, [outcome])
 
   return (
     <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
