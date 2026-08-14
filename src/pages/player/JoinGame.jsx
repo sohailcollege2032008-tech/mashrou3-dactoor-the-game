@@ -1,9 +1,11 @@
 import React, { useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ref, get, set, update } from 'firebase/database'
-import { rtdb } from '../../lib/firebase'
+import { collection, query, where, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useAuthStore } from '../../stores/authStore'
+import { addActiveTournamentId } from '../../utils/activeTournament'
 
 export default function JoinGame() {
   const { profile, session } = useAuth()
@@ -22,8 +24,17 @@ export default function JoinGame() {
   React.useEffect(() => {
     if (code.length !== 6) { setPreviewStatus(null); return }
     let cancelled = false
-    get(ref(rtdb, `rooms/${code.toUpperCase()}/status`)).then(snap => {
-      if (!cancelled) setPreviewStatus(snap.exists() ? snap.val() : 'not_found')
+    const trimmed = code.toUpperCase()
+    get(ref(rtdb, `rooms/${trimmed}/status`)).then(async snap => {
+      if (cancelled) return
+      if (snap.exists()) {
+        setPreviewStatus(snap.val())
+      } else {
+        const tourneySnap = await getDocs(
+          query(collection(db, 'tournaments'), where('code', '==', trimmed))
+        )
+        if (!cancelled) setPreviewStatus(!tourneySnap.empty ? 'tournament' : 'not_found')
+      }
     }).catch(() => {})
     return () => { cancelled = true }
   }, [code])
@@ -35,7 +46,52 @@ export default function JoinGame() {
     const roomCode = code.toUpperCase()
     try {
       const roomSnap = await get(ref(rtdb, `rooms/${roomCode}`))
-      if (!roomSnap.exists()) { alert('Invalid Room Code'); setLoading(false); return }
+      if (!roomSnap.exists()) {
+        // Fallback: Check if this 6-character code belongs to a Tournament!
+        const tourneySnap = await getDocs(
+          query(collection(db, 'tournaments'), where('code', '==', roomCode))
+        )
+        if (!tourneySnap.empty) {
+          const tDoc = tourneySnap.docs[0]
+          const tournament = tDoc.data()
+          const tId = tDoc.id
+
+          const userId = session?.uid
+          if (!userId) {
+            alert('يجب تسجيل الدخول أولاً')
+            setLoading(false)
+            return
+          }
+
+          const nicknameVal = nickname.trim() || profile?.display_name || profile?.email || 'لاعب'
+          const avatar = profile?.avatar_url || null
+
+          // Register in Firestore & RTDB
+          await setDoc(doc(db, 'tournaments', tId, 'registrations', userId), {
+            uid: userId,
+            nickname: nicknameVal,
+            avatar_url: avatar,
+            registered_at: serverTimestamp(),
+          })
+
+          await set(ref(rtdb, `tournament_registrations/${tId}/${userId}`), {
+            uid: userId,
+            nickname: nicknameVal,
+            avatar_url: avatar,
+            registered_at: Date.now(),
+          })
+
+          addActiveTournamentId(tId)
+          navigate(`/tournament/${tId}/wait`)
+          setLoading(false)
+          return
+        }
+
+        alert('كود الغرفة أو البطولة غير صحيح')
+        setLoading(false)
+        return
+      }
+
       const roomData = roomSnap.val()
       if (roomData.status === 'finished') { alert('هذه المسابقة انتهت بالفعل'); setLoading(false); return }
       const userId = session.uid
