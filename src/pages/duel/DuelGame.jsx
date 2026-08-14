@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import MathText from '../../components/common/MathText'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
@@ -14,6 +14,8 @@ import {
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { findCorrectForDuel } from '../../utils/crypto'
+import { soundManager } from '../../utils/soundManager'
+import SoundToggle from '../../components/common/SoundToggle'
 import { WifiOff, LogOut, Flag } from 'lucide-react'
 
 const QUESTION_DURATION_MS    = 30_000
@@ -128,6 +130,36 @@ export default function DuelGame({
   }, [])
 
   useEffect(() => { duelRef.current = duel }, [duel])
+
+  // ── Sound Effect Triggers ──────────────────────────────────────────────────
+  const soundPlayedQiRef = useRef(-1)
+  const lastTickTimeRef = useRef(0)
+
+  useEffect(() => {
+    if (!duel || isObserver) return
+    const qi = duel.current_question_index ?? 0
+    if (duel.status === 'revealing' && soundPlayedQiRef.current !== qi) {
+      soundPlayedQiRef.current = qi
+      const myAns = duel.answers?.[qi]?.[uid]
+      if (myAns?.is_correct) {
+        soundManager.playCorrect()
+      } else {
+        soundManager.playWrong()
+      }
+    }
+  }, [duel?.status, duel?.current_question_index, duel?.answers, uid, isObserver])
+
+  useEffect(() => {
+    if (isObserver || duel?.status !== 'playing') return
+    const sec = Math.ceil(timerPct * (activeDurationMs / 1000))
+    if (sec > 0 && sec <= 5) {
+      const now = Date.now()
+      if (now - lastTickTimeRef.current >= 950) {
+        lastTickTimeRef.current = now
+        soundManager.playTick()
+      }
+    }
+  }, [timerPct, duel?.status, activeDurationMs, isObserver])
 
   useEffect(() => {
     if (!duelId || !uid || isObserver) return
@@ -435,6 +467,7 @@ export default function DuelGame({
 
   const submitAnswer = useCallback(async (choiceIndex) => {
     if (isObserver || hasAnswered || !duel || duel.status !== 'playing' || !uid) return
+    soundManager.playButtonClick()
     const startedAt = duel.question_started_at || serverNow()
     const reactionTimeMs = serverNow() - startedAt
     setSelectedChoice(choiceIndex)
@@ -630,9 +663,12 @@ export default function DuelGame({
         <PlayerPill player={myPlayer} score={myPlayer?.score} align="right" />
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>
-            {qi + 1} / {duel.total_questions}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>
+              {qi + 1} / {duel.total_questions}
+            </span>
+            <SoundToggle showPreviewBtn={true} />
+          </div>
           <span style={{
             fontFamily: 'var(--mono)', fontSize: isObserver ? 14 : 20, fontWeight: 700,
             color: isObserver ? 'var(--ink-4)' : timeLeftSec <= 5 ? 'var(--alert)' : 'var(--ink)',

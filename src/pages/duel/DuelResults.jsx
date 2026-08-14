@@ -6,6 +6,8 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { recordPlayedQuestions } from '../../utils/duelUtils'
 import { useAuth } from '../../hooks/useAuth'
+import { soundManager } from '../../utils/soundManager'
+import SoundToggle from '../../components/common/SoundToggle'
 import { X } from 'lucide-react'
 
 // ── Review Modal ──────────────────────────────────────────────────────────────
@@ -318,6 +320,14 @@ export default function DuelResults() {
     lose_forfeit:  { headline: 'Defeat.',    sub: 'خسرت بالانسحاب', color: 'var(--alert)',   folio: 'LOSE — FORFEIT' },
     draw_surrender:{ headline: 'Draw.',      sub: 'تعادل بالاستسلام', color: 'var(--navy)',  folio: 'DRAW — SURRENDER' },
   }[outcome] ?? { headline: 'Finished.', sub: 'انتهت اللعبة', color: 'var(--ink-3)', folio: 'END' }
+
+  useEffect(() => {
+    if (outcome.startsWith('win')) {
+      soundManager.playVictory()
+    } else if (outcome.startsWith('lose')) {
+      soundManager.playDefeat()
+    }
+  }, [outcome])
 
   return (
     <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>

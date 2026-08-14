@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   doc, onSnapshot, collection, getDoc, getDocs, setDoc, serverTimestamp,
@@ -9,6 +9,8 @@ import { useAuth } from '../../hooks/useAuth'
 import { removeActiveTournamentId } from '../../utils/activeTournament'
 import { sortPlayers } from '../../utils/gameRunner'
 import BracketTree from '../../components/tournament/BracketTree'
+import { soundManager } from '../../utils/soundManager'
+import SoundToggle from '../../components/common/SoundToggle'
 import { Loader2, Trophy, ChevronDown, ChevronUp } from 'lucide-react'
 
 const STATUS_LABELS = {
@@ -165,6 +167,7 @@ export default function TournamentPlayerWait() {
 
   useEffect(() => {
     if (myMatch?.status === 'active' && myMatch?.duel_id) {
+      soundManager.playMatchAlert()
       navigate(`/tournament/${tournamentId}/duel/${myMatch.match_id}`, { replace: true })
     }
   }, [myMatch, tournamentId, navigate])
@@ -212,6 +215,14 @@ export default function TournamentPlayerWait() {
   const showFfaStandings  = ffaResults.length > 0 && (justAfterFfa || isFinished)
   const ffaTableOpen      = justAfterFfa || (isFinished && showFfaTable)
 
+  useEffect(() => {
+    if (amChampion) {
+      soundManager.playVictory()
+    } else if (isEliminated) {
+      soundManager.playDefeat()
+    }
+  }, [amChampion, isEliminated])
+
   return (
     <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
 
@@ -221,7 +232,10 @@ export default function TournamentPlayerWait() {
         padding: '13px 20px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <span className="folio" style={{ flex: 1 }}>Tournament</span>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="folio">Tournament</span>
+          <SoundToggle showPreviewBtn={true} />
+        </div>
         <svg width={28} height={28} viewBox="0 0 100 100" fill="none">
           <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
           <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />
