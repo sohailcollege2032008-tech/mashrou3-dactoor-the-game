@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Volume2, VolumeX, Play, Sliders, Sparkles, Bell, Trophy, ShieldAlert, CheckCircle, XCircle, Clock, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Volume2, VolumeX, Play, Sliders, Sparkles, Bell, Trophy, ShieldAlert, CheckCircle, XCircle, Clock, ArrowLeft, RefreshCw, ThumbsUp, Radio } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { soundManager } from '../../utils/soundManager';
 import { useSoundStore } from '../../stores/soundStore';
@@ -11,72 +11,81 @@ export default function SoundTest() {
 
   const soundCatalog = [
     {
-      id: 'match_alert',
-      nameAr: 'تنبيه استدعاء للمباراة (Match Alert)',
-      nameEn: 'Match Call Notification',
-      desc: 'نغمة تنبيه 3 نغمات متصاعدة عند جاهزية المباراة واستدعاء اللاعب',
-      icon: Bell,
-      color: 'text-amber-400 bg-amber-500/10 border-amber-500/30 hover:border-amber-400',
-      play: () => soundManager.playMatchAlert(),
-    },
-    {
-      id: 'stage_start',
-      nameAr: 'بداية مرحلة جديدة (Stage Start)',
-      nameEn: 'Round / Stage Transition',
-      desc: 'صوت حماسي عند الانقال لربع/نصف النهائي أو جولة جديدة',
-      icon: Sparkles,
-      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30 hover:border-cyan-400',
-      play: () => soundManager.playStageStart(),
-    },
-    {
-      id: 'correct',
-      nameAr: 'إجابة صحيحة (Correct Answer)',
-      nameEn: 'Arcade Double Ding',
-      desc: 'صوت إجابة صحيحة (C6 -> E6)',
-      icon: CheckCircle,
-      color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-400',
-      play: () => soundManager.playCorrect(),
-    },
-    {
-      id: 'wrong',
-      nameAr: 'إجابة خاطئة (Wrong Answer)',
-      nameEn: 'Low Sawtooth Buzz',
-      desc: 'نغمة خطأ منخفضة عند الإجابة الخاطئة',
-      icon: XCircle,
-      color: 'text-rose-400 bg-rose-500/10 border-rose-500/30 hover:border-rose-400',
-      play: () => soundManager.playWrong(),
-    },
-    {
       id: 'victory',
-      nameAr: 'نغمة الفوز والتتويج (Victory)',
-      nameEn: 'Champion Fanfare',
-      desc: 'موسيقى تتويج الفائز بالبطولة أو الدويل',
+      nameAr: 'نغمة الفوز والتتويج (Victory Trumpet MP3)',
+      nameEn: 'Real Victory Horn Sound',
+      desc: 'صوت نفخ أبواق النصر والتتويج الحقيقي للبطولات والمباريات (MP3)',
       icon: Trophy,
       color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30 hover:border-yellow-400',
       play: () => soundManager.playVictory(),
     },
     {
+      id: 'applause',
+      nameAr: 'تصفيق وتفاعل الجمهور (Audience Applause MP3)',
+      nameEn: 'Real Crowd Cheering & Applause',
+      desc: 'صوت تصفيق وتشجيع حار من الجمهور بطل البطولة (MP3)',
+      icon: ThumbsUp,
+      color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-400',
+      play: () => soundManager.playApplause(),
+    },
+    {
+      id: 'stage_start',
+      nameAr: 'افتتاح الجولات والمراحل (Tada Fanfare MP3)',
+      nameEn: 'Tada Stage Opening Sound',
+      desc: 'صوت حماسي لاقتتاح ربع ونصف النهائي والجولات الجديدة (MP3)',
+      icon: Sparkles,
+      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30 hover:border-cyan-400',
+      play: () => soundManager.playStageStart(),
+    },
+    {
+      id: 'wrong',
+      nameAr: 'صوت الإجابة الخاطئة (Game Show Wrong Buzzer MP3)',
+      nameEn: 'Real Wrong Buzzer Sound',
+      desc: 'صوت البوزر الحقيقي للبرامج والمنافسات عند الإجابة الخاطئة (MP3)',
+      icon: XCircle,
+      color: 'text-rose-400 bg-rose-500/10 border-rose-500/30 hover:border-rose-400',
+      play: () => soundManager.playWrong(),
+    },
+    {
       id: 'defeat',
-      nameAr: 'نغمة الخسارة (Defeat / Game Over)',
-      nameEn: 'Minor Descending Cadence',
-      desc: 'صوت عند الإقصاء أو خسارة المبارارة',
+      nameAr: 'نغمة الخسارة والاستهجان (Audience Booing MP3)',
+      nameEn: 'Real Defeat & Boo Sound',
+      desc: 'صوت الخسارة والإقصاء من البطولة (MP3)',
       icon: ShieldAlert,
       color: 'text-purple-400 bg-purple-500/10 border-purple-500/30 hover:border-purple-400',
       play: () => soundManager.playDefeat(),
     },
     {
+      id: 'match_alert',
+      nameAr: 'تنبيه استدعاء للمباراة (Tension Gasp Alert MP3)',
+      nameEn: 'Match Call & Crowd Gasp Alert',
+      desc: 'نغمة حماسية عند جاهزية المبارارة واستدعاء اللاعب (MP3)',
+      icon: Bell,
+      color: 'text-amber-400 bg-amber-500/10 border-amber-500/30 hover:border-amber-400',
+      play: () => soundManager.playMatchAlert(),
+    },
+    {
+      id: 'correct',
+      nameAr: 'إجابة صحيحة (Arcade High Chime)',
+      nameEn: 'Arcade Twin Chime',
+      desc: 'صوت إجابة صحيحة محاكاة للألعاب السريعة',
+      icon: CheckCircle,
+      color: 'text-green-400 bg-green-500/10 border-green-500/30 hover:border-green-400',
+      play: () => soundManager.playCorrect(),
+    },
+    {
       id: 'tick',
-      nameAr: 'تكتكة الثواني الأخيرة (Countdown Tick)',
-      nameEn: 'Urgent Timer Tap',
-      desc: 'تكتكة سريعة في آخر 5 ثوانٍ من الوقت',
+      nameAr: 'تكتكة الثواني الأخيرة (Countdown Tap)',
+      nameEn: 'Mechanical Clock Tap',
+      desc: 'تكتكة سريعة في آخر 5 ثوانٍ من السؤال',
       icon: Clock,
       color: 'text-blue-400 bg-blue-500/10 border-blue-500/30 hover:border-blue-400',
       play: () => soundManager.playTick(),
     },
     {
       id: 'button_click',
-      nameAr: 'نقر زر UI (Button Click)',
-      nameEn: 'UI Switch Click',
+      nameAr: 'نقر زر UI (Mechanical Click)',
+      nameEn: 'UI Click Switch',
       desc: 'صوت خفيف عند الضغط على الأزرار',
       icon: RefreshCw,
       color: 'text-gray-300 bg-gray-700/30 border-gray-600/30 hover:border-gray-400',
@@ -87,7 +96,7 @@ export default function SoundTest() {
   const handlePlaySound = (sound) => {
     setActivePlaying(sound.id);
     sound.play();
-    setTimeout(() => setActivePlaying(null), 800);
+    setTimeout(() => setActivePlaying(null), 1200);
   };
 
   return (
@@ -108,8 +117,9 @@ export default function SoundTest() {
           </button>
 
           <div className="flex items-center gap-3">
-            <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono rounded-full">
-              Standalone Admin Studio
+            <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono rounded-full flex items-center gap-1.5">
+              <Radio className="w-3.5 h-3.5 animate-pulse" />
+              Real HQ MP3 Sound Assets Loaded
             </span>
           </div>
         </div>
@@ -122,13 +132,13 @@ export default function SoundTest() {
             <div>
               <div className="flex items-center gap-2 text-primary font-mono text-xs font-semibold mb-2">
                 <Sliders className="w-4 h-4" />
-                <span>MED ROYALE — SOUND EFFECTS LABORATORY</span>
+                <span>MED ROYALE — REAL MP3 AUDIO LABORATORY</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
-                صفحة اختبار واستماع المؤثرات الصوتية 🎧
+                مختبر استماع المؤثرات الصوتية الحقيقية (HQ MP3) 🎙️
               </h1>
               <p className="text-sm text-gray-400 mt-2 max-w-xl leading-relaxed">
-                هذه الصفحة مستقلة ومخصصة لك لاستماع جميع المؤثرات الصوتية واختبار نبرتها ومستوى الصوت، قبل اعتمادها رسمياً في البطولة والألعاب.
+                تم تحديث المؤثرات باستخدام ملفات صووتية حقيقية عالية الجودة (MP3) لتصفيق الجمهور، أبواق الفوز، بوزر الإجابة الخاطئة، وافتتاح الجولات!
               </p>
             </div>
 
@@ -202,7 +212,7 @@ export default function SoundTest() {
                     }`}
                   >
                     <Play className={`w-4 h-4 fill-current ${isPlaying ? 'animate-bounce' : ''}`} />
-                    <span>{isPlaying ? 'جاري التشغيل…' : 'استمع للمؤثر (Play)'}</span>
+                    <span>{isPlaying ? 'جاري التشغيل…' : 'استمع للملف (Play MP3)'}</span>
                   </button>
                 </div>
               </div>
@@ -214,7 +224,7 @@ export default function SoundTest() {
         <div className="p-5 rounded-2xl bg-blue-950/30 border border-blue-800/40 text-blue-300 text-xs leading-relaxed">
           <p className="font-bold mb-1">📌 ملاحظة Sohail:</p>
           <p>
-            المؤثرات حالياً متواجدة على هذه الصفحة التجريبية فقط. عند الاستماع لجميع الأصوات واختيار الاعتماد النهائي، أخبرني بـ "تمام" وسأقوم بربطها بالمباريات والبطولة فوراً!
+            تأكد من تجربة جميع ملفات الـ MP3 الحقيقية في هذه الصفحة، وبمجرد موافقتك قل لي "تمام" وسأقوم بربط الأصوات المعتمدة فوراً بالألعاب والبطولات!
           </p>
         </div>
 
