@@ -464,7 +464,9 @@ export default function TournamentPlayerWait() {
                   textAlign: 'center',
                 }}>
                   <p className="folio" style={{ color: 'var(--gold)', letterSpacing: '0.22em', marginBottom: 10 }}>
-                    {isRoundOne ? 'PHASE II · BRACKET STARTS IN' : `ROUND ${(tournament.current_round || 1) + 1} STARTS IN`}
+                    {/* current_round is already the round that is about to
+                        start — the CF bumps it before the break begins. */}
+                    {isRoundOne ? 'PHASE II · BRACKET STARTS IN' : `ROUND ${tournament.current_round || 1} STARTS IN`}
                   </p>
                   <p style={{
                     fontFamily: 'var(--mono)', fontSize: 56, fontWeight: 700, color: 'var(--ink)',
