@@ -65,7 +65,8 @@ otherwise                              → player
 ### `tournaments/{id}` (status machine: `registration → ffa → bracket → finished`)
 ```js
 { code (6-char), host_id, title, deck_id, deck_title,
-  top_cut (8/16/32/64/128|null=auto), is_auto_top_cut, actual_top_cut, total_rounds,
+  top_cut (2/4/8/16/32/64/128 — a cap, editable while status='registration'),
+  is_auto_top_cut (legacy, always false), actual_top_cut, total_rounds,
   ffa_question_duration, duel_question_duration, phase_transition_wait, round_break_time (ms),
   scheduled_start_at?, ffa_room_id, current_round, winner_uid, winner_name,
   round_questions: { ffa: number[], '1': number[], ... } }
@@ -218,7 +219,23 @@ once-a-minute reconciler that repairs whatever is still stuck.
 - Equal 0 (0–0) → FFA rank decides.
 
 ### Question assignment
-`round_questions: { ffa: [...], '1': [...], ... }` — host can assign specific deck indices per round via `QuestionAssignmentPanel`; otherwise random unused.
+`round_questions: { ffa: [...], '1': [...], ... }` — deck indices per slot, assigned in `QuestionAssignmentPanel` (drag, tap, or the "من / إلى" range tool).
+
+**Assignment is mandatory.** `validateRoundAssignments` (in `tournamentUtils.js`)
+requires ≥ 1 question for `ffa` and ≥ `QUESTIONS_PER_MATCH` (5) for every round
+implied by `top_cut`; `TournamentLobby` blocks the FFA launch — manual button and
+scheduled auto-launch alike — until it passes. The CF's random-unused fallback in
+`_questions_for_round` survives only as a safety net for legacy tournaments.
+
+A bracket round plays **all** the questions in its slot, so assigning 12 to round
+1 makes every round-1 match 12 questions long (the panel labels this `N سؤال / ماتش`).
+
+**Bracket cap.** `top_cut` is a cap, not a promise: `actual_top_cut` shrinks to the
+largest power of 2 ≤ registrations, but never grows past it. The host can change it
+from the lobby for as long as `status === 'registration'` — the moment the real
+turnout is known. Lowering it deletes the trailing rounds from `round_questions`
+(the panel's `reshapeAssignments`), returning those questions to the side pool.
+Once the bracket exists the cap is locked (`editableTopCut={false}` in `TournamentBracket`).
 
 ### Player histories
 - `game_history` entries: `tournament_ffa` (after FFA), `tournament_match` (per match), `tournament_summary` (eliminated players + finalists + champion: `final_result` ∈ champion|finalist|semi_finalist|eliminated_bracket|eliminated_ffa).

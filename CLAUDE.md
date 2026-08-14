@@ -398,3 +398,12 @@ Used in: `UploadQuestionsModal.jsx` (AI tab)
 12. **One live tournament at a time.** The host dashboard lists every active
     tournament and `TournamentCreate` warns before a second one is started;
     with two live, players and host can end up in different brackets.
+13. **Round question assignment is mandatory.** `validateRoundAssignments` gates
+    the FFA launch (manual *and* scheduled auto-launch). Don't reintroduce
+    "leave it empty for random" as a supported path — the CF fallback in
+    `_questions_for_round` is a legacy safety net, not a feature.
+14. **`top_cut` is a cap, editable only while `status === 'registration'`.**
+    That's the window where the host learns the real turnout. Once the bracket
+    exists the round count is fixed — questions are already assigned per round
+    and matches may have played. Lowering the cap must release the dropped
+    rounds' questions back to the pool (`reshapeAssignments`).
