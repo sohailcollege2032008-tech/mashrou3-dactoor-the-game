@@ -54,8 +54,9 @@ firebase deploy --only functions         # Python Cloud Functions (needs venv, s
 
 ## Documentation
 
+- `docs/CHANGE_AUDIT.md` — **neutral audit of the 2026-08 changes**: every commit, test evidence, limitations, unresolved items, QA guide
 - `docs/ARCHITECTURE.md` — full current system: data model, state machines, Cloud Functions, security rules, scoring
-- `docs/FINAL_TEST_REPORT.md` — 2026-08 full audit: bugs found, fixes shipped, E2E evidence
+- `docs/FINAL_TEST_REPORT.md` — 2026-08 full audit narrative: bugs found, fixes shipped, E2E evidence
 - `docs/MIGRATION_GUIDE.md` — history of the Supabase → Firebase migration
 - `CLAUDE.md` / `GEMINI.md` — workspace instructions for AI agents
 
