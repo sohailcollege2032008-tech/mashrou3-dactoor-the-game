@@ -385,9 +385,15 @@ Used in: `UploadQuestionsModal.jsx` (AI tab)
 9. **Tournament duel ids are the `match_id`**, not `push()` ids — that is what
    makes launching idempotent when the host tab and the Cloud Function race.
    Never reintroduce `push()` under `tournament_duels/{tid}`.
-10. **Answer hashes are bound to the question's final index.** Tiebreaker
+10. **RTDB transactions in Python abort by RAISING, not by returning `None`.**
+    `firebase_admin.db.Reference.transaction` feeds the return value straight to
+    `set_if_unchanged`, so `return None` throws
+    `ValueError: Value must not be none.` and kills the invocation. Use the
+    `_Abort` exception + `_try_transaction()` helper in `functions/main.py`.
+    (This is the opposite of the JS SDK, where returning `undefined` aborts.)
+11. **Answer hashes are bound to the question's final index.** Tiebreaker
     questions get appended to `questions`, so they must be hashed with
     `questions.length + i`, not from 0 — hash them in one pass with the main set.
-11. **One live tournament at a time.** The host dashboard lists every active
+12. **One live tournament at a time.** The host dashboard lists every active
     tournament and `TournamentCreate` warns before a second one is started;
     with two live, players and host can end up in different brackets.

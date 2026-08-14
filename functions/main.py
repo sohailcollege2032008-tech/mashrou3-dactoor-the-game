@@ -80,6 +80,26 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+class _Abort(Exception):
+    """
+    Raised inside an RTDB transaction_update to leave the value untouched.
+
+    The Python admin SDK has no "return None to abort" contract — returning None
+    makes it try to write null and blow up with
+    ``ValueError: Value must not be none.``, killing the invocation. Aborting is
+    documented as raising, and the exception propagates to the caller.
+    """
+
+
+def _try_transaction(ref, update_fn) -> bool:
+    """Run a transaction that may abort. True if it committed, False if aborted."""
+    try:
+        ref.transaction(update_fn)
+        return True
+    except _Abort:
+        return False
+
+
 def _find_correct_c(duel_id: str, qi: int, question: object) -> object:
     """
     Return the correct-choice index for a question.
@@ -155,7 +175,7 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
     def claim_fn(current):
         captured["won"] = False          # reset on every retry
         if current is None or current.get("status") != "playing":
-            return None                  # abort — another path already claimed it
+            raise _Abort()               # another path already claimed it
         captured["duel"] = current
         captured["won"]  = True
         return {
@@ -164,7 +184,7 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
             "reveal_started_at": reveal_ts,
         }
 
-    duel_ref.transaction(claim_fn)
+    _try_transaction(duel_ref, claim_fn)
 
     if not captured["won"]:
         return  # client timer or another CF invocation won the race
@@ -261,7 +281,7 @@ def on_tournament_reveal_started(event: db_fn.Event[db_fn.Change]) -> None:
 
     def advance_fn(current):
         if current is None or current.get("status") != "revealing":
-            return None  # abort — already advanced
+            raise _Abort()  # already advanced
 
         next_qi  = (current.get("current_question_index") or 0) + 1
         total_qs = current.get("total_questions") or 0
@@ -301,7 +321,7 @@ def on_tournament_reveal_started(event: db_fn.Event[db_fn.Change]) -> None:
             "reveal_started_at":      None,
         }
 
-    duel_ref.transaction(advance_fn)
+    _try_transaction(duel_ref, advance_fn)
     logger.info("[CF] Advanced duel — tournament=%s duel=%s", tournament_id, duel_id)
 
 # ── Function 3 ─────────────────────────────────────────────────────────────────
@@ -714,11 +734,11 @@ def _launch_match(fs, tournament_id: str, tourn: dict, match: dict) -> bool:
     def create_fn(current):
         won["v"] = False
         if current is not None:
-            return None          # someone created it first — abort
+            raise _Abort()       # someone created it first
         won["v"] = True
         return payload
 
-    duel_ref.transaction(create_fn)
+    _try_transaction(duel_ref, create_fn)
     _mark_match_active(fs, tournament_id, match_id)
     if won["v"]:
         logger.info("[CF-BR] launched match %s for tournament %s", match_id, tournament_id)
@@ -993,11 +1013,11 @@ def on_tournament_duel_status(event: db_fn.Event[db_fn.Change]) -> None:
         def start_fn(current):
             started["v"] = False
             if current is None or current.get("status") != "waiting":
-                return None
+                raise _Abort()   # a player's tab (or the reconciler) already started it
             started["v"] = True
             return {**current, "status": "playing", "question_started_at": _now_ms()}
 
-        duel_ref.transaction(start_fn)
+        _try_transaction(duel_ref, start_fn)
         if started["v"]:
             logger.info("[CF-BR] force-started idle duel %s/%s", tournament_id, duel_id)
         return
