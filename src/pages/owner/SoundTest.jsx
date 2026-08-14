@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Volume2, VolumeX, Play, Sliders, Sparkles, Bell, Trophy, ShieldAlert, CheckCircle, XCircle, Clock, ArrowLeft, RefreshCw, ThumbsUp, Radio } from 'lucide-react';
+import { Volume2, VolumeX, Play, Sliders, Sparkles, Bell, Trophy, ShieldAlert, CheckCircle, XCircle, Clock, ArrowLeft, RefreshCw, Radio } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { soundManager } from '../../utils/soundManager';
 import { useSoundStore } from '../../stores/soundStore';
@@ -11,82 +11,73 @@ export default function SoundTest() {
 
   const soundCatalog = [
     {
-      id: 'victory',
-      nameAr: 'نغمة الفوز والتتويج (Victory Trumpet MP3)',
-      nameEn: 'Real Victory Horn Sound',
-      desc: 'صوت نفخ أبواق النصر والتتويج الحقيقي للبطولات والمباريات (MP3)',
-      icon: Trophy,
-      color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30 hover:border-yellow-400',
-      play: () => soundManager.playVictory(),
-    },
-    {
-      id: 'applause',
-      nameAr: 'تصفيق وتفاعل الجمهور (Audience Applause MP3)',
-      nameEn: 'Real Crowd Cheering & Applause',
-      desc: 'صوت تصفيق وتشجيع حار من الجمهور بطل البطولة (MP3)',
-      icon: ThumbsUp,
+      id: 'correct',
+      nameAr: 'إجابة صحيحة (Correct Double-Ding)',
+      nameEn: 'Subtle 0.2s Arcade Twin Chime',
+      desc: 'صوت إجابة صحيحة ناعم وسريع جدًا (0.2 ثانية) خالي من أي مبالغة',
+      icon: CheckCircle,
       color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-400',
-      play: () => soundManager.playApplause(),
-    },
-    {
-      id: 'stage_start',
-      nameAr: 'افتتاح الجولات والمراحل (Tada Fanfare MP3)',
-      nameEn: 'Tada Stage Opening Sound',
-      desc: 'صوت حماسي لاقتتاح ربع ونصف النهائي والجولات الجديدة (MP3)',
-      icon: Sparkles,
-      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30 hover:border-cyan-400',
-      play: () => soundManager.playStageStart(),
+      play: () => soundManager.playCorrect(),
     },
     {
       id: 'wrong',
-      nameAr: 'صوت الإجابة الخاطئة (Game Show Wrong Buzzer MP3)',
-      nameEn: 'Real Wrong Buzzer Sound',
-      desc: 'صوت البوزر الحقيقي للبرامج والمنافسات عند الإجابة الخاطئة (MP3)',
+      nameAr: 'إجابة خاطئة (Soft Error Thud)',
+      nameEn: 'Subtle 0.2s Low Thud',
+      desc: 'صوت خطأ خفيف وهادئ (0.2 ثانية) غير مزعج وبدون بوزر قوي',
       icon: XCircle,
       color: 'text-rose-400 bg-rose-500/10 border-rose-500/30 hover:border-rose-400',
       play: () => soundManager.playWrong(),
     },
     {
-      id: 'defeat',
-      nameAr: 'نغمة الخسارة والاستهجان (Audience Booing MP3)',
-      nameEn: 'Real Defeat & Boo Sound',
-      desc: 'صوت الخسارة والإقصاء من البطولة (MP3)',
-      icon: ShieldAlert,
-      color: 'text-purple-400 bg-purple-500/10 border-purple-500/30 hover:border-purple-400',
-      play: () => soundManager.playDefeat(),
-    },
-    {
       id: 'match_alert',
-      nameAr: 'تنبيه استدعاء للمباراة (Tension Gasp Alert MP3)',
-      nameEn: 'Match Call & Crowd Gasp Alert',
-      desc: 'نغمة حماسية عند جاهزية المبارارة واستدعاء اللاعب (MP3)',
+      nameAr: 'تنبيه دخول المباراة (Match Notification)',
+      nameEn: 'Subtle 0.25s Dual Ring',
+      desc: 'نغمة تنبيه ناعمة وأنيقة عند جاهزية المبارارة واستدعاء اللاعب',
       icon: Bell,
       color: 'text-amber-400 bg-amber-500/10 border-amber-500/30 hover:border-amber-400',
       play: () => soundManager.playMatchAlert(),
     },
     {
-      id: 'correct',
-      nameAr: 'إجابة صحيحة (Arcade High Chime)',
-      nameEn: 'Arcade Twin Chime',
-      desc: 'صوت إجابة صحيحة محاكاة للألعاب السريعة',
-      icon: CheckCircle,
-      color: 'text-green-400 bg-green-500/10 border-green-500/30 hover:border-green-400',
-      play: () => soundManager.playCorrect(),
+      id: 'stage_start',
+      nameAr: 'افتتاح الجولات (Stage Start Chime)',
+      nameEn: 'Subtle 0.3s Power-Up',
+      desc: 'نغمة حماسية خفيفة وسريعة لاقتتاح الجولات والمراحل',
+      icon: Sparkles,
+      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30 hover:border-cyan-400',
+      play: () => soundManager.playStageStart(),
+    },
+    {
+      id: 'victory',
+      nameAr: 'نغمة الفوز والتتويج (Victory Chime)',
+      nameEn: 'Subtle 0.4s Victory Melody',
+      desc: 'نغمة فوز سريعة وهادئة عند تحقيق الفوز بالبطولة أو الدويل',
+      icon: Trophy,
+      color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30 hover:border-yellow-400',
+      play: () => soundManager.playVictory(),
+    },
+    {
+      id: 'defeat',
+      nameAr: 'نغمة الخسارة (Defeat Drop)',
+      nameEn: 'Subtle 0.25s Minor Cadence',
+      desc: 'صوت هادئ جداً عند الإقصاء أو خسارة الدويل',
+      icon: ShieldAlert,
+      color: 'text-purple-400 bg-purple-500/10 border-purple-500/30 hover:border-purple-400',
+      play: () => soundManager.playDefeat(),
     },
     {
       id: 'tick',
-      nameAr: 'تكتكة الثواني الأخيرة (Countdown Tap)',
-      nameEn: 'Mechanical Clock Tap',
-      desc: 'تكتكة سريعة في آخر 5 ثوانٍ من السؤال',
+      nameAr: 'تكتكة العداد (Countdown Tap)',
+      nameEn: 'Subtle 15ms Wooden Tap',
+      desc: 'تكتكة خفيفة في آخر 5 ثوانٍ من السؤال',
       icon: Clock,
       color: 'text-blue-400 bg-blue-500/10 border-blue-500/30 hover:border-blue-400',
       play: () => soundManager.playTick(),
     },
     {
       id: 'button_click',
-      nameAr: 'نقر زر UI (Mechanical Click)',
-      nameEn: 'UI Click Switch',
-      desc: 'صوت خفيف عند الضغط على الأزرار',
+      nameAr: 'نقر الأزرار (UI Click)',
+      nameEn: 'Subtle 15ms Switch Click',
+      desc: 'صوت ناعم جداً عند الضغط على الأزرار',
       icon: RefreshCw,
       color: 'text-gray-300 bg-gray-700/30 border-gray-600/30 hover:border-gray-400',
       play: () => soundManager.playButtonClick(),
@@ -96,7 +87,7 @@ export default function SoundTest() {
   const handlePlaySound = (sound) => {
     setActivePlaying(sound.id);
     sound.play();
-    setTimeout(() => setActivePlaying(null), 1200);
+    setTimeout(() => setActivePlaying(null), 400);
   };
 
   return (
@@ -117,9 +108,9 @@ export default function SoundTest() {
           </button>
 
           <div className="flex items-center gap-3">
-            <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono rounded-full flex items-center gap-1.5">
+            <span className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-mono rounded-full flex items-center gap-1.5">
               <Radio className="w-3.5 h-3.5 animate-pulse" />
-              Real HQ MP3 Sound Assets Loaded
+              {'Subtle & Crisp Modern Game SFX (<0.4s)'}
             </span>
           </div>
         </div>
@@ -132,13 +123,13 @@ export default function SoundTest() {
             <div>
               <div className="flex items-center gap-2 text-primary font-mono text-xs font-semibold mb-2">
                 <Sliders className="w-4 h-4" />
-                <span>MED ROYALE — REAL MP3 AUDIO LABORATORY</span>
+                <span>MED ROYALE — CLEAN & SUBTLE SFX STUDIO</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
-                مختبر استماع المؤثرات الصوتية الحقيقية (HQ MP3) 🎙️
+                مؤثرات صوتية ناعمة وسريعة (Clean Game SFX) 🎯
               </h1>
               <p className="text-sm text-gray-400 mt-2 max-w-xl leading-relaxed">
-                تم تحديث المؤثرات باستخدام ملفات صووتية حقيقية عالية الجودة (MP3) لتصفيق الجمهور، أبواق الفوز، بوزر الإجابة الخاطئة، وافتتاح الجولات!
+                تم تبسيط وتنعيم جميع المؤثرات لتصبح قصيرة جداً (أقل من 0.3 ثانية)، هادئة، وخالية تماماً من أي دراما أو مبالغات أو أصوات صاخبة!
               </p>
             </div>
 
@@ -212,7 +203,7 @@ export default function SoundTest() {
                     }`}
                   >
                     <Play className={`w-4 h-4 fill-current ${isPlaying ? 'animate-bounce' : ''}`} />
-                    <span>{isPlaying ? 'جاري التشغيل…' : 'استمع للملف (Play MP3)'}</span>
+                    <span>{isPlaying ? 'جاري التشغيل…' : 'تجربة الصوت الخفيف (Play)'}</span>
                   </button>
                 </div>
               </div>
@@ -221,10 +212,10 @@ export default function SoundTest() {
         </div>
 
         {/* Admin Instructions Footer */}
-        <div className="p-5 rounded-2xl bg-blue-950/30 border border-blue-800/40 text-blue-300 text-xs leading-relaxed">
+        <div className="p-5 rounded-2xl bg-cyan-950/30 border border-cyan-800/40 text-cyan-300 text-xs leading-relaxed">
           <p className="font-bold mb-1">📌 ملاحظة Sohail:</p>
           <p>
-            تأكد من تجربة جميع ملفات الـ MP3 الحقيقية في هذه الصفحة، وبمجرد موافقتك قل لي "تمام" وسأقوم بربط الأصوات المعتمدة فوراً بالألعاب والبطولات!
+            هذه المؤثرات الصوتية تم تصميمها وتنعيمها لتكون قصيرة وهادئة تماماً وخفيفة في الألعاب. جربها الآن في هذه الصفحة، وعند موافقتك قل لي "تمام" وسأعتمدها في الموقع مباشرة!
           </p>
         </div>
 
