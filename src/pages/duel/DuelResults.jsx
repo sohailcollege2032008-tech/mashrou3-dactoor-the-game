@@ -338,7 +338,10 @@ export default function DuelResults() {
         padding: '13px 20px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <span className="folio" style={{ flex: 1 }}>Duel · Results</span>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="folio">Duel · Results</span>
+          <SoundToggle showPreviewBtn={true} />
+        </div>
         <svg width={28} height={28} viewBox="0 0 100 100" fill="none">
           <circle cx="50" cy="50" r="46" stroke="var(--ink)" strokeWidth="1.5" />
           <circle cx="50" cy="50" r="40" stroke="var(--ink)" strokeWidth="0.75" opacity="0.4" />

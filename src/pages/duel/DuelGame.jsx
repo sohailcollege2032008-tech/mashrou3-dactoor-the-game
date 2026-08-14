@@ -663,9 +663,12 @@ export default function DuelGame({
         <PlayerPill player={myPlayer} score={myPlayer?.score} align="right" />
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>
-            {qi + 1} / {duel.total_questions}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>
+              {qi + 1} / {duel.total_questions}
+            </span>
+            <SoundToggle showPreviewBtn={true} />
+          </div>
           <span style={{
             fontFamily: 'var(--mono)', fontSize: isObserver ? 14 : 20, fontWeight: 700,
             color: isObserver ? 'var(--ink-4)' : timeLeftSec <= 5 ? 'var(--alert)' : 'var(--ink)',
