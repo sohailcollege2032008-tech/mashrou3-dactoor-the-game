@@ -314,10 +314,14 @@ Main branch (`main`) is stable — do NOT push breaking changes there.
 - `profiles/{uid}/game_history/{entryId}`: read by any auth, write by owner only
 - `question_sets/{setId}`: read + write by any auth user
 - `authorized_hosts/{docId}`: read by any auth, write by owner email only
-- `tournaments/{id}`: read + write by any auth user
+- `tournaments/{id}`: read any auth; create any auth; update/delete **host, owner email, or the declared winner**
 - `tournaments/{id}/registrations/{uid}`: read by any auth, write by owner uid only
-- `tournaments/{id}/ffa_results/{uid}`: read + write by any auth
-- `tournaments/{id}/bracket_matches/{matchId}`: read + write by any auth
+- `tournaments/{id}/ffa_results/{uid}`: read any auth; **write host or owner email only**
+- `tournaments/{id}/bracket_matches/{matchId}`: read any auth; **create/delete host or owner email only**; update host, owner email, or the two players in the match
+
+> Players cannot create `ffa_results` or `bracket_matches`. Anything that must
+> happen without the host's tab open therefore belongs in a Cloud Function
+> (admin SDK bypasses rules) — see the bracket orchestration functions.
 
 ### RTDB (`database.rules.json`)
 - `rooms/{code}`: read + write by any auth (answers/reveal_locks restricted per-user)
@@ -334,7 +338,20 @@ Main branch (`main`) is stable — do NOT push breaking changes there.
 ```bash
 firebase deploy --only firestore:rules   # Firestore rules
 firebase deploy --only database          # RTDB rules
+firebase deploy --only functions         # Python Cloud Functions
 ```
+
+**Windows gotcha:** `deploy --only functions` can hang forever at
+"Loading and analyzing source code" — the CLI's local Python discovery server
+starts but the fetch to it never returns. Generate the manifest yourself first,
+then deploy (the CLI uses `functions.yaml` and skips HTTP discovery):
+
+```bash
+cd functions && FIREBASE_CONFIG='{"projectId":"mashrou3-dactoor"}' GCLOUD_PROJECT=mashrou3-dactoor venv/Scripts/python.exe -c "from firebase_functions.private.serving import get_functions, functions_as_yaml; open('functions.yaml','w',encoding='utf-8').write(functions_as_yaml(get_functions()))"
+```
+
+Regenerate `functions.yaml` after adding or changing any function signature —
+a stale manifest silently deploys the wrong trigger set.
 
 ---
 
@@ -360,3 +377,17 @@ Used in: `UploadQuestionsModal.jsx` (AI tab)
 5. **`increment()` in RTDB** can create ghost player entries — always filter answers to `realPlayers = new Set(Object.keys(duel.players))`.
 6. **iOS fullscreen** is not supported — don't attempt a workaround.
 7. **Duel question array** is stored flat in RTDB (not nested like Firestore `questions.questions`).
+8. **Never make tournament progression depend on an open browser tab.** Bracket
+   generation, match launch, duel start, result writing and round advance must
+   each have a Cloud Function that performs them. A tournament stalled for an
+   entire live event because those steps only ran inside the host's React
+   effects, and the host's tab was on a different tournament.
+9. **Tournament duel ids are the `match_id`**, not `push()` ids — that is what
+   makes launching idempotent when the host tab and the Cloud Function race.
+   Never reintroduce `push()` under `tournament_duels/{tid}`.
+10. **Answer hashes are bound to the question's final index.** Tiebreaker
+    questions get appended to `questions`, so they must be hashed with
+    `questions.length + i`, not from 0 — hash them in one pass with the main set.
+11. **One live tournament at a time.** The host dashboard lists every active
+    tournament and `TournamentCreate` warns before a second one is started;
+    with two live, players and host can end up in different brackets.

@@ -9,15 +9,13 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  doc, onSnapshot, updateDoc, getDocs, getDoc,
-  collection, writeBatch, serverTimestamp, setDoc
+  doc, onSnapshot, updateDoc, getDoc,
+  collection, writeBatch
 } from 'firebase/firestore'
-import { ref as rtdbRef, set, onValue, push } from 'firebase/database'
+import { ref as rtdbRef, onValue, update, runTransaction } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
-import { useAuth } from '../../hooks/useAuth'
 import {
-  generateBracketMatches, getQuestionsForRound,
-  sortPlayers, resolveMatchTie
+  generateBracketMatches, getQuestionsForRound
 } from '../../utils/tournamentUtils'
 import { stripCorrectForRtdb } from '../../utils/duelUtils'
 import BracketTree from '../../components/tournament/BracketTree'
@@ -65,7 +63,6 @@ function MatchStatusBadge({ status, winnerName }) {
 export default function TournamentBracket() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
-  const { session } = useAuth()
   const bracketRef = useRef(null)
 
   const [tournament,  setTournament]  = useState(null)
@@ -83,11 +80,18 @@ export default function TournamentBracket() {
   const [ending,          setEnding]          = useState(false)
   const [liveDuels,       setLiveDuels]       = useState({})
   const [waitingPresence, setWaitingPresence] = useState({})
+  const [nowTick,         setNowTick]         = useState(() => Date.now())
+
+  // Drives the phase countdown label; without it the number freezes between
+  // Firestore snapshots.
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 500)
+    return () => clearInterval(id)
+  }, [])
 
   const autoLaunchedRef   = useRef(new Set())
-  const autoAdvancedRef   = useRef(null)
   const autoFinishedRef   = useRef(false)
-  const autoTransitionRef = useRef(false)
+  const autoTransitionRef = useRef(null)
 
   useEffect(() => {
     if (!tournamentId) return
@@ -114,11 +118,21 @@ export default function TournamentBracket() {
     return () => unsub()
   }, [tournamentId])
 
+  // Live, not one-shot: a getDocs() here used to run before the FFA results were
+  // written, leaving ffaResults empty forever — which silently blocked bracket
+  // generation even with this page open.
   useEffect(() => {
     if (!tournamentId) return
-    getDocs(collection(db, 'tournaments', tournamentId, 'ffa_results'))
-      .then(snap => setFfaResults(sortPlayers(snap.docs.map(d => ({ uid: d.id, ...d.data() })))))
-      .catch(console.error)
+    const unsub = onSnapshot(
+      collection(db, 'tournaments', tournamentId, 'ffa_results'),
+      snap => setFfaResults(
+        snap.docs
+          .map(d => ({ uid: d.id, ...d.data() }))
+          .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+      ),
+      console.error
+    )
+    return () => unsub()
   }, [tournamentId])
 
   useEffect(() => {
@@ -136,8 +150,17 @@ export default function TournamentBracket() {
     if (!activeMatches.length) { setLiveDuels({}); return }
 
     const unsubs = activeMatches.map(m =>
-      onValue(rtdbRef(rtdb, `tournament_duels/${tournamentId}/${m.duel_id}/players`), snap => {
-        setLiveDuels(prev => ({ ...prev, [m.duel_id]: snap.val() || {} }))
+      onValue(rtdbRef(rtdb, `tournament_duels/${tournamentId}/${m.duel_id}`), snap => {
+        const d = snap.val()
+        setLiveDuels(prev => ({
+          ...prev,
+          [m.duel_id]: {
+            players: d?.players || {},
+            status:  d?.status  || null,
+            qi:      d?.current_question_index ?? 0,
+            total:   d?.total_questions ?? 0,
+          },
+        }))
       })
     )
     return () => unsubs.forEach(u => u())
@@ -153,17 +176,31 @@ export default function TournamentBracket() {
     .filter(m => m.status === 'pending' && m.player_a_uid && m.player_b_uid)
     .map(m => m.match_id).sort().join(',')
 
-  // ── Phase-transition gate (FFA → bracket) ──────────────────────────────────
-  // Round-1 matches must NOT auto-launch until the configured
-  // phase_transition_wait has elapsed since phase_started_at (set when the
-  // FFA ended). Players see the same countdown on their wait page.
-  const transitionWaitMs = (() => {
-    if (!tournament || tournament.status !== 'bracket') return 0
-    if ((tournament.current_round || 1) !== 1) return 0
+  // ── Phase clock ────────────────────────────────────────────────────────────
+  // Host and server must agree on when a round starts, otherwise this tab can
+  // launch a round the instant the previous one ends while players are still
+  // watching a break countdown. Both read the same value: launch_after on the
+  // match, or phase_started_at + the configured wait for its round.
+  const launchDueAt = useCallback((match) => {
+    if (!tournament) return 0
+    if (match?.launch_after) return match.launch_after
     const start = tournament.phase_started_at || 0
-    const wait  = tournament.phase_transition_wait || 0
-    if (!start || !wait) return 0
-    return Math.max(0, start + wait - Date.now())
+    if (!start) return 0
+    const wait = (match?.round || 1) === 1
+      ? (tournament.phase_transition_wait || 0)
+      : (tournament.round_break_time || 0)
+    return start + wait
+  }, [tournament])
+
+  const currentRoundNo = tournament?.current_round || 1
+  const phaseRemainingMs = (() => {
+    if (!tournament || tournament.status !== 'bracket') return 0
+    const start = tournament.phase_started_at || 0
+    if (!start) return 0
+    const wait = currentRoundNo === 1
+      ? (tournament.phase_transition_wait || 0)
+      : (tournament.round_break_time || 0)
+    return Math.max(0, start + wait - nowTick)
   })()
 
   useEffect(() => {
@@ -172,72 +209,35 @@ export default function TournamentBracket() {
       m.status === 'pending' &&
       m.player_a_uid &&
       m.player_b_uid &&
+      m.round === currentRoundNo &&
       !autoLaunchedRef.current.has(m.match_id)
     )
     if (!toAutoLaunch.length) return
 
-    // Round 1 waits for the FFA → bracket transition window.
-    if (transitionWaitMs > 0) {
-      const t = setTimeout(() => {
-        toAutoLaunch.forEach(m => {
-          autoLaunchedRef.current.add(m.match_id)
-          launchMatch(m)
-        })
-      }, transitionWaitMs + 500)
-      return () => clearTimeout(t)
-    }
-
-    const t = setTimeout(() => {
-      toAutoLaunch.forEach(m => {
+    const timers = toAutoLaunch.map(m => {
+      const delay = Math.max(1500, launchDueAt(m) - Date.now() + 500)
+      return setTimeout(() => {
         autoLaunchedRef.current.add(m.match_id)
         launchMatch(m)
-      })
-    }, 1500)
-    return () => clearTimeout(t)
+      }, delay)
+    })
+    return () => timers.forEach(clearTimeout)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [launchablePendingKey, tournament?.status, transitionWaitMs])
+  }, [launchablePendingKey, tournament?.status, currentRoundNo, tournament?.phase_started_at])
 
-  // ── Round-1 transition countdown (host side — players get the same one) ────
+  // ── Phase countdown overlay (same clock the players see) ───────────────────
   useEffect(() => {
     if (!tournament || tournament.status !== 'bracket') return
-    if ((tournament.current_round || 1) !== 1) return
-    if (!tournament.phase_started_at || !tournament.phase_transition_wait) return
-    if (transitionWaitMs <= 0) return
-    if (autoTransitionRef.current) return
-    autoTransitionRef.current = true
-    setCountdownLabel('الانتقال لمرحلة الـ Bracket')
-    setCountdownMs(transitionWaitMs)
+    if (phaseRemainingMs <= 0) return
+    const key = `r${currentRoundNo}`
+    if (autoTransitionRef.current === key) return
+    autoTransitionRef.current = key
+    setCountdownLabel(currentRoundNo === 1
+      ? 'الانتقال لمرحلة الـ Bracket'
+      : `استراحة قبل الجولة ${currentRoundNo}`)
+    setCountdownMs(phaseRemainingMs)
     setShowCountdown(true)
-  }, [
-    tournament?.status,
-    tournament?.current_round,
-    transitionWaitMs,
-    showCountdown,
-  ])
-
-  useEffect(() => {
-    if (!tournament || tournament.status !== 'bracket') return
-    const tRounds    = tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)
-    const cRound     = tournament.current_round || 1
-    const rMatches   = matches.filter(m => m.round === cRound)
-    const allDone    = rMatches.length > 0 && rMatches.every(m => m.status === 'finished')
-
-    if (!allDone || cRound >= tRounds) return
-    if (autoAdvancedRef.current === cRound) return
-    if (showCountdown) return
-
-    autoAdvancedRef.current = cRound
-    setCountdownLabel(`استراحة قبل الجولة ${cRound + 1}`)
-    setCountdownMs(tournament.round_break_time || 30000)
-    setShowCountdown(true)
-    // Tell the players the break has started so they can count down with us.
-    updateDoc(doc(db, 'tournaments', tournamentId), { phase_started_at: Date.now() }).catch(() => {})
-  }, [
-    matches.map(m => m.match_id + m.status).join(','),
-    tournament?.current_round,
-    tournament?.status,
-    showCountdown,
-  ])
+  }, [tournament?.status, currentRoundNo, phaseRemainingMs])
 
   useEffect(() => {
     if (!tournament || tournament.status !== 'bracket') return
@@ -268,25 +268,56 @@ export default function TournamentBracket() {
     if (generating || ffaResults.length < 2) return
     setGenerating(true)
     try {
-      const topN     = tournament.actual_top_cut
-      const advanced = ffaResults.filter(p => p.advanced).slice(0, topN)
+      const topN     = tournament.actual_top_cut || 0
+      const ranked   = [...ffaResults].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+      let advanced   = ranked.filter(p => p.advanced)
+      if (advanced.length === 0) advanced = ranked.slice(0, topN || ranked.length)
+      if (topN) advanced = advanced.slice(0, topN)
+
+      // A bracket needs a power-of-two field — trim to the largest that fits.
+      let size = 1
+      while (size * 2 <= advanced.length) size *= 2
+      if (size < 2) throw new Error('عدد المتأهلين غير كافٍ لتوليد الـ Bracket')
+      advanced = advanced.slice(0, size)
+
       const newMatches = generateBracketMatches(advanced)
+
+      // Pin each round-1 match's start time so the server launcher and this tab
+      // agree on it (see launchDueAt).
+      const phaseStart     = tournament.phase_started_at || Date.now()
+      const roundOneLaunch = phaseStart + (tournament.phase_transition_wait || 0)
 
       const batch = writeBatch(db)
       newMatches.forEach(m => {
         const ref = doc(db, 'tournaments', tournamentId, 'bracket_matches', m.match_id)
-        batch.set(ref, m)
+        batch.set(ref, m.round === 1 ? { ...m, launch_after: roundOneLaunch } : m)
       })
+
+      // Keep the tournament doc consistent with the bracket we actually built.
+      const rounds = Math.log2(size)
+      const patch  = {}
+      if (tournament.actual_top_cut !== size)  patch.actual_top_cut = size
+      if (tournament.total_rounds   !== rounds) patch.total_rounds  = rounds
+      if (!tournament.current_round)           patch.current_round  = 1
+      if (!tournament.phase_started_at)        patch.phase_started_at = phaseStart
+      if (Object.keys(patch).length > 0) {
+        batch.update(doc(db, 'tournaments', tournamentId), patch)
+      }
+
       await batch.commit()
     } catch (e) {
       console.error(e)
-      setError('فشل توليد الـ Bracket')
+      setError(e.message || 'فشل توليد الـ Bracket')
     } finally {
       setGenerating(false)
     }
   }, [generating, ffaResults, tournament, tournamentId])
 
+  // Manual override — the server advances rounds on its own, this is the host's
+  // "skip the break, go now" button. Seeds winners, opens the round and clears
+  // the wait so the next matches launch immediately.
   const doAdvanceRound = useCallback(async (currentRnd, roundMatchList) => {
+    const now   = Date.now()
     const batch = writeBatch(db)
     for (const m of roundMatchList) {
       if (m.status !== 'finished' || !m.winner_uid || !m.next_match_id) continue
@@ -295,22 +326,18 @@ export default function TournamentBracket() {
       const nextRef = doc(db, 'tournaments', tournamentId, 'bracket_matches', m.next_match_id)
       const isOdd = m.match_number % 2 === 1
       batch.update(nextRef, isOdd
-        ? { player_a_uid: m.winner_uid, player_a_name: winnerName }
-        : { player_b_uid: m.winner_uid, player_b_name: winnerName }
+        ? { player_a_uid: m.winner_uid, player_a_name: winnerName, launch_after: now }
+        : { player_b_uid: m.winner_uid, player_b_name: winnerName, launch_after: now }
       )
     }
-    batch.update(doc(db, 'tournaments', tournamentId), { current_round: currentRnd + 1 })
+    batch.update(doc(db, 'tournaments', tournamentId), {
+      current_round:    currentRnd + 1,
+      phase_started_at: now,
+    })
     await batch.commit()
   }, [tournamentId])
 
-  const handleCountdownComplete = useCallback(() => {
-    setShowCountdown(false)
-    if (autoAdvancedRef.current !== null) {
-      const rnd = autoAdvancedRef.current
-      doAdvanceRound(rnd, matches.filter(m => m.round === rnd))
-        .catch(console.error)
-    }
-  }, [doAdvanceRound, matches])
+  const handleCountdownComplete = useCallback(() => setShowCountdown(false), [])
 
   const exportImage = useCallback(async () => {
     if (!bracketRef.current || exporting) return
@@ -340,9 +367,16 @@ export default function TournamentBracket() {
     if (!match || match.status !== 'pending') return
     if (!match.player_a_uid || !match.player_b_uid) return setError('لاعب غير محدد في هذه المباراة')
 
+    // The duel key is the match_id, not a push() id. That makes creation
+    // idempotent: this tab and the Cloud Function can both try to launch the
+    // same match and exactly one write lands.
+    const duelId  = match.match_id
+    const duelRef = rtdbRef(rtdb, `tournament_duels/${tournamentId}/${duelId}`)
+
     try {
       const deckSnap    = await getDoc(doc(db, 'question_sets', tournament.deck_id))
-      const freshDeckQs = deckSnap.data()?.questions?.questions || []
+      const deckData    = deckSnap.data() || {}
+      const freshDeckQs = deckData.questions?.questions || []
       if (freshDeckQs.length === 0) throw new Error('لا توجد أسئلة في الـ Deck')
 
       const questions = getQuestionsForRound(match.round, tournament, freshDeckQs, 5)
@@ -355,12 +389,14 @@ export default function TournamentBracket() {
         ? unusedQs.slice(0, 3)
         : [...freshDeckQs].sort(() => Math.random() - 0.5).slice(0, 3)
 
-      const newDuelRef = push(rtdbRef(rtdb, `tournament_duels/${tournamentId}`))
-      const duelId = newDuelRef.key
-      const safeQuestions    = await stripCorrectForRtdb(questions, duelId)
-      const safeTiebreakers  = await stripCorrectForRtdb(tiebreakerQuestions, duelId)
+      // Hash both sets in one pass: a tiebreaker is appended to `questions` at
+      // index questions.length + i, and the answer hash is bound to that index.
+      // Hashing them separately (from 0) made every tiebreaker unscoreable.
+      const allSafe         = await stripCorrectForRtdb([...questions, ...tiebreakerQuestions], duelId)
+      const safeQuestions   = allSafe.slice(0, questions.length)
+      const safeTiebreakers = allSafe.slice(questions.length)
 
-      await set(newDuelRef, {
+      const payload = {
         tournament_id:        tournamentId,
         match_id:             match.match_id,
         round:                match.round,
@@ -374,7 +410,7 @@ export default function TournamentBracket() {
         tiebreaker_used:      0,
         is_tiebreaker:        false,
         config:               { questionCount: safeQuestions.length, shuffleQuestions: false, shuffleAnswers: false },
-        force_rtl:            false,
+        force_rtl:            deckData.force_rtl || false,
         status:               'waiting',
         current_question_index: 0,
         question_started_at:  null,
@@ -396,7 +432,10 @@ export default function TournamentBracket() {
           },
         },
         answers: {},
-      })
+        created_at: Date.now(),
+      }
+
+      await runTransaction(duelRef, current => (current === null ? payload : undefined))
 
       await updateDoc(
         doc(db, 'tournaments', tournamentId, 'bracket_matches', match.match_id),
@@ -407,6 +446,50 @@ export default function TournamentBracket() {
       setError(e.message || 'فشل إطلاق المباراة')
     }
   }, [tournament, tournamentId, ffaResults])
+
+  // Rescue a duel that nobody opened: it stays 'waiting' until a player's tab
+  // starts it, so a match with two absent players would sit frozen while the
+  // bracket showed it as LIVE.
+  const forceStartMatch = useCallback(async (match) => {
+    if (!match?.duel_id) return
+    try {
+      await update(rtdbRef(rtdb, `tournament_duels/${tournamentId}/${match.duel_id}`), {
+        status: 'playing',
+        question_started_at: Date.now(),
+      })
+    } catch (e) {
+      console.error(e)
+      setError(e.message || 'فشل بدء المباراة')
+    }
+  }, [tournamentId])
+
+  // Cut the break short and start the current round's matches right now.
+  const startRoundNow = useCallback(async () => {
+    const now     = Date.now()
+    const pending = matches.filter(m =>
+      m.round === (tournament?.current_round || 1) &&
+      m.status === 'pending' && m.player_a_uid && m.player_b_uid
+    )
+    if (!pending.length) return
+    try {
+      const batch = writeBatch(db)
+      pending.forEach(m => batch.update(
+        doc(db, 'tournaments', tournamentId, 'bracket_matches', m.match_id),
+        { launch_after: now }
+      ))
+      // phase_started_at: 0 clears the countdown for the players too.
+      batch.update(doc(db, 'tournaments', tournamentId), { phase_started_at: 0 })
+      await batch.commit()
+      setShowCountdown(false)
+      pending.forEach(m => {
+        autoLaunchedRef.current.add(m.match_id)
+        launchMatch(m)
+      })
+    } catch (e) {
+      console.error(e)
+      setError(e.message || 'فشل بدء الجولة')
+    }
+  }, [matches, tournament?.current_round, tournamentId, launchMatch])
 
   const endTournament = useCallback(async () => {
     if (ending) return
@@ -653,13 +736,37 @@ export default function TournamentBracket() {
               </h2>
             </div>
 
+            {/* Break in progress — matches start on their own, this skips ahead */}
+            {phaseRemainingMs > 0 && roundMatches.some(m => m.status === 'pending') && (
+              <div style={{
+                padding: '10px 16px', borderBottom: '1px solid var(--rule)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                background: 'color-mix(in srgb, var(--gold) 6%, var(--paper))',
+              }}>
+                <span className="ar folio" style={{ color: 'var(--gold)', fontSize: 9 }}>
+                  تبدأ خلال {Math.ceil(phaseRemainingMs / 1000)}ث
+                </span>
+                <button
+                  onClick={startRoundNow}
+                  style={{
+                    padding: '6px 14px', border: '1px solid var(--gold)', borderRadius: 4,
+                    background: 'transparent', color: 'var(--gold)',
+                    fontFamily: 'var(--sans)', fontSize: 12, cursor: 'pointer',
+                  }}
+                >
+                  <span className="ar">ابدأ الجولة الآن</span>
+                </button>
+              </div>
+            )}
+
             {/* Match list */}
             <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
               {roundMatches.map(match => {
                 const live = match.duel_id ? (liveDuels[match.duel_id] || {}) : {}
-                const liveA = live[match.player_a_uid]
-                const liveB = live[match.player_b_uid]
+                const liveA = live.players?.[match.player_a_uid]
+                const liveB = live.players?.[match.player_b_uid]
                 const hasLive = match.status === 'active' && (liveA || liveB)
+                const isIdle  = match.status === 'active' && live.status === 'waiting'
 
                 return (
                   <div key={match.match_id} style={{ border: '1px solid var(--rule)', borderRadius: 4, overflow: 'hidden' }}>
@@ -707,6 +814,20 @@ export default function TournamentBracket() {
                           <span className="ar">ابدأ</span>
                         </button>
                       )}
+                      {isIdle && (
+                        <button
+                          onClick={() => forceStartMatch(match)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 5,
+                            padding: '5px 12px', border: '1px solid var(--alert)',
+                            borderRadius: 4, background: 'color-mix(in srgb, var(--alert) 8%, var(--paper))',
+                            color: 'var(--alert)', fontFamily: 'var(--sans)', fontSize: 12, cursor: 'pointer',
+                          }}
+                        >
+                          <Play size={11} />
+                          <span className="ar">بدء إجباري</span>
+                        </button>
+                      )}
                       {match.status === 'active' && match.duel_id && (
                         <button
                           onClick={() => navigate(`/tournament/${tournamentId}/duel/${match.match_id}`)}
@@ -722,6 +843,27 @@ export default function TournamentBracket() {
                         </button>
                       )}
                     </div>
+
+                    {/* Live duel state — makes a frozen match obvious instead of
+                        showing a permanent "LIVE" badge on a duel nobody opened. */}
+                    {match.status === 'active' && (
+                      <div style={{
+                        borderTop: '1px solid var(--rule)', padding: '6px 14px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      }}>
+                        <span className="folio" style={{
+                          fontSize: 9,
+                          color: isIdle ? 'var(--alert)' : 'var(--ink-4)',
+                        }}>
+                          {isIdle ? 'DUEL IDLE — NO PLAYER JOINED' : `DUEL ${(live.status || '…').toUpperCase()}`}
+                        </span>
+                        {live.total > 0 && (
+                          <span className="folio" style={{ fontSize: 9, color: 'var(--ink-4)' }}>
+                            Q{(live.qi ?? 0) + 1}/{live.total}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -751,10 +893,9 @@ export default function TournamentBracket() {
               <div style={{ padding: '12px 16px', borderTop: '1px solid var(--rule)' }}>
                 <button
                   onClick={() => {
-                    autoAdvancedRef.current = currentRound
-                    setCountdownLabel(`استراحة قبل الجولة ${currentRound + 1}`)
-                    setCountdownMs(tournament.round_break_time || 30000)
-                    setShowCountdown(true)
+                    setShowCountdown(false)
+                    doAdvanceRound(currentRound, matches.filter(m => m.round === currentRound))
+                      .catch(e => { console.error(e); setError(e.message || 'فشل الانتقال للجولة القادمة') })
                   }}
                   style={{
                     width: '100%', padding: '12px 0',

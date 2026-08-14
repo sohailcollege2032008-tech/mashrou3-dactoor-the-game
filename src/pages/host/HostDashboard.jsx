@@ -20,7 +20,7 @@ export default function HostDashboard() {
   const [deletingId, setDeletingId] = useState(null)
   const [selectedBank, setSelectedBank] = useState(null)
   const [activeRoom,       setActiveRoom]       = useState(null)
-  const [activeTournament, setActiveTournament] = useState(null)
+  const [activeTournaments, setActiveTournaments] = useState([])
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
 
@@ -50,9 +50,15 @@ export default function HostDashboard() {
     if (!session?.uid) return
     const q = query(collection(db, 'tournaments'), where('host_id', '==', session.uid))
     const unsub = onSnapshot(q, snap => {
+      // Keep every live tournament, newest first. Picking one arbitrarily meant
+      // that with two running at once the host could sit on tournament B's
+      // bracket while the players were all in tournament A.
       const ACTIVE = ['registration', 'ffa', 'transition', 'bracket']
-      const found = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(t => ACTIVE.includes(t.status))
-      setActiveTournament(found || null)
+      const live = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(t => ACTIVE.includes(t.status))
+        .sort((a, b) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0))
+      setActiveTournaments(live)
     }, () => {})
     return () => unsub()
   }, [session?.uid])
@@ -296,22 +302,38 @@ export default function HostDashboard() {
         )}
 
         {/* ── Active tournament banner ──────────────────────────────────── */}
-        {activeTournament && (() => {
+        {activeTournaments.length > 1 && (
+          <div style={{
+            border: '1px solid var(--alert)', borderBottomWidth: 3,
+            padding: '12px 20px', marginBottom: 12,
+            background: 'color-mix(in srgb, var(--alert) 6%, transparent)',
+          }}>
+            <p className="folio" style={{ fontSize: 9, color: 'var(--alert)', marginBottom: 4 }}>
+              {activeTournaments.length} TOURNAMENTS RUNNING
+            </p>
+            <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-2)', margin: 0, lineHeight: 1.6 }}>
+              في أكثر من بطولة شغالة في نفس الوقت — اللاعبون ممكن يدخلوا واحدة وأنت في التانية.
+              أنهِ البطولات القديمة قبل ما تبدأ بطولة جديدة.
+            </p>
+          </div>
+        )}
+
+        {activeTournaments.map(t => {
           const statusLabel = {
             registration: { text: 'REGISTRATION OPEN', color: 'var(--gold)' },
             ffa:          { text: 'FFA IN PROGRESS',   color: 'var(--alert)' },
             transition:   { text: 'TRANSITIONING',     color: 'var(--navy)' },
             bracket:      { text: 'BRACKET ACTIVE',    color: 'var(--burgundy)' },
-          }[activeTournament.status] || { text: activeTournament.status.toUpperCase(), color: 'var(--ink-3)' }
+          }[t.status] || { text: String(t.status).toUpperCase(), color: 'var(--ink-3)' }
 
-          const url = activeTournament.status === 'registration'
-            ? `/tournament/${activeTournament.id}/lobby`
-            : activeTournament.status === 'ffa' && activeTournament.ffa_room_id
-              ? `/host/game/${activeTournament.ffa_room_id}`
-              : `/tournament/${activeTournament.id}/bracket`
+          const url = t.status === 'registration'
+            ? `/tournament/${t.id}/lobby`
+            : t.status === 'ffa' && t.ffa_room_id
+              ? `/host/game/${t.ffa_room_id}`
+              : `/tournament/${t.id}/bracket`
 
           return (
-            <div style={{
+            <div key={t.id} style={{
               border: `1px solid ${statusLabel.color}`, borderBottomWidth: 3,
               padding: '16px 20px', marginBottom: 20,
               background: `color-mix(in srgb, ${statusLabel.color} 5%, transparent)`,
@@ -323,11 +345,11 @@ export default function HostDashboard() {
                   <p className="folio" style={{ fontSize: 9, color: statusLabel.color }}>{statusLabel.text}</p>
                 </div>
                 <h3 className="ar" style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 400, color: 'var(--ink)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {activeTournament.title}
+                  {t.title}
                 </h3>
-                {activeTournament.code && (
+                {t.code && (
                   <p style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)', marginTop: 3 }}>
-                    CODE: <strong style={{ color: statusLabel.color, letterSpacing: '0.14em' }}>{activeTournament.code}</strong>
+                    CODE: <strong style={{ color: statusLabel.color, letterSpacing: '0.14em' }}>{t.code}</strong>
                   </p>
                 )}
               </div>
@@ -339,7 +361,7 @@ export default function HostDashboard() {
               }}>متابعة →</Link>
             </div>
           )
-        })()}
+        })}
 
         {/* ── Question Banks ────────────────────────────────────────────── */}
         <div style={{ border: '1px solid var(--rule)', borderBottomWidth: 3 }}>

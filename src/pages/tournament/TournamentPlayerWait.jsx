@@ -31,7 +31,8 @@ export default function TournamentPlayerWait() {
   const [myResult,      setMyResult]      = useState(null)
   const [ffaEliminated, setFfaEliminated] = useState(false)
   const [ffaResults,    setFfaResults]    = useState([])
-  const [showBracket,   setShowBracket]   = useState(location.state?.showBracket === true)
+  // Open by default — the bracket is the thing players want to see while waiting.
+  const [showBracket,   setShowBracket]   = useState(location.state?.showBracket !== false)
   const [now,           setNow]           = useState(Date.now())
 
   const uid = session?.uid
@@ -113,33 +114,40 @@ export default function TournamentPlayerWait() {
       .catch(console.error)
   }, [tournamentId, uid, tournament?.status])
 
+  // Subscribe as soon as we have a tournament id. This used to be gated on
+  // tournament.current_round, so a tournament whose round had not been written
+  // yet left the player on a bracket tree that spun forever.
   useEffect(() => {
-    if (!tournamentId || !uid || !tournament?.current_round) return
+    if (!tournamentId) return
     const unsub = onSnapshot(
       collection(db, 'tournaments', tournamentId, 'bracket_matches'),
-      snap => {
-        const all = snap.docs.map(d => ({ match_id: d.id, ...d.data() }))
-        setAllMatches(all)
-        const currentRound = tournament.current_round
-        const mine = all.find(m =>
-          m.round === currentRound &&
-          (m.player_a_uid === uid || m.player_b_uid === uid)
-        )
-        setMyMatch(mine || null)
-
-        const myFinishedMatches = all.filter(m =>
-          m.round <= currentRound &&
-          (m.player_a_uid === uid || m.player_b_uid === uid) &&
-          m.status === 'finished'
-        )
-        if (myFinishedMatches.length > 0) {
-          const lastMatch = myFinishedMatches[myFinishedMatches.length - 1]
-          setMyResult(lastMatch.winner_uid === uid ? 'advanced' : 'eliminated')
-        }
-      }
+      snap => setAllMatches(snap.docs.map(d => ({ match_id: d.id, ...d.data() }))),
+      e => console.error('[TournamentWait] bracket listener:', e)
     )
     return () => unsub()
-  }, [tournamentId, uid, tournament?.current_round])
+  }, [tournamentId])
+
+  useEffect(() => {
+    if (!uid) return
+    const currentRound = tournament?.current_round || 1
+    const mine = allMatches.find(m =>
+      m.round === currentRound &&
+      (m.player_a_uid === uid || m.player_b_uid === uid)
+    )
+    setMyMatch(mine || null)
+
+    const myFinished = allMatches
+      .filter(m =>
+        m.round <= currentRound &&
+        (m.player_a_uid === uid || m.player_b_uid === uid) &&
+        m.status === 'finished'
+      )
+      .sort((a, b) => a.round - b.round)
+    if (myFinished.length > 0) {
+      const last = myFinished[myFinished.length - 1]
+      setMyResult(last.winner_uid === uid ? 'advanced' : 'eliminated')
+    }
+  }, [allMatches, uid, tournament?.current_round])
 
   // FFA results (rank + advanced) — visible to every player so they can see
   // where they finished in the qualifiers phase.

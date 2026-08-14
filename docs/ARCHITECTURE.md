@@ -186,12 +186,31 @@ registration ──(launch FFA)──▶ ffa ──(room finished)──▶ brac
 4. Room `finished` → **`on_ffa_room_finished` CF** (or host page) writes `ffa_results/{uid}` (rank, advanced) with random tie-break at the cut → tournament → `bracket`, `current_round: 1`.
 
 ### Phase II — Bracket
-1. `TournamentBracket` auto-generates matches from `ffa_results` (seeded: r1 pairs are (1vN)(n/2+1 vs n/2)… — standard single-elimination seeding).
-2. Matches with both players **auto-launch** (host page): 5 questions per round from `getQuestionsForRound` (host-assigned indices or random unused) + 3 tiebreaker questions; duel created under `tournament_duels/{tid}/{duelId}`.
-3. Players auto-navigate from `/tournament/{id}/wait` to their duel (`TournamentDuelWrapper` → `DuelGame` with tournament path).
-4. **Server-side progression (Cloud Functions)**: answers → reveal → scoring → next question → finish; tiebreaker question appended when scores tie > 0.
-5. Round completion → host bracket page countdown → advancement batch (winners fill next round's slots; `current_round++`); next round auto-launches.
-6. Final match winner → tournament `finished` + `winner_uid/name` (host page or champion via rules).
+
+**Every step below runs server-side.** The client paths still exist and usually
+win the race when the host tab is open, but nothing depends on them: each step
+has a Cloud Function that performs the same action idempotently, plus a
+once-a-minute reconciler that repairs whatever is still stuck.
+
+1. Tournament enters `bracket` → **`on_tournament_written` CF** generates matches from
+   `ffa_results`, seeded by rank (r1 pairs are (1vN)(n/2+1 vs n/2)… — standard
+   single-elimination seeding). The field is trimmed to the largest power of two that fits.
+2. Match has both players → **`on_bracket_match_written` CF** waits out
+   `phase_transition_wait` (round 1) or `round_break_time` (later rounds), then creates
+   the duel: 5 questions from `getQuestionsForRound` + 3 tiebreakers.
+   **The duel key is the `match_id`**, so a client and the CF racing to launch the same
+   match can only ever produce one duel (create-if-absent transaction).
+3. Players auto-navigate from `/tournament/{id}/wait` to their duel (`TournamentDuelWrapper` → `DuelGame`).
+4. Duel still `waiting` after 25s → **`on_tournament_duel_status` CF** force-starts it.
+   A match neither player opens no longer freezes while showing LIVE on the bracket.
+5. **Question progression (CFs)**: answers → reveal → scoring → next question → finish;
+   tiebreaker question appended when scores tie > 0.
+6. Duel `finished` → **`on_tournament_duel_status` CF** writes the result onto the match,
+   seeds the winner into the next match (**slot chosen by match-number parity**, not by
+   which slot happens to be free) and bumps `current_round` when the round is complete.
+7. Final match winner → tournament `finished` + `winner_uid/name`.
+8. **`tournament_reconciler`** (every minute) re-runs any of the above that did not
+   happen: missing bracket, overdue launch, frozen duel, unfinalized result, stalled round.
 
 ### Tie-breaking (matches)
 - Scores differ → higher score wins.
@@ -215,6 +234,10 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
 | `on_tournament_answer_written` | `tournament_duels/{tid}/{duelId}/answers/{qi}/{uid}` | When ALL real players answered: atomic claim (`playing → revealing` + `reveal_started_at`), score server-side (first correct 2 / other 1, reaction-time clamped to [50ms, 65s]), write `correct_reveal`. |
 | `on_tournament_reveal_started` | `tournament_duels/{tid}/{duelId}/reveal_started_at` (null→value) | Sleeps remaining reveal time, then atomically advances to next question — or finishes with optional **tiebreaker extension** (equal non-zero scores append a reserve question). |
 | `on_ffa_room_finished` | `rooms/{code}/status` (→ `finished`, with `tournament_id`) | Writes `ffa_results` + flips tournament to `bracket` server-side (skips if the host client already wrote them to avoid conflicting tie shuffles). |
+| `on_tournament_written` | `tournaments/{tid}` | Status → `bracket` and no matches yet ⇒ generate `bracket_matches` from `ffa_results`, and sync `actual_top_cut` / `total_rounds` / `current_round` / `phase_started_at`. |
+| `on_bracket_match_written` | `tournaments/{tid}/bracket_matches/{matchId}` | Pending match with both players ⇒ sleep out the phase wait (+3s so the host tab wins when open), then create the duel at `tournament_duels/{tid}/{match_id}` and flip the match to `active`. |
+| `on_tournament_duel_status` | `tournament_duels/{tid}/{duelId}/status` | `waiting` ⇒ force-start after 25s. `finished` ⇒ resolve the winner (forfeit → score → FFA rank at 0–0 → speed), write the match result, advance the winner and progress the round or crown the champion. |
+| `tournament_reconciler` | schedule `* * * * *` | Safety net over every bracket-phase tournament: regenerate missing brackets, launch overdue matches, restart frozen duels, finalize finished ones, reopen matches whose duel vanished, move rounds along. |
 
 ---
 

@@ -157,9 +157,13 @@ export default function PlayerDashboard() {
         } else if (idx >= 0) {
           docs.splice(idx, 1)
         }
-        // Prefer the first LIVE tournament; prune vanished docs; fall back to
-        // the most recent (even finished) so the player can still see results.
-        const live = docs.find(d => ['registration', 'ffa', 'transition', 'bracket'].includes(d.data.status))
+        // Prefer the most recently created LIVE tournament; prune vanished docs;
+        // fall back to the most recent (even finished) so the player can still
+        // see results. Picking whichever snapshot arrived first was how players
+        // ended up in a different tournament than the host.
+        const live = docs
+          .filter(d => ['registration', 'ffa', 'transition', 'bracket'].includes(d.data.status))
+          .sort((a, b) => (b.data.created_at?.seconds || 0) - (a.data.created_at?.seconds || 0))[0]
         if (live) {
           setActiveTournament({ id: live.id, ...live.data })
           return

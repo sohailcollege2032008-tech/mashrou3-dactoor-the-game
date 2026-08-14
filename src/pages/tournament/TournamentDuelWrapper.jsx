@@ -13,7 +13,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocs, collection
+  doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocs, collection, onSnapshot
 } from 'firebase/firestore'
 import { ref as rtdbRef, get, onValue } from 'firebase/database'
 import { rtdb, db } from '../../lib/firebase'
@@ -221,26 +221,35 @@ export default function TournamentDuelWrapper() {
   const [matchResult,    setMatchResult]    = useState(null)
   const [autoNavSeconds, setAutoNavSeconds] = useState(null)
 
+  // Live subscription rather than a single read: arriving a moment before the
+  // duel_id is written used to dead-end on "لم تبدأ المباراة بعد" with no retry.
   useEffect(() => {
     if (!tournamentId || !matchId) return
-    const load = async () => {
-      try {
-        const [tSnap, mSnap] = await Promise.all([
-          getDoc(doc(db, 'tournaments', tournamentId)),
-          getDoc(doc(db, 'tournaments', tournamentId, 'bracket_matches', matchId)),
-        ])
-        if (!tSnap.exists() || !mSnap.exists()) throw new Error('لم يتم العثور على المباراة')
+    let cancelled = false
 
-        const t = { id: tSnap.id, ...tSnap.data() }
-        const m = { match_id: mSnap.id, ...mSnap.data() }
-        if (!m.duel_id) throw new Error('لم تبدأ المباراة بعد')
+    getDoc(doc(db, 'tournaments', tournamentId))
+      .then(tSnap => {
+        if (cancelled) return
+        if (!tSnap.exists()) return setError('لم يتم العثور على البطولة')
+        setTournament({ id: tSnap.id, ...tSnap.data() })
+      })
+      .catch(e => { console.error(e); setError(e.message) })
 
-        setTournament(t); setMatch(m); setDuelId(m.duel_id); setReady(true)
-      } catch (e) {
-        console.error(e); setError(e.message)
-      }
-    }
-    load()
+    const unsub = onSnapshot(
+      doc(db, 'tournaments', tournamentId, 'bracket_matches', matchId),
+      snap => {
+        if (!snap.exists()) return setError('لم يتم العثور على المباراة')
+        const m = { match_id: snap.id, ...snap.data() }
+        setMatch(m)
+        if (m.duel_id) {
+          setDuelId(m.duel_id)
+          setError(null)
+          setReady(true)
+        }
+      },
+      e => { console.error(e); setError(e.message) }
+    )
+    return () => { cancelled = true; unsub() }
   }, [tournamentId, matchId])
 
   useEffect(() => {
@@ -326,11 +335,14 @@ export default function TournamentDuelWrapper() {
           const nextRef  = doc(db, 'tournaments', tournamentId, 'bracket_matches', match.next_match_id)
           const nextSnap = await getDoc(nextRef)
           if (nextSnap.exists()) {
-            const nextMatch = nextSnap.data()
-            const updates = !nextMatch.player_a_uid
-              ? { player_a_uid: winnerUid, player_a_name: winnerName }
-              : { player_b_uid: winnerUid, player_b_name: winnerName }
-            await updateDoc(nextRef, updates)
+            // Slot is decided by match number parity, not by which slot happens
+            // to be empty — "first empty slot" put both winners in the wrong
+            // seats whenever two matches finished out of order.
+            const slot = (match.match_number ?? 1) % 2 === 1 ? 'player_a' : 'player_b'
+            await updateDoc(nextRef, {
+              [`${slot}_uid`]:  winnerUid,
+              [`${slot}_name`]: winnerName,
+            })
           }
         } catch (e) {
           console.warn('[Bracket] Could not advance winner client-side:', e.code || e.message)
@@ -481,7 +493,7 @@ export default function TournamentDuelWrapper() {
   }
 
   // ── Loading ───────────────────────────────────────────────────────────────
-  if (!ready) {
+  if (!ready || !tournament) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Loader2 size={28} className="animate-spin" style={{ color: 'var(--ink-3)' }} />

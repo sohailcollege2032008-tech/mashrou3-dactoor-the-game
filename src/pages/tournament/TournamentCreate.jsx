@@ -57,6 +57,7 @@ export default function TournamentCreate() {
   const [loading,       setLoading]       = useState(false)
   const [fetching,      setFetching]      = useState(true)
   const [error,         setError]         = useState(null)
+  const [liveOthers,    setLiveOthers]    = useState([])
 
   useEffect(() => {
     if (!session?.uid) return
@@ -69,6 +70,20 @@ export default function TournamentCreate() {
       } catch (e) { console.error(e) }
       finally { setFetching(false) }
     })()
+  }, [session?.uid])
+
+  // Two live tournaments at once is how the host and the players ended up in
+  // different brackets — surface it before a second one is created.
+  useEffect(() => {
+    if (!session?.uid) return
+    const ACTIVE = ['registration', 'ffa', 'transition', 'bracket']
+    getDocs(query(collection(db, 'tournaments'), where('host_id', '==', session.uid)))
+      .then(snap => setLiveOthers(
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(t => ACTIVE.includes(t.status))
+      ))
+      .catch(() => {})
   }, [session?.uid])
 
   const updateConfig = (key, val) => setConfig(prev => ({ ...prev, [key]: val }))
@@ -303,6 +318,35 @@ export default function TournamentCreate() {
               </div>
             )}
           </div>
+
+          {liveOthers.length > 0 && (
+            <div style={{
+              border: '1px solid var(--alert)', borderRadius: 4, padding: '14px 16px',
+              background: 'color-mix(in srgb, var(--alert) 6%, var(--paper))',
+            }}>
+              <p className="folio" style={{ fontSize: 9, color: 'var(--alert)', marginBottom: 6 }}>
+                {liveOthers.length} ACTIVE TOURNAMENT{liveOthers.length > 1 ? 'S' : ''}
+              </p>
+              <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.7, margin: '0 0 10px' }}>
+                عندك بطولة شغالة بالفعل ({liveOthers.map(t => t.title).join('، ')}).
+                لو عملت بطولة تانية دلوقتي، اللاعبون ممكن يدخلوا الغلط. أنهِ القديمة الأول.
+              </p>
+              <button
+                onClick={() => navigate(
+                  liveOthers[0].status === 'registration'
+                    ? `/tournament/${liveOthers[0].id}/lobby`
+                    : `/tournament/${liveOthers[0].id}/bracket`
+                )}
+                style={{
+                  padding: '8px 16px', border: '1px solid var(--alert)', borderRadius: 4,
+                  background: 'transparent', color: 'var(--alert)',
+                  fontFamily: 'var(--sans)', fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                <span className="ar">افتح البطولة الحالية</span>
+              </button>
+            </div>
+          )}
 
           {error && (
             <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--alert)', textAlign: 'center' }}>

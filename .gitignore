@@ -29,3 +29,6 @@ functions/venv/
 
 # E2E test harness (contains tokens — never commit)
 scratch/tests/
+
+functions/__pycache__/
+functions/functions.yaml

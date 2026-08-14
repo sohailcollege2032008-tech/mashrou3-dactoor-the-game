@@ -28,8 +28,8 @@ export function computeActualTopCut(registeredCount, desiredTopCut) {
  * Returns an array of 1-based seed numbers arranged so that adjacent pairs are
  * the Round-1 match-ups:  [1, n, (n/2)+1, (n/2), ...]
  *
- * Example: buildBracketOrder(8) → [1, 8, 5, 4, 3, 6, 7, 2]
- * Pairs: (1v8), (5v4), (3v6), (7v2)
+ * Example: buildBracketOrder(8) → [1, 8, 4, 5, 2, 7, 3, 6]
+ * Pairs: (1v8), (4v5), (2v7), (3v6)
  */
 export function buildBracketOrder(n) {
   if (n === 2) return [1, 2]
