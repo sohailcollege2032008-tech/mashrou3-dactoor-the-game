@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { useEffect, Component } from 'react'
 import FullscreenButton from './components/FullscreenButton'
 import ThemeToggle from './components/ThemeToggle'
-import SoundPreviewModal from './components/common/SoundPreviewModal'
+import SoundTest from './pages/owner/SoundTest'
 import { useAuthStore } from './stores/authStore'
 import Landing from './pages/Landing'
 import AuthCallback from './pages/AuthCallback'
@@ -64,9 +64,9 @@ export default function App() {
     <BrowserRouter>
       <ThemeToggle />
       <FullscreenButton />
-      <SoundPreviewModal />
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/sound-test" element={<SoundTest />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/not-authorized" element={<NotAuthorized />} />
         <Route path="/test-math" element={<TestMathRendering />} />

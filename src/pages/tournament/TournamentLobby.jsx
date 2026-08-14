@@ -310,10 +310,7 @@ export default function TournamentLobby() {
           <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
             fontFamily="Fraunces, Georgia, serif" fontSize="28" fontWeight="500" fill="var(--ink)">MR</text>
         </svg>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="folio">Tournament · Lobby</span>
-          <SoundToggle showPreviewBtn={true} />
-        </div>
+        <span className="folio">Tournament · Lobby</span>
       </header>
 
       {/* ── Body ───────────────────────────────────────────────────────── */}

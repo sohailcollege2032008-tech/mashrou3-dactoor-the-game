@@ -583,24 +583,21 @@ export default function TournamentBracket() {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <SoundToggle showPreviewBtn={true} />
-            <button
-              onClick={exportImage}
-              disabled={exporting || matches.length === 0}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 14px', border: '1px solid var(--rule)', borderRadius: 4,
-                background: 'none', cursor: exporting || matches.length === 0 ? 'not-allowed' : 'pointer',
-                fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
-                color: 'var(--ink-3)', opacity: exporting || matches.length === 0 ? 0.4 : 1,
-                transition: 'all 150ms',
-              }}
-            >
-              {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-              تصدير صورة
-            </button>
-          </div>
+          <button
+            onClick={exportImage}
+            disabled={exporting || matches.length === 0}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', border: '1px solid var(--rule)', borderRadius: 4,
+              background: 'none', cursor: exporting || matches.length === 0 ? 'not-allowed' : 'pointer',
+              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: 'var(--ink-3)', opacity: exporting || matches.length === 0 ? 0.4 : 1,
+              transition: 'all 150ms',
+            }}
+          >
+            {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+            تصدير صورة
+          </button>
         </div>
 
         {/* Error */}
