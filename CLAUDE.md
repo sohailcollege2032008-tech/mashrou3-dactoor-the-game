@@ -1,4 +1,5 @@
 ﻿> Read docs/ARCHITECTURE.md for the complete current-system reference (data model, state machines, Cloud Functions, rules, deployment).
+> Read docs/LESSONS.md BEFORE changing anything — mandatory testing/risk discipline from a production incident (host-tab-dependent bracket).
 
 # CLAUDE.md — Mashrou3 Dactoor: THE GAME
 
