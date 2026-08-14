@@ -33,6 +33,7 @@ export default function TournamentPlayerWait() {
   const [ffaResults,    setFfaResults]    = useState([])
   // Open by default — the bracket is the thing players want to see while waiting.
   const [showBracket,   setShowBracket]   = useState(location.state?.showBracket !== false)
+  const [showFfaTable,  setShowFfaTable]  = useState(false)
   const [now,           setNow]           = useState(Date.now())
 
   const uid = session?.uid
@@ -204,6 +205,12 @@ export default function TournamentPlayerWait() {
   const isEliminated = ffaEliminated || myResult === 'eliminated'
   const isFinished   = tournament.status === 'finished'
   const amChampion   = isFinished && tournament.winner_uid === uid
+
+  // Right after the FFA (the round-1 transition window) it is the headline;
+  // after that it stays out of the way until the tournament is over.
+  const justAfterFfa      = tournament.status === 'bracket' && isRoundOne && inPhaseWait
+  const showFfaStandings  = ffaResults.length > 0 && (justAfterFfa || isFinished)
+  const ffaTableOpen      = justAfterFfa || (isFinished && showFfaTable)
 
   return (
     <div className="paper-grain" style={{ minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
@@ -471,17 +478,50 @@ export default function TournamentPlayerWait() {
                 </div>
               )}
 
-              {/* FFA qualifiers results */}
-              {ffaResults.length > 0 && (
-                <div style={{ border: '1px solid var(--rule)', marginBottom: 16 }}>
-                  <div style={{
-                    padding: '10px 14px', borderBottom: '1px solid var(--rule)',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  }}>
-                    <span className="folio" style={{ letterSpacing: '0.18em' }}>التصفيات — FFA</span>
-                    <span className="folio" style={{ color: 'var(--ink-4)' }}>{ffaResults.length} لاعب</span>
-                  </div>
-                  {ffaResults.slice(0, 8).map((r, i) => {
+              {/* ── FFA standings ──────────────────────────────────────────
+                  Shown once, right after the qualifiers end, and again at the
+                  very end of the tournament — collapsed and labelled, so it is
+                  never mistaken for the final ranking. It used to sit on screen
+                  through every round break, which made the FFA leader look like
+                  the tournament leader. */}
+              {showFfaStandings && (
+                <div style={{
+                  border: `1px solid ${isFinished ? 'var(--rule)' : 'var(--gold)'}`,
+                  marginBottom: 16,
+                }}>
+                  <button
+                    onClick={() => isFinished && setShowFfaTable(v => !v)}
+                    style={{
+                      width: '100%', padding: '10px 14px',
+                      borderBottom: ffaTableOpen ? '1px solid var(--rule)' : 'none',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      background: isFinished ? 'var(--paper-2)' : 'rgba(176,137,68,0.06)',
+                      border: 'none', cursor: isFinished ? 'pointer' : 'default',
+                      textAlign: 'right',
+                    }}
+                  >
+                    <span className="folio" style={{
+                      letterSpacing: '0.18em',
+                      color: isFinished ? 'var(--ink-3)' : 'var(--gold)',
+                    }}>
+                      {isFinished ? 'ترتيب التصفيات — ليس الترتيب النهائي' : 'نتيجة التصفيات — المتأهلون'}
+                    </span>
+                    <span className="folio" style={{ color: 'var(--ink-4)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {ffaResults.length} لاعب
+                      {isFinished && (ffaTableOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
+                    </span>
+                  </button>
+
+                  {ffaTableOpen && isFinished && (
+                    <p className="ar" style={{
+                      fontSize: 11, color: 'var(--ink-4)', margin: 0,
+                      padding: '8px 14px', borderBottom: '1px solid var(--rule)', lineHeight: 1.7,
+                    }}>
+                      ده ترتيب مرحلة التصفيات بس. البطل بيتحدد من مباريات الـ Bracket، مش من الجدول ده.
+                    </p>
+                  )}
+
+                  {ffaTableOpen && ffaResults.slice(0, 8).map((r, i) => {
                     const isMe = r.uid === uid
                     return (
                       <div key={r.uid} style={{
@@ -507,7 +547,7 @@ export default function TournamentPlayerWait() {
                       </div>
                     )
                   })}
-                  {ffaResults.length > 8 && (
+                  {ffaTableOpen && ffaResults.length > 8 && (
                     <p className="folio" style={{ textAlign: 'center', padding: 8, color: 'var(--ink-4)', fontSize: 9 }}>
                       +{ffaResults.length - 8} آخرين
                     </p>

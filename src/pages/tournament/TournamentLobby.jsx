@@ -9,7 +9,9 @@ import {
 import { ref as rtdbRef, onValue, set, remove } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { computeActualTopCut } from '../../utils/tournamentUtils'
+import {
+  computeActualTopCut, roundsForTopCut, validateRoundAssignments, TOP_CUT_CHOICES
+} from '../../utils/tournamentUtils'
 import { Copy, Check, Settings } from 'lucide-react'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
 
@@ -117,11 +119,27 @@ export default function TournamentLobby() {
     })
   }, [tournament?.code])
 
-  const saveAssignment = useCallback(async (newAssignments) => {
+  const saveAssignment = useCallback(async (newAssignments, newTopCut) => {
     try {
-      await updateDoc(doc(db, 'tournaments', tournamentId), { round_questions: newAssignments })
+      const patch = { round_questions: newAssignments }
+      if (newTopCut) { patch.top_cut = newTopCut; patch.is_auto_top_cut = false }
+      await updateDoc(doc(db, 'tournaments', tournamentId), patch)
     } catch (e) { console.error(e) }
     setShowQPanel(false)
+  }, [tournamentId])
+
+  // Editable while registration is open: the host watches players arrive and
+  // often needs to drop the cap because the number they planned won't be met.
+  const changeTopCut = useCallback(async (value) => {
+    try {
+      await updateDoc(doc(db, 'tournaments', tournamentId), {
+        top_cut: value,
+        is_auto_top_cut: false,
+      })
+    } catch (e) {
+      console.error(e)
+      setError('فشل تغيير عدد المتأهلين')
+    }
   }, [tournamentId])
 
   const cancelTournament = useCallback(async () => {
@@ -144,10 +162,22 @@ export default function TournamentLobby() {
     if (!tournament || launching || registrations.length < 2) return
     setLaunching(true)
     setError(null)
+    // Assignment is mandatory — never launch into rounds with no questions.
+    const plannedRounds = roundsForTopCut(tournament.top_cut || 8)
+    const check = validateRoundAssignments(tournament.round_questions, plannedRounds)
+    if (!check.ok) {
+      setLaunching(false)
+      autoLaunchedRef.current = false
+      setError('لازم تخصص أسئلة لكل الجولات قبل البدء: ' +
+        check.missing.map(m => `${m.label} (${m.have}/${m.need})`).join('، '))
+      return
+    }
+
     try {
-      const desiredCap = (tournament.is_auto_top_cut || !tournament.top_cut)
-        ? registrations.length : tournament.top_cut
-      const actualTopCut = computeActualTopCut(registrations.length, desiredCap)
+      // top_cut is the host's cap. If fewer players show up than the cap, the
+      // bracket shrinks to fit — it never grows past what the host assigned
+      // questions for.
+      const actualTopCut = computeActualTopCut(registrations.length, tournament.top_cut || 8)
 
       const deckDoc = await getDoc(doc(db, 'question_sets', tournament.deck_id))
       const deckData = deckDoc.data()
@@ -233,11 +263,14 @@ export default function TournamentLobby() {
     )
   }
 
-  const renderDesiredCap = (tournament.is_auto_top_cut || !tournament.top_cut)
-    ? registrations.length : tournament.top_cut
-  const actualTopCut = registrations.length >= 2
-    ? computeActualTopCut(registrations.length, renderDesiredCap) : null
-  const tentativeRounds = actualTopCut ? Math.log2(actualTopCut) : null
+  // top_cut is the cap the host plans (and assigns questions) for. The bracket
+  // shrinks to fit whoever actually shows up, but never grows past it.
+  const capTopCut     = tournament.top_cut || 8
+  const plannedRounds = roundsForTopCut(capTopCut)
+  const actualTopCut  = registrations.length >= 2
+    ? computeActualTopCut(registrations.length, capTopCut) : null
+  const actualRounds  = actualTopCut ? Math.log2(actualTopCut) : null
+  const assignCheck   = validateRoundAssignments(tournament.round_questions, plannedRounds)
   const isScheduled = !!tournament.scheduled_start_at
   const countdownUrgent = timeLeft !== null && timeLeft <= 60
 
@@ -249,8 +282,8 @@ export default function TournamentLobby() {
         <QuestionAssignmentPanel
           deckQs={deckQs}
           roundQuestions={tournament.round_questions || {}}
-          totalRounds={tentativeRounds}
-          isAutoMode={!!(tournament.is_auto_top_cut || !tournament.top_cut)}
+          topCut={capTopCut}
+          editableTopCut
           lockedRounds={[]}
           onSave={saveAssignment}
           onClose={() => setShowQPanel(false)}
@@ -348,16 +381,64 @@ export default function TournamentLobby() {
             </span>
           </div>
 
-          {actualTopCut && (
-            <div style={{
-              padding: '10px 14px', borderBottom: '1px solid var(--rule)',
-              background: 'var(--paper-2)', textAlign: 'center',
-            }}>
-              <span className="folio" style={{ color: 'var(--gold)', letterSpacing: '0.18em' }}>
-                TOP CUT → {actualTopCut} players · {tentativeRounds} rounds
+          {/* ── Bracket cap — changeable for as long as registration is open ── */}
+          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--rule)', background: 'var(--paper-2)' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span className="ar" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>
+                عدد المتأهلين للـ Bracket
+              </span>
+              <span className="folio" style={{ color: 'var(--ink-4)' }}>
+                {plannedRounds} {plannedRounds === 1 ? 'ROUND' : 'ROUNDS'}
               </span>
             </div>
-          )}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {TOP_CUT_CHOICES.map(n => {
+                const active = capTopCut === n
+                return (
+                  <button
+                    key={n}
+                    onClick={() => changeTopCut(n)}
+                    style={{
+                      flex: '1 0 auto', minWidth: 44, padding: '7px 0',
+                      border: `1px solid ${active ? 'var(--ink)' : 'var(--rule)'}`,
+                      background: active ? 'var(--ink)' : 'var(--paper)',
+                      color: active ? 'var(--paper)' : 'var(--ink-3)',
+                      fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700,
+                      cursor: 'pointer', transition: 'all 120ms',
+                    }}
+                  >
+                    {n}
+                  </button>
+                )
+              })}
+            </div>
+
+            <p className="ar" style={{ fontSize: 11, color: 'var(--ink-4)', margin: '8px 0 0', lineHeight: 1.6 }}>
+              {actualTopCut
+                ? actualTopCut < capTopCut
+                  ? `حضر ${registrations.length} — البراكيت هيبدأ بـ ${actualTopCut} لاعب (${actualRounds} ${actualRounds === 1 ? 'جولة' : 'جولات'}). تقدر تقلل العدد دلوقتي.`
+                  : `البراكيت هيبدأ بـ ${actualTopCut} لاعب (${actualRounds} ${actualRounds === 1 ? 'جولة' : 'جولات'}).`
+                : 'لو حضر عدد أقل، البراكيت هيصغّر نفسه تلقائياً — بس مش هيزيد عن الرقم ده.'}
+            </p>
+          </div>
+
+          {/* Mandatory assignment status */}
+          <div style={{
+            padding: '10px 14px', borderBottom: '1px solid var(--rule)',
+            background: assignCheck.ok
+              ? 'color-mix(in srgb, var(--success) 6%, var(--paper))'
+              : 'color-mix(in srgb, var(--alert) 6%, var(--paper))',
+          }}>
+            <p className="ar" style={{
+              fontSize: 12, margin: 0, lineHeight: 1.7,
+              color: assignCheck.ok ? 'var(--success)' : 'var(--alert)',
+            }}>
+              {assignCheck.ok
+                ? '✓ كل الجولات ليها أسئلة مخصصة'
+                : `ناقص تخصيص أسئلة: ${assignCheck.missing.map(m => `${m.label} (${m.have}/${m.need})`).join('، ')}`}
+            </p>
+          </div>
 
           <div style={{ maxHeight: 200, overflowY: 'auto' }}>
             {registrations.length === 0 && (
@@ -435,25 +516,43 @@ export default function TournamentLobby() {
         )}
 
         {/* ── Launch FFA ───────────────────────────────────────────────── */}
-        <button
-          onClick={launchFFA}
-          disabled={launching || registrations.length < 2}
-          style={{
-            width: '100%', padding: '15px 20px',
-            background: launching || registrations.length < 2 ? 'var(--rule)' : 'var(--ink)',
-            color: launching || registrations.length < 2 ? 'var(--ink-4)' : 'var(--paper)',
-            border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 16, fontWeight: 700,
-            cursor: launching || registrations.length < 2 ? 'not-allowed' : 'pointer',
-            marginBottom: 8, transition: 'opacity 150ms',
-          }}
-        >
-          {launching ? 'جاري الإطلاق…' : 'ابدأ مرحلة FFA'}
-        </button>
+        {(() => {
+          const blocked = launching || registrations.length < 2 || !assignCheck.ok
+          return (
+            <button
+              onClick={launchFFA}
+              disabled={blocked}
+              style={{
+                width: '100%', padding: '15px 20px',
+                background: blocked ? 'var(--rule)' : 'var(--ink)',
+                color: blocked ? 'var(--ink-4)' : 'var(--paper)',
+                border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 16, fontWeight: 700,
+                cursor: blocked ? 'not-allowed' : 'pointer',
+                marginBottom: 8, transition: 'opacity 150ms',
+              }}
+            >
+              {launching ? 'جاري الإطلاق…' : 'ابدأ مرحلة FFA'}
+            </button>
+          )
+        })()}
 
         {registrations.length < 2 && (
           <p className="ar" style={{ textAlign: 'center', fontSize: 11, color: 'var(--ink-4)', marginBottom: 16 }}>
             يلزم مشاركان على الأقل
           </p>
+        )}
+
+        {registrations.length >= 2 && !assignCheck.ok && (
+          <button
+            onClick={() => setShowQPanel(true)}
+            style={{
+              width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+              textAlign: 'center', fontSize: 11, color: 'var(--alert)',
+              marginBottom: 16, fontFamily: 'var(--arabic)', textDecoration: 'underline',
+            }}
+          >
+            خصّص أسئلة الجولات الأول عشان تقدر تبدأ
+          </button>
         )}
 
         {/* ── Cancel tournament ────────────────────────────────────────── */}

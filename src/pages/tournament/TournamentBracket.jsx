@@ -545,7 +545,8 @@ export default function TournamentBracket() {
           deckQs={deckQs}
           roundQuestions={tournament.round_questions || {}}
           totalRounds={totalRounds}
-          isAutoMode={false}
+          topCut={tournament.actual_top_cut || 8}
+          editableTopCut={false}
           lockedRounds={Array.from({ length: currentRound - 1 }, (_, i) => i + 1)}
           ffaLocked={true}
           onSave={saveAssignment}

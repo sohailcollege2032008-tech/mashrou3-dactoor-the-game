@@ -5,10 +5,10 @@ import {
 } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { generateTournamentCode } from '../../utils/tournamentUtils'
-import { Trophy, Loader2, Clock, Zap, Calendar, ChevronRight } from 'lucide-react'
-
-const TOP_CUT_OPTIONS = [null, 8, 16, 32, 64, 128]
+import {
+  generateTournamentCode, roundsForTopCut, TOP_CUT_CHOICES
+} from '../../utils/tournamentUtils'
+import { Trophy, Loader2, Clock, Calendar, ChevronRight } from 'lucide-react'
 
 const DEFAULTS = {
   ffaQuestionDuration:   30,
@@ -49,7 +49,9 @@ export default function TournamentCreate() {
 
   const [title,         setTitle]         = useState('')
   const [deckId,        setDeckId]        = useState('')
-  const [topCut,        setTopCut]        = useState(null)
+  // A cap, not a promise: the bracket shrinks to fit whoever shows up, and the
+  // host can still change this in the lobby while registration is open.
+  const [topCut,        setTopCut]        = useState(8)
   const [config,        setConfig]        = useState({ ...DEFAULTS })
   const [useScheduled,  setUseScheduled]  = useState(false)
   const [scheduledDate, setScheduledDate] = useState(defaultScheduledDate)
@@ -115,7 +117,7 @@ export default function TournamentCreate() {
         created_at: serverTimestamp(),
         status:     'registration',
         top_cut:                topCut,
-        is_auto_top_cut:        topCut === null,
+        is_auto_top_cut:        false,   // legacy field — the cap is always explicit now
         actual_top_cut:         null,
         total_rounds:           null,
         ffa_question_duration:  config.ffaQuestionDuration  * 1000,
@@ -223,9 +225,9 @@ export default function TournamentCreate() {
           <div>
             <div className="folio" style={{ color: 'var(--ink-4)', marginBottom: 10 }}>عدد المتأهلين — Top Cut</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {TOP_CUT_OPTIONS.map(n => (
+              {TOP_CUT_CHOICES.map(n => (
                 <button
-                  key={n ?? 'auto'}
+                  key={n}
                   onClick={() => setTopCut(n)}
                   style={{
                     padding: '8px 16px', cursor: 'pointer',
@@ -237,15 +239,12 @@ export default function TournamentCreate() {
                     transition: 'all 150ms',
                   }}
                 >
-                  {n === null && <Zap size={11} />}
-                  {n === null ? 'تلقائي' : `Top ${n}`}
+                  {`Top ${n}`}
                 </button>
               ))}
             </div>
             <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink-4)', marginTop: 8 }}>
-              {topCut === null
-                ? 'أكبر قوة لـ 2 ≤ عدد المشاركين الفعليين عند إطلاق FFA'
-                : `سيتم التقليص لأقرب قوة لـ 2 إذا كان عدد المشاركين أقل من ${topCut}`}
+              {`${roundsForTopCut(topCut)} ${roundsForTopCut(topCut) === 1 ? 'جولة' : 'جولات'} براكيت — لو حضر عدد أقل من ${topCut} البراكيت هيصغّر نفسه تلقائياً. تقدر تغيّر الرقم ده من صفحة الانتظار قبل ما الـ FFA تبدأ.`}
             </p>
           </div>
 

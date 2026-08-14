@@ -21,6 +21,95 @@ export function computeActualTopCut(registeredCount, desiredTopCut) {
   return n
 }
 
+/** Questions consumed by a single bracket match (must match the Cloud Function). */
+export const QUESTIONS_PER_MATCH = 5
+
+/** Bracket sizes a host can pick as the cap — each one is a whole number of rounds. */
+export const TOP_CUT_CHOICES = [2, 4, 8, 16, 32, 64, 128]
+
+/**
+ * Number of bracket rounds a given bracket size produces.
+ * 2 → 1 (final only), 4 → 2, 8 → 3 …
+ */
+export function roundsForTopCut(topCut) {
+  let n = 1, rounds = 0
+  while (n * 2 <= (topCut || 0)) { n *= 2; rounds++ }
+  return Math.max(rounds, 1)
+}
+
+/**
+ * Check that every slot the tournament will use has questions assigned.
+ * Assignment is mandatory — a round left empty used to fall back to random
+ * questions, which meant the host never really controlled what was asked.
+ *
+ * @param {object} roundQuestions - tournament.round_questions
+ * @param {number} plannedRounds  - rounds implied by the bracket cap
+ * @returns {{ ok: boolean, missing: {slot: string, label: string, have: number, need: number}[] }}
+ */
+export function validateRoundAssignments(roundQuestions, plannedRounds) {
+  const rq = roundQuestions || {}
+  const missing = []
+
+  const ffaCount = (rq.ffa || []).length
+  if (ffaCount < 1) {
+    missing.push({ slot: 'ffa', label: 'التصفيات (FFA)', have: ffaCount, need: 1 })
+  }
+
+  for (let r = 1; r <= plannedRounds; r++) {
+    const have = (rq[String(r)] || []).length
+    if (have < QUESTIONS_PER_MATCH) {
+      missing.push({
+        slot:  String(r),
+        label: r === plannedRounds ? 'النهائي'
+             : r === plannedRounds - 1 ? 'نصف النهائي'
+             : r === plannedRounds - 2 ? 'ربع النهائي'
+             : `الجولة ${r}`,
+        have,
+        need: QUESTIONS_PER_MATCH,
+      })
+    }
+  }
+
+  return { ok: missing.length === 0, missing }
+}
+
+/**
+ * Indices currently assigned to a slot the tournament will actually use.
+ * Rounds beyond `roundCount` are ignored — when the host lowers the bracket cap
+ * those rounds disappear, and their questions must become available again.
+ *
+ * @param {object} assignments - { ffa: number[], 1: number[], … }
+ * @param {number} roundCount
+ * @returns {Set<number>}
+ */
+export function assignedIndices(assignments, roundCount) {
+  return new Set(
+    Object.entries(assignments || {})
+      .filter(([k]) => k === 'ffa' || Number(k) <= roundCount)
+      .flatMap(([, idxs]) => idxs || [])
+  )
+}
+
+/**
+ * Reshape an assignment map when the number of bracket rounds changes.
+ * Shrinking DELETES the dropped rounds (their questions return to the pool);
+ * growing adds empty slots. Kept rounds are untouched.
+ *
+ * @param {object} assignments
+ * @param {number} prevRounds
+ * @param {number} nextRounds
+ * @returns {object} new assignment map
+ */
+export function reshapeAssignments(assignments, prevRounds, nextRounds) {
+  const copy = { ...(assignments || {}) }
+  if (nextRounds < prevRounds) {
+    for (let r = nextRounds + 1; r <= prevRounds; r++) delete copy[r]
+  } else {
+    for (let r = prevRounds + 1; r <= nextRounds; r++) copy[r] = copy[r] || []
+  }
+  return copy
+}
+
 // ── Bracket seed ordering ──────────────────────────────────────────────────────
 
 /**

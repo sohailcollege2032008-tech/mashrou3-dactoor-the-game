@@ -1,5 +1,9 @@
 import React, { useState, useCallback } from 'react'
-import { X, Plus, Minus, GripVertical, Lock, BookOpen, CheckCircle2, Zap } from 'lucide-react'
+import { X, Plus, Minus, GripVertical, Lock, BookOpen, CheckCircle2, Zap, AlertTriangle } from 'lucide-react'
+import {
+  QUESTIONS_PER_MATCH, TOP_CUT_CHOICES, roundsForTopCut, validateRoundAssignments,
+  assignedIndices, reshapeAssignments,
+} from '../../utils/tournamentUtils'
 
 function getRoundName(round, total) {
   if (round === total)     return 'النهائي'
@@ -11,28 +15,47 @@ function getRoundName(round, total) {
 export default function QuestionAssignmentPanel({
   deckQs         = [],
   roundQuestions = {},
-  totalRounds    = null,
-  isAutoMode     = false,
+  topCut         = 8,
+  totalRounds    = null,   // fixed round count (bracket phase — cap already locked)
+  editableTopCut = false,
   lockedRounds   = [],
   ffaLocked      = false,
   onSave,
   onClose,
 }) {
-  const initCount = Math.max(totalRounds || 3, 1)
+  // Round count follows the bracket cap, which is the one number the host
+  // actually reasons about ("how many make it through").
+  const [cap, setCap] = useState(() => topCut || 8)
+  const roundCount = totalRounds ? Math.max(totalRounds, 1) : roundsForTopCut(cap)
 
-  const [roundCount, setRoundCount] = useState(initCount)
   const [assignments, setAssignments] = useState(() => {
     const init = { ffa: [...(roundQuestions['ffa'] || [])] }
-    for (let r = 1; r <= initCount; r++) init[r] = [...(roundQuestions[String(r)] || [])]
+    const n = totalRounds ? Math.max(totalRounds, 1) : roundsForTopCut(topCut || 8)
+    for (let r = 1; r <= n; r++) init[r] = [...(roundQuestions[String(r)] || [])]
     return init
   })
+
+  const [rangeFrom, setRangeFrom] = useState('')
+  const [rangeTo,   setRangeTo]   = useState('')
+  // Default to the first slot that can still receive questions, so the panel
+  // doesn't open with a disabled option selected mid-bracket.
+  const [rangeSlot, setRangeSlot] = useState(() => {
+    if (!ffaLocked) return 'ffa'
+    const n = totalRounds ? Math.max(totalRounds, 1) : roundsForTopCut(topCut || 8)
+    for (let r = 1; r <= n; r++) if (!lockedRounds.some(x => Number(x) === r)) return String(r)
+    return 'ffa'
+  })
+  const [rangeNote, setRangeNote] = useState(null)
 
   const [dragIdx,  setDragIdx]  = useState(null)
   const [dragFrom, setDragFrom] = useState(null)
   const [dragOver, setDragOver] = useState(null)
   const [tapIdx,   setTapIdx]   = useState(null)
 
-  const isSlotLocked = (slot) => slot === 'ffa' ? ffaLocked : lockedRounds.includes(slot)
+  // slot arrives as a number from renderSlot and as a string from the range
+  // <select>, so compare numerically — otherwise a finished round reads unlocked.
+  const isSlotLocked = (slot) =>
+    slot === 'ffa' ? ffaLocked : lockedRounds.some(r => Number(r) === Number(slot))
 
   const copyAll = (prev) => {
     const copy = { ffa: [...(prev['ffa'] || [])] }
@@ -40,24 +63,54 @@ export default function QuestionAssignmentPanel({
     return copy
   }
 
-  const allAssigned = new Set(
-    Object.entries(assignments)
-      .filter(([k]) => k === 'ffa' || Number(k) <= roundCount)
-      .flatMap(([, idxs]) => idxs)
-  )
+  const allAssigned = assignedIndices(assignments, roundCount)
   const pool = deckQs.map((_, i) => i).filter(i => !allAssigned.has(i))
 
-  const changeRoundCount = useCallback((delta) => {
-    const next = Math.max(1, Math.min(7, roundCount + delta))
-    if (next === roundCount) return
+  // Halving/doubling the cap adds or drops a round. Questions in a dropped
+  // round are released back to the pool rather than thrown away — the host can
+  // redistribute them across the rounds that remain.
+  const changeCap = useCallback((nextCap) => {
+    if (!editableTopCut || !nextCap || nextCap === cap) return
+    const nextRounds = roundsForTopCut(nextCap)
+    setAssignments(prev => reshapeAssignments(prev, roundsForTopCut(cap), nextRounds))
+    setCap(nextCap)
+    if (rangeSlot !== 'ffa' && Number(rangeSlot) > nextRounds) setRangeSlot('ffa')
+  }, [cap, editableTopCut, rangeSlot])
+
+  // Assign a whole span of the deck at once — dragging 40 questions one by one
+  // was the actual bottleneck.
+  const applyRange = useCallback(() => {
+    const from = parseInt(rangeFrom, 10)
+    const to   = parseInt(rangeTo, 10)
+    if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      return setRangeNote({ bad: true, text: 'اكتب رقم البداية والنهاية' })
+    }
+    const lo = Math.max(1, Math.min(from, to))
+    const hi = Math.min(deckQs.length, Math.max(from, to))
+    if (hi < lo) return setRangeNote({ bad: true, text: 'النطاق خارج حدود البنك' })
+    if (isSlotLocked(rangeSlot)) return setRangeNote({ bad: true, text: 'الجولة دي منتهية' })
+
+    const wanted = []
+    for (let i = lo - 1; i <= hi - 1; i++) wanted.push(i)
+    const free  = wanted.filter(i => !allAssigned.has(i))
+    const taken = wanted.length - free.length
+
+    if (free.length === 0) {
+      return setRangeNote({ bad: true, text: 'كل الأسئلة في النطاق ده مخصصة بالفعل' })
+    }
+
     setAssignments(prev => {
-      const copy = { ...prev }
-      if (next < roundCount) { for (let r = next + 1; r <= roundCount; r++) delete copy[r] }
-      else { for (let r = roundCount + 1; r <= next; r++) copy[r] = copy[r] || [] }
+      const copy = copyAll(prev)
+      if (!copy[rangeSlot]) copy[rangeSlot] = []
+      copy[rangeSlot] = [...copy[rangeSlot], ...free.filter(i => !copy[rangeSlot].includes(i))]
       return copy
     })
-    setRoundCount(next)
-  }, [roundCount])
+    setRangeNote({
+      bad: false,
+      text: `تمت إضافة ${free.length} سؤال` + (taken ? ` — ${taken} كانوا مخصصين وتم تخطيهم` : ''),
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeFrom, rangeTo, rangeSlot, deckQs.length, assignments, roundCount])
 
   const onDragStart = useCallback((e, idx, fromSlot) => {
     setDragIdx(idx); setDragFrom(fromSlot); setTapIdx(null)
@@ -111,11 +164,14 @@ export default function QuestionAssignmentPanel({
     setAssignments(prev => ({ ...prev, [slot]: (prev[slot] || []).filter(i => i !== idx) }))
   }
 
-  const handleSave = () => {
-    const result = { ffa: assignments['ffa'] || [] }
-    for (let r = 1; r <= roundCount; r++) result[String(r)] = assignments[r] || []
-    onSave(result)
-  }
+  const draft = (() => {
+    const out = { ffa: assignments['ffa'] || [] }
+    for (let r = 1; r <= roundCount; r++) out[String(r)] = assignments[r] || []
+    return out
+  })()
+  const check = validateRoundAssignments(draft, roundCount)
+
+  const handleSave = () => onSave(draft, editableTopCut ? cap : null)
 
   const renderSlot = (slotKey, label, accentColor, icon) => {
     const isLocked   = isSlotLocked(slotKey)
@@ -148,9 +204,22 @@ export default function QuestionAssignmentPanel({
           }}>
             {label}
           </span>
-          <span className="folio" style={{ marginRight: 'auto', fontSize: 9, color: 'var(--ink-4)' }}>
-            {isLocked ? 'منتهية' : slotQs.length > 0 ? `${slotQs.length} سؤال` : 'فارغة (تلقائي)'}
-          </span>
+          {(() => {
+            const need   = slotKey === 'ffa' ? 1 : QUESTIONS_PER_MATCH
+            const short  = !isLocked && slotQs.length < need
+            return (
+              <span className="folio" style={{
+                marginRight: 'auto', fontSize: 9,
+                color: isLocked ? 'var(--ink-4)' : short ? 'var(--alert)' : 'var(--success)',
+              }}>
+                {isLocked ? 'منتهية'
+                  : short ? `${slotQs.length}/${need} سؤال — ناقص`
+                  : slotKey === 'ffa' ? `${slotQs.length} سؤال`
+                  /* every match in a bracket round plays the whole slot */
+                  : `${slotQs.length} سؤال / ماتش`}
+              </span>
+            )
+          })()}
         </div>
 
         {slotQs.length === 0 && !isLocked && (
@@ -158,7 +227,7 @@ export default function QuestionAssignmentPanel({
             fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--ink-4)',
             fontStyle: 'italic', textAlign: 'center', padding: '4px 0',
           }}>
-            {isDropping ? '⬇ أفلت هنا' : 'اسحب أسئلة هنا، أو اتركها فارغة للاختيار التلقائي'}
+            {isDropping ? '⬇ أفلت هنا' : 'اسحب أسئلة هنا أو استخدم "إضافة بالنطاق" — التخصيص إجباري'}
           </p>
         )}
 
@@ -217,24 +286,81 @@ export default function QuestionAssignmentPanel({
           تخصيص أسئلة الجولات
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {isAutoMode && (
+          {editableTopCut && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--rule)', padding: '6px 12px', borderRadius: 4 }}>
-              <span className="ar folio" style={{ color: 'var(--ink-3)', fontSize: 9 }}>جولات BRACKET</span>
-              <button onClick={() => changeRoundCount(-1)} disabled={roundCount <= 1}
-                style={{ width: 24, height: 24, border: '1px solid var(--rule)', background: 'var(--paper-2)', cursor: 'pointer', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink)' }}>
+              <span className="ar folio" style={{ color: 'var(--ink-3)', fontSize: 9 }}>متأهلين البراكيت</span>
+              <button
+                onClick={() => changeCap(cap / 2)}
+                disabled={cap <= TOP_CUT_CHOICES[0]}
+                style={{ width: 24, height: 24, border: '1px solid var(--rule)', background: 'var(--paper-2)', cursor: cap <= TOP_CUT_CHOICES[0] ? 'not-allowed' : 'pointer', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink)', opacity: cap <= TOP_CUT_CHOICES[0] ? 0.4 : 1 }}>
                 <Minus size={10} />
               </button>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600, color: 'var(--ink)', minWidth: 18, textAlign: 'center' }}>{roundCount}</span>
-              <button onClick={() => changeRoundCount(+1)} disabled={roundCount >= 7}
-                style={{ width: 24, height: 24, border: '1px solid var(--rule)', background: 'var(--paper-2)', cursor: 'pointer', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink)' }}>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600, color: 'var(--ink)', minWidth: 26, textAlign: 'center' }}>{cap}</span>
+              <button
+                onClick={() => changeCap(cap * 2)}
+                disabled={cap >= TOP_CUT_CHOICES[TOP_CUT_CHOICES.length - 1]}
+                style={{ width: 24, height: 24, border: '1px solid var(--rule)', background: 'var(--paper-2)', cursor: cap >= 128 ? 'not-allowed' : 'pointer', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink)', opacity: cap >= 128 ? 0.4 : 1 }}>
                 <Plus size={10} />
               </button>
+              <span className="ar folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>
+                = {roundCount} {roundCount === 1 ? 'جولة' : 'جولات'}
+              </span>
             </div>
           )}
           <button onClick={onClose} style={{ padding: 8, background: 'none', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', color: 'var(--ink)', display: 'flex' }}>
             <X size={16} />
           </button>
         </div>
+      </div>
+
+      {/* ── Range assignment — the fast path ─────────────────────────────── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+        padding: '10px 20px', borderBottom: '1px solid var(--rule)',
+        background: 'var(--paper-2)', flexShrink: 0,
+      }}>
+        <span className="ar" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>إضافة بالنطاق</span>
+        <span className="ar" style={{ fontSize: 12, color: 'var(--ink-3)' }}>من</span>
+        <input
+          type="number" min={1} max={deckQs.length} value={rangeFrom}
+          onChange={e => { setRangeFrom(e.target.value); setRangeNote(null) }}
+          placeholder="1"
+          style={{ width: 62, padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--mono)', fontSize: 13, textAlign: 'center' }}
+        />
+        <span className="ar" style={{ fontSize: 12, color: 'var(--ink-3)' }}>إلى</span>
+        <input
+          type="number" min={1} max={deckQs.length} value={rangeTo}
+          onChange={e => { setRangeTo(e.target.value); setRangeNote(null) }}
+          placeholder={String(deckQs.length)}
+          style={{ width: 62, padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--mono)', fontSize: 13, textAlign: 'center' }}
+        />
+        <select
+          value={rangeSlot}
+          onChange={e => { setRangeSlot(e.target.value); setRangeNote(null) }}
+          style={{ padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--arabic)', fontSize: 12, minWidth: 130 }}
+        >
+          <option value="ffa" disabled={ffaLocked}>التصفيات — FFA</option>
+          {Array.from({ length: roundCount }, (_, i) => i + 1).map(r => (
+            <option key={r} value={String(r)} disabled={isSlotLocked(r)}>
+              {getRoundName(r, roundCount)}{isSlotLocked(r) ? ' — منتهية' : ''}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={applyRange}
+          style={{
+            padding: '7px 18px', border: '1px solid var(--ink)', borderRadius: 3,
+            background: 'var(--ink)', color: 'var(--paper)',
+            fontFamily: 'var(--arabic)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          أضف
+        </button>
+        {rangeNote && (
+          <span className="ar" style={{ fontSize: 11, color: rangeNote.bad ? 'var(--alert)' : 'var(--success)' }}>
+            {rangeNote.text}
+          </span>
+        )}
       </div>
 
       {/* Tap hint */}
@@ -339,24 +465,38 @@ export default function QuestionAssignmentPanel({
       </div>
 
       {/* Footer */}
-      <div style={{
-        display: 'flex', gap: 10, padding: '14px 20px',
-        borderTop: '1px solid var(--rule)', flexShrink: 0,
-      }}>
-        <button onClick={onClose} style={{
-          flex: 1, padding: '12px 0', background: 'var(--paper-2)',
-          border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer',
-          fontFamily: 'var(--sans)', fontWeight: 500, fontSize: 14, color: 'var(--ink-2)',
-        }} className="ar">
-          إغلاق بدون حفظ
-        </button>
-        <button onClick={handleSave} style={{
-          flex: 3, padding: '12px 0', background: 'var(--ink)',
-          border: '1px solid var(--ink)', borderRadius: 4, cursor: 'pointer',
-          fontFamily: 'var(--sans)', fontWeight: 500, fontSize: 14, color: 'var(--paper)',
-        }} className="ar">
-          حفظ التخصيص
-        </button>
+      <div style={{ borderTop: '1px solid var(--rule)', flexShrink: 0 }}>
+        {!check.ok && (
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 20px',
+            background: 'color-mix(in srgb, var(--alert) 6%, var(--paper))',
+            borderBottom: '1px solid var(--rule)',
+          }}>
+            <AlertTriangle size={13} style={{ color: 'var(--alert)', flexShrink: 0, marginTop: 2 }} />
+            <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--alert)', margin: 0, lineHeight: 1.7 }}>
+              التخصيص إجباري — ناقص: {check.missing.map(m => `${m.label} (${m.have}/${m.need})`).join('، ')}
+            </p>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 10, padding: '14px 20px' }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '12px 0', background: 'var(--paper-2)',
+            border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer',
+            fontFamily: 'var(--sans)', fontWeight: 500, fontSize: 14, color: 'var(--ink-2)',
+          }} className="ar">
+            إغلاق بدون حفظ
+          </button>
+          <button onClick={handleSave} style={{
+            flex: 3, padding: '12px 0',
+            background: check.ok ? 'var(--ink)' : 'var(--paper-2)',
+            border: `1px solid ${check.ok ? 'var(--ink)' : 'var(--rule)'}`,
+            borderRadius: 4, cursor: 'pointer',
+            fontFamily: 'var(--sans)', fontWeight: 500, fontSize: 14,
+            color: check.ok ? 'var(--paper)' : 'var(--ink-3)',
+          }} className="ar">
+            {check.ok ? 'حفظ التخصيص' : 'حفظ (ناقص أسئلة)'}
+          </button>
+        </div>
       </div>
     </div>
   )
