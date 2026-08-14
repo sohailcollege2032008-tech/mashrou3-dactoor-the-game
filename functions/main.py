@@ -835,16 +835,46 @@ def _progress_round(fs, tournament_id: str, tourn: dict, rnd: int) -> None:
     logger.info("[CF-BR] tournament %s advanced to round %d", tournament_id, rnd + 1)
 
 
+def _advance_winner_slot(fs, tournament_id: str, match: dict) -> None:
+    """
+    Fill the winner's slot in the next match (idempotent).  Odd match numbers
+    feed slot A of the next match, even ones feed slot B.  Only fills an empty
+    slot so concurrent writers can never clobber each other.
+    """
+    if not match or not match.get("winner_uid") or not match.get("next_match_id"):
+        return
+    slot = "player_a" if (match.get("match_number") or 1) % 2 == 1 else "player_b"
+    next_ref = fs.collection("tournaments").document(tournament_id) \
+        .collection("bracket_matches").document(match["next_match_id"])
+    next_match = next_ref.get().to_dict() or {}
+    if next_match.get(f"{slot}_uid"):
+        return  # already seeded — nothing to do
+    winner = match["winner_uid"]
+    winner_name = match.get("player_a_name") if winner == match.get("player_a_uid") \
+        else match.get("player_b_name")
+    next_ref.update({f"{slot}_uid": winner, f"{slot}_name": winner_name})
+    logger.info("[CF-BR] advanced %s -> %s.%s (%s)",
+                match.get("match_id"), match["next_match_id"], slot, winner_name)
+
+
 def _finalize_match(fs, tournament_id: str, match_id: str) -> bool:
     """
     Write a finished duel's result onto its bracket match, push the winner into
-    the next match and progress the round.  A match already 'finished' is
-    skipped, so the client and the server can both attempt this safely.
+    the next match and progress the round.
+
+    IMPORTANT: advancement must happen even when the match was ALREADY
+    finalised by a player's browser tab.  A client tab can write the match
+    result (it is a participant), but its own advancement write is denied by
+    the security rules (it is not yet a participant of the next match).  If we
+    skip 'finished' matches here, the winner is lost forever — which is what
+    happened in production on 2026-08-14 (two of four round-1 winners never
+    reached round 2).  Every step below is idempotent; the reconciler calls
+    this same code as a backstop.
     """
     tourn_ref = fs.collection("tournaments").document(tournament_id)
     match_ref = tourn_ref.collection("bracket_matches").document(match_id)
     match = match_ref.get().to_dict()
-    if not match or match.get("status") == "finished":
+    if not match:
         return False
 
     duel_id = match.get("duel_id") or match_id
@@ -853,45 +883,45 @@ def _finalize_match(fs, tournament_id: str, match_id: str) -> bool:
         return False
 
     tourn = tourn_ref.get().to_dict() or {}
-    winner, loser, tie_breaker = _resolve_winner(fs, tournament_id, duel, match)
-    if not winner:
-        return False
 
-    players = duel.get("players") or {}
-    claimed = {"v": False}
+    if match.get("status") == "finished" and match.get("winner_uid"):
+        # A client tab (or a previous invocation) already finalised the match.
+        winner, loser, tie_breaker = match["winner_uid"], match.get("loser_uid"), match.get("tie_broken_by")
+    else:
+        winner, loser, tie_breaker = _resolve_winner(fs, tournament_id, duel, match)
+        if not winner:
+            return False
+        players = duel.get("players") or {}
+        claimed = {"v": False}
 
-    @admin_fs.transactional
-    def _claim(txn, target):
-        data = target.get(transaction=txn).to_dict() or {}
-        if data.get("status") == "finished":
-            return
-        claimed["v"] = True
-        txn.update(target, {
-            "status": "finished",
-            "winner_uid": winner,
-            "loser_uid": loser,
-            "player_a_score": (players.get(match.get("player_a_uid")) or {}).get("score") or 0,
-            "player_b_score": (players.get(match.get("player_b_uid")) or {}).get("score") or 0,
-            "tie_broken_by": tie_breaker,
-            "finished_at": admin_fs.SERVER_TIMESTAMP,
-        })
+        @admin_fs.transactional
+        def _claim(txn, target):
+            data = target.get(transaction=txn).to_dict() or {}
+            if data.get("status") == "finished":
+                return
+            claimed["v"] = True
+            txn.update(target, {
+                "status": "finished",
+                "winner_uid": winner,
+                "loser_uid": loser,
+                "player_a_score": (players.get(match.get("player_a_uid")) or {}).get("score") or 0,
+                "player_b_score": (players.get(match.get("player_b_uid")) or {}).get("score") or 0,
+                "tie_broken_by": tie_breaker,
+                "finished_at": admin_fs.SERVER_TIMESTAMP,
+            })
 
-    _claim(fs.transaction(), match_ref)
-    if not claimed["v"]:
-        return False
+        _claim(fs.transaction(), match_ref)
+        if not claimed["v"]:
+            # Lost the finalise race to a client tab — reload and use its winner.
+            match = match_ref.get().to_dict() or {}
+            winner = match.get("winner_uid")
+            if not winner:
+                return False
+            loser = match.get("loser_uid")
+            tie_breaker = match.get("tie_broken_by")
 
-    winner_name = match.get("player_a_name") if winner == match.get("player_a_uid") \
-        else match.get("player_b_name")
-
-    if match.get("next_match_id"):
-        # Odd match numbers feed slot A of the next match, even ones feed slot B.
-        slot = "player_a" if (match.get("match_number") or 1) % 2 == 1 else "player_b"
-        tourn_ref.collection("bracket_matches").document(match["next_match_id"]).update({
-            f"{slot}_uid": winner,
-            f"{slot}_name": winner_name,
-        })
-
-    logger.info("[CF-BR] finalized %s — winner %s", match_id, winner_name)
+    _advance_winner_slot(fs, tournament_id, match)
+    logger.info("[CF-BR] finalized %s — winner %s", match_id, winner)
     _progress_round(fs, tournament_id, tourn, match.get("round") or 1)
     return True
 
@@ -1069,6 +1099,12 @@ def tournament_reconciler(event: scheduler_fn.ScheduledEvent) -> None:
 
             for m in matches:
                 rnd = m.get("round") or 1
+
+                # A match finalised by a client tab still needs its winner
+                # advanced server-side (client advancement is rule-denied).
+                if m.get("status") == "finished" and m.get("winner_uid") and m.get("next_match_id"):
+                    _advance_winner_slot(fs, tournament_id, m)
+                    continue
 
                 if m.get("status") == "pending":
                     if not m.get("player_a_uid") or not m.get("player_b_uid"):
