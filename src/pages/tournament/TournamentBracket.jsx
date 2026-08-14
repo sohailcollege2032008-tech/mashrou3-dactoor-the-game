@@ -473,6 +473,47 @@ export default function TournamentBracket() {
     }
   }, [tournamentId])
 
+  const forceFinishMatch = useCallback(async (match, winningPlayerUid) => {
+    if (!match || !tournamentId) return
+    const winnerUid = winningPlayerUid || match.player_a_uid
+    const winnerName = winnerUid === match.player_a_uid ? match.player_a_name : match.player_b_name
+
+    try {
+      const batch = writeBatch(db)
+
+      const matchRef = doc(db, 'tournaments', tournamentId, 'bracket_matches', match.match_id)
+      batch.update(matchRef, {
+        status: 'finished',
+        winner_uid: winnerUid,
+        player_a_score: winnerUid === match.player_a_uid ? 1 : 0,
+        player_b_score: winnerUid === match.player_b_uid ? 1 : 0,
+        finished_at: Date.now(),
+        forced_by_host: true,
+      })
+
+      if (match.next_match_id) {
+        const nextRef = doc(db, 'tournaments', tournamentId, 'bracket_matches', match.next_match_id)
+        const isOdd = match.match_number % 2 === 1
+        batch.update(nextRef, isOdd
+          ? { player_a_uid: winnerUid, player_a_name: winnerName }
+          : { player_b_uid: winnerUid, player_b_name: winnerName }
+        )
+      }
+
+      await batch.commit()
+
+      if (match.duel_id) {
+        await update(rtdbRef(rtdb, `tournament_duels/${tournamentId}/${match.duel_id}`), {
+          status: 'finished',
+          forfeit_by: winnerUid === match.player_a_uid ? match.player_b_uid : match.player_a_uid,
+        })
+      }
+    } catch (e) {
+      console.error(e)
+      setError(e.message || 'فشل حسم المباراة')
+    }
+  }, [tournamentId])
+
   // Cut the break short and start the current round's matches right now.
   const startRoundNow = useCallback(async () => {
     const now     = Date.now()
@@ -855,6 +896,34 @@ export default function TournamentBracket() {
                           <ChevronRight size={11} />
                           <span className="ar">شاهد</span>
                         </button>
+                      )}
+                      {(match.status === 'active' || match.status === 'pending') && match.player_a_uid && match.player_b_uid && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <button
+                            onClick={() => forceFinishMatch(match, match.player_a_uid)}
+                            title={`حسم وتأهيل ${match.player_a_name}`}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 3,
+                              padding: '5px 8px', border: '1px solid var(--success)',
+                              borderRadius: 4, background: 'color-mix(in srgb, var(--success) 10%, var(--paper))',
+                              color: 'var(--success)', fontFamily: 'var(--sans)', fontSize: 11, cursor: 'pointer',
+                            }}
+                          >
+                            <span className="ar">⚡ حسم لـ {match.player_a_name ? match.player_a_name.split(' ')[0] : 'أ'}</span>
+                          </button>
+                          <button
+                            onClick={() => forceFinishMatch(match, match.player_b_uid)}
+                            title={`حسم وتأهيل ${match.player_b_name}`}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 3,
+                              padding: '5px 8px', border: '1px solid var(--success)',
+                              borderRadius: 4, background: 'color-mix(in srgb, var(--success) 10%, var(--paper))',
+                              color: 'var(--success)', fontFamily: 'var(--sans)', fontSize: 11, cursor: 'pointer',
+                            }}
+                          >
+                            <span className="ar">⚡ حسم لـ {match.player_b_name ? match.player_b_name.split(' ')[0] : 'ب'}</span>
+                          </button>
+                        </div>
                       )}
                     </div>
 
