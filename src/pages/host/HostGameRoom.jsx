@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import MathText from '../../components/common/MathText'
 import { getDir } from '../../utils/rtlUtils'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -20,20 +20,19 @@ import ActivityLogViewer from '../../components/ActivityLogViewer'
 
 // ── Countdown bar ──────────────────────────────────────────────────────────────
 function CountdownBar({ startedAt, duration }) {
-  const [remaining, setRemaining] = useState(duration)
-  const rafRef = useRef(null)
+  const [remaining, setRemaining] = useState(() => Math.max(0, duration - (Date.now() - startedAt) / 1000))
 
   useEffect(() => {
-    const tick = () => {
+    const update = () => {
       const rem = Math.max(0, duration - (Date.now() - startedAt) / 1000)
       setRemaining(rem)
-      if (rem > 0) rafRef.current = requestAnimationFrame(tick)
     }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafRef.current)
+    update()
+    const interval = setInterval(update, 200)
+    return () => clearInterval(interval)
   }, [startedAt, duration])
 
-  const pct     = (remaining / duration) * 100
+  const pct     = Math.min(100, Math.max(0, (remaining / duration) * 100))
   const urgent  = remaining < duration * 0.25
   const expired = remaining === 0
   const barColor = expired ? 'var(--rule)' : urgent ? 'var(--alert)' : 'var(--ink)'
@@ -45,8 +44,8 @@ function CountdownBar({ startedAt, duration }) {
       borderBottomWidth: expired ? 1 : 2, background: 'var(--paper-2)',
     }}>
       <Timer size={14} style={{ color: expired ? 'var(--ink-4)' : urgent ? 'var(--alert)' : 'var(--ink)', flexShrink: 0 }} />
-      <div style={{ flex: 1, height: 2, background: 'var(--rule)', position: 'relative' }}>
-        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, transition: 'width 0.1s linear' }} />
+      <div style={{ flex: 1, height: 2, background: 'var(--rule)', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, transition: 'width 200ms linear' }} />
       </div>
       <span style={{
         fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16,
@@ -58,6 +57,7 @@ function CountdownBar({ startedAt, duration }) {
     </div>
   )
 }
+
 
 function formatFormulaForLog(html) {
   if (!html) return '';
@@ -72,11 +72,8 @@ function formatFormulaForLog(html) {
   return plain.replace(/\s+/g, ' ').trim();
 }
 
-// ── Config panel ──────────────────────────────────────────────────────────────
-function GameConfigPanel({ config, onChange }) {
-  const apply = (key, val) => onChange({ ...config, [key]: val })
-
-  const Toggle = ({ value, onToggle, color = 'var(--ink)' }) => (
+function ConfigToggle({ value, onToggle, color = 'var(--ink)' }) {
+  return (
     <button onClick={onToggle} style={{
       position: 'relative', width: 42, height: 22, borderRadius: 11, flexShrink: 0,
       background: value ? color : 'var(--rule)', border: 'none', cursor: 'pointer',
@@ -88,8 +85,10 @@ function GameConfigPanel({ config, onChange }) {
       }} />
     </button>
   )
+}
 
-  const row = (icon, label, desc, control) => (
+function ConfigRow({ icon, label, desc, control }) {
+  return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--rule)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
         <div style={{ marginTop: 1, flexShrink: 0, color: 'var(--ink-3)' }}>{icon}</div>
@@ -101,6 +100,11 @@ function GameConfigPanel({ config, onChange }) {
       {control}
     </div>
   )
+}
+
+// ── Config panel ──────────────────────────────────────────────────────────────
+function GameConfigPanel({ config, onChange }) {
+  const apply = (key, val) => onChange({ ...config, [key]: val })
 
   return (
     <div style={{ border: '1px solid var(--rule)', borderBottomWidth: 2, background: 'var(--paper)' }}>
@@ -112,9 +116,9 @@ function GameConfigPanel({ config, onChange }) {
       </div>
       <div style={{ padding: '0 16px 4px' }}>
 
-        {row(<UserCheck size={14} />, 'قبول تلقائي للاعبين', 'قبول طلبات الانضمام فوراً دون تدخل يدوي',
-          <Toggle value={config.auto_accept} onToggle={() => apply('auto_accept', !config.auto_accept)} color="var(--success)" />
-        )}
+        <ConfigRow icon={<UserCheck size={14} />} label="قبول تلقائي للاعبين" desc="قبول طلبات الانضمام فوراً دون تدخل يدوي"
+          control={<ConfigToggle value={config.auto_accept} onToggle={() => apply('auto_accept', !config.auto_accept)} color="var(--success)" />}
+        />
 
         {/* Timer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--rule)' }}>
@@ -136,9 +140,9 @@ function GameConfigPanel({ config, onChange }) {
           </div>
         </div>
 
-        {row(<Zap size={14} />, 'وضع تلقائي', null,
-          <Toggle value={config.auto_mode} onToggle={() => apply('auto_mode', !config.auto_mode)} color="var(--gold)" />
-        )}
+        <ConfigRow icon={<Zap size={14} />} label="وضع تلقائي" desc={null}
+          control={<ConfigToggle value={config.auto_mode} onToggle={() => apply('auto_mode', !config.auto_mode)} color="var(--gold)" />}
+        />
 
         {config.auto_mode && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 0 12px 24px', borderBottom: '1px solid var(--rule)' }}>
@@ -158,21 +162,22 @@ function GameConfigPanel({ config, onChange }) {
           </div>
         )}
 
-        {row(<Moon size={14} />, 'وضع غير مُراقَب', 'ابدأ الجيم وسيبه يشتغل لوحده',
-          <Toggle value={config.unattended_mode} onToggle={() => {
+        <ConfigRow icon={<Moon size={14} />} label="وضع غير مُراقَب" desc="ابدأ الجيم وسيبه يشتغل لوحده"
+          control={<ConfigToggle value={config.unattended_mode} onToggle={() => {
             const next = !config.unattended_mode
             if (next) { onChange({ ...config, unattended_mode: true, auto_accept: true, auto_mode: true }) }
             else { onChange({ ...config, unattended_mode: false }) }
-          }} color="var(--burgundy)" />
-        )}
+          }} color="var(--burgundy)" />}
+        />
 
-        {row(<Shuffle size={14} />, 'ترتيب الاختيارات عشوائي', null,
-          <Toggle value={config.shuffle_choices} onToggle={() => apply('shuffle_choices', !config.shuffle_choices)} />
-        )}
+        <ConfigRow icon={<Shuffle size={14} />} label="ترتيب الاختيارات عشوائي" desc={null}
+          control={<ConfigToggle value={config.shuffle_choices} onToggle={() => apply('shuffle_choices', !config.shuffle_choices)} />}
+        />
 
-        {row(<Layers size={14} />, 'ترتيب الأسئلة عشوائي', null,
-          <Toggle value={config.shuffle_questions} onToggle={() => apply('shuffle_questions', !config.shuffle_questions)} />
-        )}
+        <ConfigRow icon={<Layers size={14} />} label="ترتيب الأسئلة عشوائي" desc={null}
+          control={<ConfigToggle value={config.shuffle_questions} onToggle={() => apply('shuffle_questions', !config.shuffle_questions)} />}
+        />
+
 
         {/* Repeat entry */}
         <div style={{ padding: '12px 0', borderBottom: '1px solid var(--rule)' }}>
@@ -612,12 +617,13 @@ export default function HostGameRoom() {
         ...questions,
         questions: questions.questions.map(async (q, qIdx) => {
           const correctHash = await generateCorrectAnswerHash(q.correct, `${roomId}-q${qIdx}`, roomId, secretKey)
-          const { correct, ...qWithoutCorrect } = q
+          const { correct: _correct, ...qWithoutCorrect } = q
           return { ...qWithoutCorrect, correct_hash: correctHash }
         })
       }
       const secureQuestionsArray = await Promise.all(secureQuestions.questions)
       const finalQuestions = { ...questions, questions: secureQuestionsArray }
+
       await update(ref(rtdb, `rooms/${roomId}`), {
         status: 'playing', current_question_index: 0, question_started_at: Date.now(),
         config: gameConfig, questions: finalQuestions,

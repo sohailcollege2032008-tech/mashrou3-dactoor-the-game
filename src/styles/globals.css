@@ -1,6 +1,3 @@
-/* ─── Fonts ───────────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Inter+Tight:ital,wght@0,100..900;1,100..900&family=IBM+Plex+Sans+Arabic:wght@100;200;300;400;500;600;700&family=JetBrains+Mono:wght@100..800&display=swap');
-
 @import "tailwindcss";
 @source "../../index.html";
 @source "../../src";
@@ -30,12 +27,13 @@
   --color-choice-d:     #3C6E47;
 
   /* Fonts */
-  --font-sans:      'Cairo', sans-serif;
-  --font-display:   'Clash Display', sans-serif;
+  --font-sans:      'Inter Tight', system-ui, sans-serif;
+  --font-display:   'Fraunces', Georgia, serif;
   --font-serif:     'Fraunces', Georgia, serif;
   --font-editorial: 'Inter Tight', system-ui, sans-serif;
   --font-arabic:    'IBM Plex Sans Arabic', sans-serif;
   --font-mono:      'JetBrains Mono', monospace;
+
 
   /* Radii */
   --radius-xs:   2px;

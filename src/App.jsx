@@ -1,35 +1,73 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { useEffect, Component } from 'react'
+import { useEffect, Component, lazy, Suspense } from 'react'
 import FullscreenButton from './components/FullscreenButton'
 import ThemeToggle from './components/ThemeToggle'
 import SoundPreviewModal from './components/common/SoundPreviewModal'
-import SoundTest from './pages/owner/SoundTest'
 import { useAuthStore } from './stores/authStore'
-import Landing from './pages/Landing'
-import AuthCallback from './pages/AuthCallback'
-import NotAuthorized from './pages/NotAuthorized'
 import ProtectedRoute from './components/auth/ProtectedRoute'
-import OwnerDashboard from './pages/owner/OwnerDashboard'
-import OwnerLogs from './pages/owner/OwnerLogs'
-import HostDashboard from './pages/host/HostDashboard'
-import HostGameRoom from './pages/host/HostGameRoom'
-import JoinGame from './pages/player/JoinGame'
-import PlayerDashboard from './pages/player/PlayerDashboard'
-import PlayerProfile from './pages/player/PlayerProfile'
-import WaitingRoom from './pages/player/WaitingRoom'
-import PlayerGameView from './pages/player/PlayerGameView'
-import DeckBrowser from './pages/player/DeckBrowser'
-import PublicProfile from './pages/player/PublicProfile'
-import DuelLobby from './pages/duel/DuelLobby'
-import DuelGame from './pages/duel/DuelGame'
-import DuelResults from './pages/duel/DuelResults'
-import TournamentCreate from './pages/tournament/TournamentCreate'
-import TournamentLobby from './pages/tournament/TournamentLobby'
-import TournamentJoin from './pages/tournament/TournamentJoin'
-import TournamentBracket from './pages/tournament/TournamentBracket'
-import TournamentPlayerWait from './pages/tournament/TournamentPlayerWait'
-import TournamentDuelWrapper from './pages/tournament/TournamentDuelWrapper'
-import TestMathRendering from './pages/TestMathRendering'
+
+// ── Lazy-loaded Route Components ───────────────────────────────────────────
+const Landing = lazy(() => import('./pages/Landing'))
+const AuthCallback = lazy(() => import('./pages/AuthCallback'))
+const NotAuthorized = lazy(() => import('./pages/NotAuthorized'))
+const SoundTest = lazy(() => import('./pages/owner/SoundTest'))
+const TestMathRendering = lazy(() => import('./pages/TestMathRendering'))
+
+// Owner Routes
+const OwnerDashboard = lazy(() => import('./pages/owner/OwnerDashboard'))
+const OwnerLogs = lazy(() => import('./pages/owner/OwnerLogs'))
+
+// Host Routes
+const HostDashboard = lazy(() => import('./pages/host/HostDashboard'))
+const HostGameRoom = lazy(() => import('./pages/host/HostGameRoom'))
+
+// Player Routes
+const JoinGame = lazy(() => import('./pages/player/JoinGame'))
+const PlayerDashboard = lazy(() => import('./pages/player/PlayerDashboard'))
+const PlayerProfile = lazy(() => import('./pages/player/PlayerProfile'))
+const WaitingRoom = lazy(() => import('./pages/player/WaitingRoom'))
+const PlayerGameView = lazy(() => import('./pages/player/PlayerGameView'))
+const DeckBrowser = lazy(() => import('./pages/player/DeckBrowser'))
+const PublicProfile = lazy(() => import('./pages/player/PublicProfile'))
+
+// Duel Routes
+const DuelLobby = lazy(() => import('./pages/duel/DuelLobby'))
+const DuelGame = lazy(() => import('./pages/duel/DuelGame'))
+const DuelResults = lazy(() => import('./pages/duel/DuelResults'))
+
+// Tournament Routes
+const TournamentCreate = lazy(() => import('./pages/tournament/TournamentCreate'))
+const TournamentLobby = lazy(() => import('./pages/tournament/TournamentLobby'))
+const TournamentJoin = lazy(() => import('./pages/tournament/TournamentJoin'))
+const TournamentBracket = lazy(() => import('./pages/tournament/TournamentBracket'))
+const TournamentPlayerWait = lazy(() => import('./pages/tournament/TournamentPlayerWait'))
+const TournamentDuelWrapper = lazy(() => import('./pages/tournament/TournamentDuelWrapper'))
+
+// ── Minimalist Brand-Aligned Route Fallback ────────────────────────────────
+function PageLoader() {
+  return (
+    <div style={{
+      minHeight: '100svh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'var(--paper)',
+      color: 'var(--ink)',
+      gap: 16
+    }}>
+      <div style={{
+        width: 36,
+        height: 36,
+        border: '2px solid var(--rule)',
+        borderTopColor: 'var(--ink)',
+        borderRadius: '50%',
+        animation: 'mr-spin 0.8s linear infinite'
+      }} />
+      <span className="folio" style={{ letterSpacing: '0.15em' }}>MED ROYALE</span>
+    </div>
+  )
+}
 
 // ── Global Error Boundary — prevents blank screen on unexpected render errors ──
 class ErrorBoundary extends Component {
@@ -60,43 +98,47 @@ export default function App() {
   useEffect(() => {
     useAuthStore.getState().initialize()
   }, [])
+
   return (
     <ErrorBoundary>
-    <BrowserRouter>
-      <ThemeToggle />
-      <FullscreenButton />
-      <SoundPreviewModal />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/sound-test" element={<SoundTest />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/not-authorized" element={<NotAuthorized />} />
-        <Route path="/test-math" element={<TestMathRendering />} />
-        
-        <Route path="/owner/dashboard" element={<ProtectedRoute allowedRoles={['owner']}><OwnerDashboard /></ProtectedRoute>} />
-        <Route path="/owner/logs" element={<ProtectedRoute allowedRoles={['owner']}><OwnerLogs /></ProtectedRoute>} />
-        <Route path="/host/dashboard" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostDashboard /></ProtectedRoute>} />
-        <Route path="/host/game/:roomId" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostGameRoom /></ProtectedRoute>} />
-        <Route path="/player/dashboard" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerDashboard /></ProtectedRoute>} />
-        <Route path="/player/profile" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerProfile /></ProtectedRoute>} />
-        <Route path="/player/join" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><JoinGame /></ProtectedRoute>} />
-        <Route path="/player/waiting/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><WaitingRoom /></ProtectedRoute>} />
-        <Route path="/player/game/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerGameView /></ProtectedRoute>} />
-        <Route path="/player/decks" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DeckBrowser /></ProtectedRoute>} />
-        <Route path="/player/profile/:uid" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PublicProfile /></ProtectedRoute>} />
-        <Route path="/duel/lobby/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelLobby /></ProtectedRoute>} />
-        <Route path="/duel/game/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelGame /></ProtectedRoute>} />
-        <Route path="/duel/results/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelResults /></ProtectedRoute>} />
+      <BrowserRouter>
+        <ThemeToggle />
+        <FullscreenButton />
+        <SoundPreviewModal />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/sound-test" element={<SoundTest />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/not-authorized" element={<NotAuthorized />} />
+            <Route path="/test-math" element={<TestMathRendering />} />
+            
+            <Route path="/owner/dashboard" element={<ProtectedRoute allowedRoles={['owner']}><OwnerDashboard /></ProtectedRoute>} />
+            <Route path="/owner/logs" element={<ProtectedRoute allowedRoles={['owner']}><OwnerLogs /></ProtectedRoute>} />
+            <Route path="/host/dashboard" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostDashboard /></ProtectedRoute>} />
+            <Route path="/host/game/:roomId" element={<ProtectedRoute allowedRoles={['owner', 'host']}><HostGameRoom /></ProtectedRoute>} />
+            <Route path="/player/dashboard" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerDashboard /></ProtectedRoute>} />
+            <Route path="/player/profile" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerProfile /></ProtectedRoute>} />
+            <Route path="/player/join" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><JoinGame /></ProtectedRoute>} />
+            <Route path="/player/waiting/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><WaitingRoom /></ProtectedRoute>} />
+            <Route path="/player/game/:roomId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PlayerGameView /></ProtectedRoute>} />
+            <Route path="/player/decks" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DeckBrowser /></ProtectedRoute>} />
+            <Route path="/player/profile/:uid" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><PublicProfile /></ProtectedRoute>} />
+            <Route path="/duel/lobby/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelLobby /></ProtectedRoute>} />
+            <Route path="/duel/game/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelGame /></ProtectedRoute>} />
+            <Route path="/duel/results/:duelId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><DuelResults /></ProtectedRoute>} />
 
-        {/* ── Tournament routes ─────────────────────────────────────────── */}
-        <Route path="/tournament/create" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentCreate /></ProtectedRoute>} />
-        <Route path="/tournament/join" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentJoin /></ProtectedRoute>} />
-        <Route path="/tournament/:tournamentId/lobby" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentLobby /></ProtectedRoute>} />
-        <Route path="/tournament/:tournamentId/bracket" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentBracket /></ProtectedRoute>} />
-        <Route path="/tournament/:tournamentId/wait" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentPlayerWait /></ProtectedRoute>} />
-        <Route path="/tournament/:tournamentId/duel/:matchId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentDuelWrapper /></ProtectedRoute>} />
-      </Routes>
-    </BrowserRouter>
+            {/* ── Tournament routes ─────────────────────────────────────────── */}
+            <Route path="/tournament/create" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentCreate /></ProtectedRoute>} />
+            <Route path="/tournament/join" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentJoin /></ProtectedRoute>} />
+            <Route path="/tournament/:tournamentId/lobby" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentLobby /></ProtectedRoute>} />
+            <Route path="/tournament/:tournamentId/bracket" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentBracket /></ProtectedRoute>} />
+            <Route path="/tournament/:tournamentId/wait" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentPlayerWait /></ProtectedRoute>} />
+            <Route path="/tournament/:tournamentId/duel/:matchId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentDuelWrapper /></ProtectedRoute>} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
     </ErrorBoundary>
   )
 }
+

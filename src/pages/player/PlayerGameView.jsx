@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import MathText from '../../components/common/MathText'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, get, set, update, runTransaction, onDisconnect } from 'firebase/database'
@@ -131,20 +131,19 @@ function MiniLeaderboard({ top5, myId, myRank, myScore, myNickname }) {
 
 // ── Player-side countdown bar ─────────────────────────────────────────────────
 function PlayerCountdown({ startedAt, duration }) {
-  const [remaining, setRemaining] = useState(duration)
-  const rafRef = useRef(null)
+  const [remaining, setRemaining] = useState(() => Math.max(0, duration - (Date.now() - startedAt) / 1000))
 
   useEffect(() => {
-    const tick = () => {
+    const update = () => {
       const rem = Math.max(0, duration - (Date.now() - startedAt) / 1000)
       setRemaining(rem)
-      if (rem > 0) rafRef.current = requestAnimationFrame(tick)
     }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafRef.current)
+    update()
+    const interval = setInterval(update, 200)
+    return () => clearInterval(interval)
   }, [startedAt, duration])
 
-  const pct     = (remaining / duration) * 100
+  const pct     = Math.min(100, Math.max(0, (remaining / duration) * 100))
   const urgent  = remaining < duration * 0.25
   const expired = remaining === 0
 
@@ -157,7 +156,7 @@ function PlayerCountdown({ startedAt, duration }) {
           position: 'absolute', left: 0, top: 0, height: '100%',
           width: `${pct}%`,
           background: expired ? 'var(--rule)' : urgent ? 'var(--alert)' : 'var(--ink)',
-          transition: 'background 300ms',
+          transition: 'width 200ms linear, background 300ms',
         }} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
@@ -171,6 +170,7 @@ function PlayerCountdown({ startedAt, duration }) {
     </div>
   )
 }
+
 
 function questionFontSize(text = '') {
   const len = text.length

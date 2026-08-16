@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { hasArabic } from '../../utils/rtlUtils'
+import { loadMathJax } from '../../utils/mathjaxLoader'
 
 // In RTL context, MathJax renders LTR which puts the variable (LHS) on the left.
 // An Arabic reader reads right-to-left, so they hit the expression (RHS) first, then "=", then the variable.
@@ -19,40 +20,32 @@ function swapEquationSidesForRtl(text) {
 
 export default function MathText({ text, className = "", dir = "auto" }) {
   const containerRef = useRef(null)
+  const isMath = !!text && text.includes('<math')
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!isMath || !containerRef.current) return
 
-    if (!window.MathJax) {
-      setTimeout(() => {
-        if (window.MathJax?.typesetPromise && containerRef.current) {
-          window.MathJax.typesetPromise([containerRef.current]).catch(err => {
-            console.error('MathJax typeset failed:', err)
-          })
-        }
-      }, 100)
-      return
-    }
+    let isMounted = true
 
-    try {
-      if (window.MathJax.typesetPromise) {
-        window.MathJax.typesetPromise([containerRef.current]).catch(err => {
-          console.error('MathJax typeset failed:', err)
+    loadMathJax().then((mj) => {
+      if (!isMounted || !containerRef.current || !mj?.typesetPromise) return
+      try {
+        mj.typesetPromise([containerRef.current]).catch(err => {
+          console.error('[MathJax] typeset failed:', err)
         })
-      } else if (window.MathJax.typesetClear && window.MathJax.typesetPromise) {
-        window.MathJax.typesetClear()
-        window.MathJax.typesetPromise([containerRef.current]).catch(err => {
-          console.error('MathJax typeset failed:', err)
-        })
+      } catch (e) {
+        console.warn('[MathJax] typeset error:', e)
       }
-    } catch (e) {
-      console.warn('MathJax error:', e)
+    }).catch(() => {})
+
+    return () => {
+      isMounted = false
     }
-  }, [text])
+  }, [text, isMath])
 
   const finalDir = dir === 'auto' ? (hasArabic(text) ? 'rtl' : 'ltr') : dir
 
-  if (!text || !text.includes('<math')) {
+  if (!isMath) {
     return <span className={className} dir={finalDir}>{text}</span>
   }
 
@@ -68,3 +61,4 @@ export default function MathText({ text, className = "", dir = "auto" }) {
     />
   )
 }
+
