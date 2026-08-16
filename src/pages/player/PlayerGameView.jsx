@@ -13,6 +13,7 @@ import { signAnswer, validateReactionTime, verifyAnswerHash } from '../../utils/
 import { initActivityLogger, getActivityLogger } from '../../utils/activityLogger'
 import { getDir } from '../../utils/rtlUtils'
 import { sortPlayers } from '../../utils/gameRunner'
+import { soundManager } from '../../utils/soundManager'
 import { useUnattendedGameRunner } from '../../hooks/useUnattendedGameRunner'
 
 // ── Full live leaderboard (bottom sheet, players see everyone's standings) ───
@@ -399,6 +400,20 @@ export default function PlayerGameView() {
   }, [roomId, session])
 
   useUnattendedGameRunner({ roomId, room, session })
+
+  // ── Sound: reveal result (correct/wrong) + FFA finished (phase transition) ──
+  useEffect(() => {
+    if (!revealedResult) return
+    if (revealedResult.didNotAnswer) { soundManager.playWrong(); return }
+    if (revealedResult.is_correct) soundManager.playCorrect()
+    else soundManager.playWrong()
+  }, [revealedResult])
+
+  useEffect(() => {
+    if (room?.status === 'finished' && room?.tournament_id) {
+      soundManager.playStageStart()
+    }
+  }, [room?.status, room?.tournament_id])
 
   useEffect(() => {
     if (autoNavCountdown === null || !room?.tournament_id) return

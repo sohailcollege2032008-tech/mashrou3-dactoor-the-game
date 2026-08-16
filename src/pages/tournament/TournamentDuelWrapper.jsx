@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TournamentDuelWrapper.jsx
  * Resolves tournament + match context and renders DuelGame with the correct
  * RTDB path (tournament_duels/{tournamentId}) and question duration.
@@ -19,11 +19,12 @@ import { ref as rtdbRef, get, onValue } from 'firebase/database'
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { resolveMatchTie } from '../../utils/tournamentUtils'
+import { soundManager } from '../../utils/soundManager'
 import DuelGame from '../duel/DuelGame'
 import { Loader2, Trophy, XCircle, Timer, ArrowRight } from 'lucide-react'
 
 // ── Host split-screen spectator view ─────────────────────────────────────────
-function HostSpectatorView({ tournamentId, duelId, match, tournament, onBack }) {
+function HostSpectatorView({ tournamentId, duelId, match, onBack }) {
   const [duel, setDuel] = useState(null)
 
   useEffect(() => {
@@ -462,6 +463,11 @@ export default function TournamentDuelWrapper() {
         hadTiebreaker: duelData.is_tiebreaker === true,
       })
       setAutoNavSeconds(15)
+
+      // ── Sound: match outcome (champion / win / lose) ───────────────────
+      if (!match.next_match_id && winnerUid === uid) soundManager.playChampion()
+      else if (winnerUid === uid) soundManager.playVictory()
+      else soundManager.playDefeat()
 
     } catch (e) {
       console.error('Error writing match result:', e)

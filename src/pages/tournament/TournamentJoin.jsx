@@ -8,6 +8,7 @@ import { ref as rtdbRef, set } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { addActiveTournamentId } from '../../utils/activeTournament'
+import { soundManager } from '../../utils/soundManager'
 
 export default function TournamentJoin() {
   const navigate = useNavigate()
@@ -61,6 +62,7 @@ export default function TournamentJoin() {
       })
 
       addActiveTournamentId(tDoc.id)
+      soundManager.playJoin()
 
       setTournamentId(tDoc.id)
       setTournamentTitle(tournament.title)

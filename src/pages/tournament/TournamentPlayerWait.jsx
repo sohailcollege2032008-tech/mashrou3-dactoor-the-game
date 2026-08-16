@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react'
+﻿import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   doc, onSnapshot, collection, getDoc, getDocs, setDoc, serverTimestamp,
@@ -7,7 +7,6 @@ import { ref as rtdbRef, get as rtdbGet, set as rtdbSet } from 'firebase/databas
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { removeActiveTournamentId } from '../../utils/activeTournament'
-import { sortPlayers } from '../../utils/gameRunner'
 import BracketTree from '../../components/tournament/BracketTree'
 import { soundManager } from '../../utils/soundManager'
 import SoundToggle from '../../components/common/SoundToggle'
@@ -29,14 +28,12 @@ export default function TournamentPlayerWait() {
 
   const [tournament,    setTournament]    = useState(null)
   const [allMatches,    setAllMatches]    = useState([])
-  const [myMatch,       setMyMatch]       = useState(null)
-  const [myResult,      setMyResult]      = useState(null)
   const [ffaEliminated, setFfaEliminated] = useState(false)
   const [ffaResults,    setFfaResults]    = useState([])
   // Open by default — the bracket is the thing players want to see while waiting.
   const [showBracket,   setShowBracket]   = useState(location.state?.showBracket !== false)
   const [showFfaTable,  setShowFfaTable]  = useState(false)
-  const [now,           setNow]           = useState(Date.now())
+  const [now,           setNow]           = useState(0)
 
   const uid = session?.uid
   const ffaCheckedRef = useRef(false)
@@ -130,27 +127,28 @@ export default function TournamentPlayerWait() {
     return () => unsub()
   }, [tournamentId])
 
-  useEffect(() => {
-    if (!uid) return
-    const currentRound = tournament?.current_round || 1
-    const mine = allMatches.find(m =>
-      m.round === currentRound &&
-      (m.player_a_uid === uid || m.player_b_uid === uid)
-    )
-    setMyMatch(mine || null)
-
-    const myFinished = allMatches
-      .filter(m =>
-        m.round <= currentRound &&
-        (m.player_a_uid === uid || m.player_b_uid === uid) &&
-        m.status === 'finished'
-      )
-      .sort((a, b) => a.round - b.round)
-    if (myFinished.length > 0) {
-      const last = myFinished[myFinished.length - 1]
-      setMyResult(last.winner_uid === uid ? 'advanced' : 'eliminated')
-    }
-  }, [allMatches, uid, tournament?.current_round])
+  // My match & tournament result, derived directly during render (React-19-safe:
+  // no sync setState inside effects).
+  const myCurrentRound = tournament?.current_round || 1
+  const myMatch = uid
+    ? (allMatches.find(m =>
+        m.round === myCurrentRound &&
+        (m.player_a_uid === uid || m.player_b_uid === uid)
+      ) || null)
+    : null
+  const myFinishedLast = uid
+    ? allMatches
+        .filter(m =>
+          m.round <= myCurrentRound &&
+          (m.player_a_uid === uid || m.player_b_uid === uid) &&
+          m.status === 'finished'
+        )
+        .sort((a, b) => a.round - b.round)
+        .at(-1)
+    : undefined
+  const myResult = myFinishedLast
+    ? (myFinishedLast.winner_uid === uid ? 'advanced' : 'eliminated')
+    : undefined
 
   // FFA results (rank + advanced) — visible to every player so they can see
   // where they finished in the qualifiers phase.
@@ -193,11 +191,30 @@ export default function TournamentPlayerWait() {
   const isFinished   = tournament?.status === 'finished'
   const amChampion   = isFinished && tournament?.winner_uid === uid
 
+  // ── Sound: phase transition + countdown tick (hooks MUST stay above returns) ──
+  const transitionPlayedRef = useRef(null)
+  useEffect(() => {
+    if (!inPhaseWait || !phaseStart) return
+    if (transitionPlayedRef.current === phaseStart) return
+    transitionPlayedRef.current = phaseStart
+    soundManager.playStageStart()
+  }, [inPhaseWait, phaseStart])
+
+  const lastTickSecRef = useRef(null)
+  useEffect(() => {
+    if (!inPhaseWait) { lastTickSecRef.current = null; return }
+    const secs = Math.ceil(remainingMs / 1000)
+    if (secs <= 5 && secs >= 1 && lastTickSecRef.current !== secs) {
+      lastTickSecRef.current = secs
+      soundManager.playTick()
+    }
+  }, [remainingMs, inPhaseWait])
+
   useEffect(() => {
     if (amChampion) {
-      soundManager.playVictory()
+      soundManager.playChampion()
     } else if (isEliminated) {
-      soundManager.playDefeat()
+      soundManager.playEliminated()
     }
   }, [amChampion, isEliminated])
 
