@@ -134,13 +134,18 @@ function PlayerCountdown({ startedAt, duration }) {
   const [remaining, setRemaining] = useState(() => Math.max(0, duration - (Date.now() - startedAt) / 1000))
 
   useEffect(() => {
+    let interval = null
     const update = () => {
       const rem = Math.max(0, duration - (Date.now() - startedAt) / 1000)
       setRemaining(rem)
+      if (rem <= 0 && interval) {
+        clearInterval(interval)
+        interval = null
+      }
     }
     update()
-    const interval = setInterval(update, 200)
-    return () => clearInterval(interval)
+    interval = setInterval(update, 200)
+    return () => { if (interval) clearInterval(interval) }
   }, [startedAt, duration])
 
   const pct     = Math.min(100, Math.max(0, (remaining / duration) * 100))

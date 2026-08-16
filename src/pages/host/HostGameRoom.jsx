@@ -3,7 +3,7 @@ import MathText from '../../components/common/MathText'
 import { getDir } from '../../utils/rtlUtils'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, update, get, set, onDisconnect } from 'firebase/database'
-import { doc, getDoc, setDoc, updateDoc, collection, writeBatch, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { performReveal, performNextQuestion, sortPlayers } from '../../utils/gameRunner'
 import { useAuth } from '../../hooks/useAuth'
@@ -23,13 +23,18 @@ function CountdownBar({ startedAt, duration }) {
   const [remaining, setRemaining] = useState(() => Math.max(0, duration - (Date.now() - startedAt) / 1000))
 
   useEffect(() => {
+    let interval = null
     const update = () => {
       const rem = Math.max(0, duration - (Date.now() - startedAt) / 1000)
       setRemaining(rem)
+      if (rem <= 0 && interval) {
+        clearInterval(interval)
+        interval = null
+      }
     }
     update()
-    const interval = setInterval(update, 200)
-    return () => clearInterval(interval)
+    interval = setInterval(update, 200)
+    return () => { if (interval) clearInterval(interval) }
   }, [startedAt, duration])
 
   const pct     = Math.min(100, Math.max(0, (remaining / duration) * 100))
