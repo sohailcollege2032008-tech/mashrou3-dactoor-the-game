@@ -32,3 +32,6 @@ scratch/tests/
 
 functions/__pycache__/
 functions/functions.yaml
+
+# Claude Code per-machine settings (can capture tokens in allow-rules)
+.claude/settings.local.json
