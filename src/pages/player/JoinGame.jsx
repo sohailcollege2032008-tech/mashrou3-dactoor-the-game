@@ -63,6 +63,15 @@ export default function JoinGame() {
             return
           }
 
+          if (tournament.status !== 'registration') {
+            addActiveTournamentId(tId)
+            navigate(`/tournament/${tId}/wait`, {
+              state: { spectator: true, message: 'التسجيل اتقفل — بس تقدر تتفرج على البطولة' }
+            })
+            setLoading(false)
+            return
+          }
+
           const nicknameVal = nickname.trim() || profile?.display_name || profile?.email || 'لاعب'
           const avatar = profile?.avatar_url || null
 

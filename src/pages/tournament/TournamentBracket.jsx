@@ -80,6 +80,8 @@ export default function TournamentBracket() {
   const [showQPanel,      setShowQPanel]      = useState(false)
   const [showEndConfirm,  setShowEndConfirm]  = useState(false)
   const [ending,          setEnding]          = useState(false)
+  const [confirmForce,    setConfirmForce]    = useState(null)
+  const [forcing,         setForcing]         = useState(false)
   const [liveDuels,       setLiveDuels]       = useState({})
   const [waitingPresence, setWaitingPresence] = useState({})
   const [nowTick,         setNowTick]         = useState(() => Date.now())
@@ -473,8 +475,9 @@ export default function TournamentBracket() {
     }
   }, [tournamentId])
 
-  const forceFinishMatch = useCallback(async (match, winningPlayerUid) => {
-    if (!match || !tournamentId) return
+  const doForceFinish = useCallback(async (match, winningPlayerUid) => {
+    if (!match || !tournamentId || forcing) return
+    setForcing(true)
     const winnerUid = winningPlayerUid || match.player_a_uid
     const winnerName = winnerUid === match.player_a_uid ? match.player_a_name : match.player_b_name
 
@@ -511,8 +514,11 @@ export default function TournamentBracket() {
     } catch (e) {
       console.error(e)
       setError(e.message || 'فشل حسم المباراة')
+    } finally {
+      setForcing(false)
+      setConfirmForce(null)
     }
-  }, [tournamentId])
+  }, [tournamentId, forcing])
 
   // Cut the break short and start the current round's matches right now.
   const startRoundNow = useCallback(async () => {
@@ -900,7 +906,7 @@ export default function TournamentBracket() {
                       {(match.status === 'active' || match.status === 'pending') && match.player_a_uid && match.player_b_uid && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <button
-                            onClick={() => forceFinishMatch(match, match.player_a_uid)}
+                            onClick={() => setConfirmForce({ match, winnerUid: match.player_a_uid, winnerName: match.player_a_name })}
                             title={`حسم وتأهيل ${match.player_a_name}`}
                             style={{
                               display: 'flex', alignItems: 'center', gap: 3,
@@ -912,7 +918,7 @@ export default function TournamentBracket() {
                             <span className="ar">⚡ حسم لـ {match.player_a_name ? match.player_a_name.split(' ')[0] : 'أ'}</span>
                           </button>
                           <button
-                            onClick={() => forceFinishMatch(match, match.player_b_uid)}
+                            onClick={() => setConfirmForce({ match, winnerUid: match.player_b_uid, winnerName: match.player_b_name })}
                             title={`حسم وتأهيل ${match.player_b_name}`}
                             style={{
                               display: 'flex', alignItems: 'center', gap: 3,
@@ -926,6 +932,54 @@ export default function TournamentBracket() {
                         </div>
                       )}
                     </div>
+
+                    {/* Force-finish confirm (two-step, same pattern as end-tournament) */}
+                    {confirmForce?.match?.match_id === match.match_id && (
+                      <div style={{
+                        borderTop: '1px solid var(--rule)', padding: '14px 16px',
+                        background: 'color-mix(in srgb, var(--success) 5%, var(--paper))',
+                        display: 'flex', flexDirection: 'column', gap: 12,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                          <AlertTriangle size={14} style={{ color: 'var(--success)', flexShrink: 0, marginTop: 2 }} />
+                          <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, margin: 0 }}>
+                            هتحسم ماتش <span style={{ fontWeight: 700 }}>{match.match_id}</span> فوراً وتأهّل{' '}
+                            <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{confirmForce.winnerName || 'اللاعب'}</span>
+                            {' '}بدون أي إمكانية للتراجع. هل أنت متأكد؟
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            onClick={() => setConfirmForce(null)}
+                            disabled={forcing}
+                            style={{
+                              flex: 1, padding: '10px 0', border: '1px solid var(--rule)', borderRadius: 4,
+                              background: 'var(--paper-2)', color: 'var(--ink-3)',
+                              fontFamily: 'var(--sans)', fontSize: 13, cursor: 'pointer',
+                              opacity: forcing ? 0.4 : 1,
+                            }}
+                          >
+                            <span className="ar">تراجع</span>
+                          </button>
+                          <button
+                            onClick={() => doForceFinish(confirmForce.match, confirmForce.winnerUid)}
+                            disabled={forcing}
+                            style={{
+                              flex: 1, padding: '10px 0',
+                              border: '1px solid var(--success)', borderRadius: 4,
+                              background: 'color-mix(in srgb, var(--success) 10%, var(--paper))',
+                              color: 'var(--success)', fontFamily: 'var(--sans)', fontSize: 13,
+                              cursor: forcing ? 'not-allowed' : 'pointer',
+                              opacity: forcing ? 0.6 : 1,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                            }}
+                          >
+                            {forcing ? <Loader2 size={13} className="animate-spin" /> : null}
+                            <span className="ar">نعم، حسِم الماتش</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Live duel state — makes a frozen match obvious instead of
                         showing a permanent "LIVE" badge on a duel nobody opened. */}

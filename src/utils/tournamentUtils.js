@@ -255,7 +255,21 @@ export function getQuestionsForRound(round, tournament, deckQuestions, count = 5
   const assigned = tournament.round_questions?.[String(round)]
 
   if (assigned && assigned.length > 0) {
-    return assigned.map(i => deckQuestions[i]).filter(Boolean)
+    // Filter out assigned indices that fell out of the deck's range (e.g. the
+    // host deleted a question after assignments were saved) — otherwise the
+    // indices silently slip and the match plays wrong/fewer questions.
+    const inRange = assigned.filter(i =>
+      Number.isInteger(i) && i >= 0 && i < deckQuestions.length
+    )
+    if (inRange.length !== assigned.length) {
+      console.warn(
+        `[getQuestionsForRound] Round ${round}: ` +
+        `${assigned.length - inRange.length} assigned index(es) outside the deck ` +
+        'range were filtered out.'
+      )
+    }
+    const questions = inRange.map(i => deckQuestions[i]).filter(Boolean)
+    if (questions.length > 0) return questions
   }
 
   // Fallback: collect indices used in previous rounds

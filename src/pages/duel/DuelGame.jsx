@@ -234,27 +234,40 @@ export default function DuelGame({
     }
   }, [duel?.status])
 
+  // Auto-start transition (transaction-guarded): the first tab to reach its 5s
+  // mark flips waiting → playing; everyone else sees the flipped status. This is
+  // the actual game-launch logic and must stay as-is.
   useEffect(() => {
     if (!duel || duelPath === 'duels' || duel.status !== 'waiting') return
 
-    setStartCountdown(5)
-    const ticks = [
-      setTimeout(() => setStartCountdown(4), 1000),
-      setTimeout(() => setStartCountdown(3), 2000),
-      setTimeout(() => setStartCountdown(2), 3000),
-      setTimeout(() => setStartCountdown(1), 4000),
-      setTimeout(async () => {
-        setStartCountdown(0)
-        try {
-          await runTransaction(rtdbRef(rtdb, `${duelPath}/${duelId}`), current => {
-            if (!current || current.status !== 'waiting') return undefined
-            return { ...current, status: 'playing', question_started_at: Date.now() + serverOffsetRef.current }
-          })
-        } catch (e) { console.error('auto-start error:', e) }
-      }, 5000),
-    ]
-    return () => ticks.forEach(clearTimeout)
+    const startGame = setTimeout(async () => {
+      try {
+        await runTransaction(rtdbRef(rtdb, `${duelPath}/${duelId}`), current => {
+          if (!current || current.status !== 'waiting') return undefined
+          return { ...current, status: 'playing', question_started_at: Date.now() + serverOffsetRef.current }
+        })
+      } catch (e) { console.error('auto-start error:', e) }
+    }, 5000)
+    return () => clearTimeout(startGame)
   }, [duel?.status, duelPath, duelId])
+
+  // VS countdown display, derived from the duel's server creation timestamp
+  // (written when the duel is launched) instead of a per-device local timer, so
+  // both players see the same 5-4-3-2-1 regardless of when each tab opened.
+  useEffect(() => {
+    if (!duel || duelPath === 'duels' || duel.status !== 'waiting') {
+      setStartCountdown(null)
+      return
+    }
+    const anchor = duel.created_at || 0
+    const tick   = () => {
+      const remaining = Math.max(0, 5 - Math.floor((serverNow() - anchor) / 1000))
+      setStartCountdown(remaining)
+    }
+    if (anchor > 0) tick()
+    const id = setInterval(tick, 250)
+    return () => clearInterval(id)
+  }, [duel?.status, duel?.created_at, duelPath, serverNow])
 
   useEffect(() => {
     if (!duelId) return
@@ -522,6 +535,7 @@ export default function DuelGame({
 
   /* ── Tournament duel — "about to start" waiting screen ─────────────────── */
   if (duelPath !== 'duels' && duel.status === 'waiting') {
+    const roundLabel = tournamentBadge?.split(' — ')[1]?.trim() || ''
     return (
       <div style={{
         minHeight: '100svh', background: 'var(--paper)',
@@ -545,6 +559,16 @@ export default function DuelGame({
           <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>VS</span>
           <PlayerPill player={opponentPlayer} score={0} align="left" />
         </div>
+
+        {/* Round label */}
+        {roundLabel && (
+          <span className="ar" style={{
+            fontSize: 13, fontWeight: 600, color: 'var(--gold)',
+            border: '1px solid var(--gold)', padding: '5px 16px', borderRadius: 999,
+          }}>
+            {roundLabel}
+          </span>
+        )}
 
         {/* Countdown */}
         <div style={{ textAlign: 'center' }}>
@@ -664,8 +688,8 @@ export default function DuelGame({
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>
-              {qi + 1} / {duel.total_questions}
+            <span dir="ltr" style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>
+              {qi + 1}/{duel.total_questions}
             </span>
             <SoundToggle showPreviewBtn={true} />
           </div>
@@ -777,21 +801,23 @@ export default function DuelGame({
           borderTop: '1px solid var(--rule)', padding: '10px 20px',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20,
         }}>
-          <button
-            onClick={() => setConfirmAction('surrender')}
-            disabled={actionLoading}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 5,
-              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: 'var(--ink-4)',
-              opacity: actionLoading ? 0.4 : 1,
-            }}
-          >
-            <Flag size={11} />
-            استسلام
-          </button>
-          <div style={{ width: 1, height: 14, background: 'var(--rule)' }} />
+          {duelPath === 'duels' && (
+            <button
+              onClick={() => setConfirmAction('surrender')}
+              disabled={actionLoading}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 5,
+                fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em',
+                textTransform: 'uppercase', color: 'var(--ink-4)',
+                opacity: actionLoading ? 0.4 : 1,
+              }}
+            >
+              <Flag size={11} />
+              استسلام
+            </button>
+          )}
+          {duelPath === 'duels' && <div style={{ width: 1, height: 14, background: 'var(--rule)' }} />}
           <button
             onClick={() => setConfirmAction('forfeit')}
             disabled={actionLoading}

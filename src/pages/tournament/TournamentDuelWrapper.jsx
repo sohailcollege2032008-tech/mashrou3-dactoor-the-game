@@ -8,10 +8,10 @@
  *   2. Writes result to bracket_match doc
  *   3. Advances winner to next match (or marks tournament finished)
  *   4. Writes tournament_match entry to player's game history
- *   5. Shows a post-match results screen (auto-navigates to wait after 8 s)
+ *   5. Shows a post-match results screen (auto-navigates to wait after 15 s)
  */
 import React, { useEffect, useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import {
   doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocs, collection, onSnapshot
 } from 'firebase/firestore'
@@ -150,7 +150,7 @@ function HostSpectatorView({ tournamentId, duelId, match, onBack }) {
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span className="ar folio" style={{ color: 'var(--gold)', fontSize: 9 }}>SPECTATING</span>
-          <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>{qi + 1}/{duel.total_questions}</span>
+          <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}><span dir="ltr">{qi + 1}/{duel.total_questions}</span></span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Timer size={12} style={{ color: 'var(--ink-4)' }} />
@@ -212,7 +212,7 @@ function getRoundLabel(round, totalRounds) {
 export default function TournamentDuelWrapper() {
   const { tournamentId, matchId } = useParams()
   const navigate   = useNavigate()
-  const { session } = useAuth()
+  const { session, profile } = useAuth()
 
   const [ready,       setReady]       = useState(false)
   const [match,       setMatch]       = useState(null)
@@ -221,6 +221,7 @@ export default function TournamentDuelWrapper() {
   const [error,       setError]       = useState(null)
   const [matchResult,    setMatchResult]    = useState(null)
   const [autoNavSeconds, setAutoNavSeconds] = useState(null)
+  const [nextOpponent,   setNextOpponent]   = useState(null)
 
   // Live subscription rather than a single read: arriving a moment before the
   // duel_id is written used to dead-end on "لم تبدأ المباراة بعد" with no retry.
@@ -263,7 +264,29 @@ export default function TournamentDuelWrapper() {
     return () => clearTimeout(t)
   }, [matchResult, autoNavSeconds, tournamentId, navigate])
 
+  // Resolve the next-round opponent for the winner screen. Single Firestore read
+  // on the next match (not an RTDB tournament_duels subscription): after both
+  // sibling matches finish, one slot is the advancing winner and the other is
+  // their next opponent.
+  useEffect(() => {
+    if (!matchResult || !match?.next_match_id) return
+    let cancelled = false
+    getDoc(doc(db, 'tournaments', tournamentId, 'bracket_matches', match.next_match_id))
+      .then(snap => {
+        if (cancelled || !snap.exists()) return
+        const nm      = snap.data()
+        const mySlot   = (match.match_number ?? 1) % 2 === 1 ? 'player_a' : 'player_b'
+        const oppSlot  = mySlot === 'player_a' ? 'player_b' : 'player_a'
+        const oppName  = nm[oppSlot + '_name']
+        setNextOpponent(oppName && oppName !== 'TBD' ? oppName : null)
+      })
+      .catch(() => { if (!cancelled) setNextOpponent(null) })
+    return () => { cancelled = true }
+  }, [matchResult, match, tournamentId])
+
   const uid = session?.uid
+  const isHostOrOwner = ready && tournament &&
+    (tournament.host_id === uid || profile?.role === 'owner')
   const isPlayerInMatch = ready && match &&
     (match.player_a_uid === uid || match.player_b_uid === uid)
 
@@ -290,7 +313,15 @@ export default function TournamentDuelWrapper() {
 
       let winnerUid, loserUid, tieBreaker
 
-      if (duelData.forfeit_by) {
+      // Surrender is treated exactly like a forfeit — the surrenderer loses and
+      // the other player wins. The bracket has no draw outcome, so a surrender
+      // must never fall through to score comparison or FFA-rank ordering.
+      // TODO(server): _resolve_winner must honour surrender_by too
+      if (duelData.surrender_by) {
+        loserUid   = duelData.surrender_by
+        winnerUid  = playerUids.find(u => u !== loserUid)
+        tieBreaker = null
+      } else if (duelData.forfeit_by) {
         loserUid   = duelData.forfeit_by
         winnerUid  = playerUids.find(u => u !== loserUid)
         tieBreaker = null
@@ -567,6 +598,20 @@ export default function TournamentDuelWrapper() {
             )}
           </div>
 
+          {/* Next-round opponent (winner, non-final) */}
+          {isWinner && !isFinal && match?.next_match_id && (
+            <div style={{
+              border: '1px solid var(--rule)', borderRadius: 4, padding: '14px 16px',
+              background: 'var(--paper-2)', textAlign: 'center',
+            }}>
+              <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-2)', margin: 0 }}>
+                {nextOpponent
+                  ? <>جولتك الجاية ضد: <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{nextOpponent}</span></>
+                  : 'في انتظار نتيجة الماتش التاني'}
+              </p>
+            </div>
+          )}
+
           {/* Score comparison */}
           <div style={{ display: 'flex', alignItems: 'stretch', gap: 12 }}>
             <div style={{
@@ -626,7 +671,11 @@ export default function TournamentDuelWrapper() {
   }
 
   // ── Host spectator view ───────────────────────────────────────────────────
-  if (!isPlayerInMatch) {
+  // Only the tournament host (or the owner) may spectate — this route shows the
+  // full live question, and every match in a round runs the same questions in
+  // parallel. Anyone else who is not a player here is bounced to the wait room
+  // instead of leaking the question text.
+  if (!isPlayerInMatch && isHostOrOwner) {
     return (
       <HostSpectatorView
         tournamentId={tournamentId}
@@ -636,6 +685,10 @@ export default function TournamentDuelWrapper() {
         onBack={() => navigate(`/tournament/${tournamentId}/bracket`, { replace: true })}
       />
     )
+  }
+
+  if (!isPlayerInMatch) {
+    return <Navigate to={`/tournament/${tournamentId}/wait`} replace />
   }
 
   // ── Game (player view) ────────────────────────────────────────────────────

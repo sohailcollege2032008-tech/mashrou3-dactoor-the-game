@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef } from 'react'
+import React, { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   collection, query, where, getDocs,
@@ -40,7 +40,12 @@ export default function TournamentJoin() {
       const tournament = tDoc.data()
 
       if (tournament.status !== 'registration') {
-        throw new Error('البطولة لم تعد تقبل التسجيل')
+        addActiveTournamentId(tDoc.id)
+        soundManager.playJoin()
+        navigate(`/tournament/${tDoc.id}/wait`, {
+          state: { spectator: true, message: 'التسجيل اتقفل — بس تقدر تتفرج على البطولة' }
+        })
+        return
       }
 
       const uid      = session.uid

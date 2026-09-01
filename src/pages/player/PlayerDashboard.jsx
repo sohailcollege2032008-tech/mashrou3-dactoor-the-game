@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { RotateCcw, Trophy, Zap, X, Bell, CheckCheck } from 'lucide-react'
@@ -190,7 +190,8 @@ export default function PlayerDashboard() {
       .then(snap => {
         if (snap.exists() && snap.data().advanced === false) {
           setTournamentEliminated(true)
-          removeActiveTournamentId(tId)
+        } else {
+          setTournamentEliminated(false)
         }
       }).catch(() => {})
   }, [activeTournament?.status, activeTournament?.id, uid])
@@ -205,7 +206,7 @@ export default function PlayerDashboard() {
   }, [uid])
 
   const tournamentDest = activeTournament
-    ? activeTournament.status === 'ffa' && activeTournament.ffa_room_id
+    ? activeTournament.status === 'ffa' && activeTournament.ffa_room_id && !tournamentEliminated
       ? `/player/game/${activeTournament.ffa_room_id}`
       : `/tournament/${activeTournament.id}/wait`
     : null
@@ -216,8 +217,8 @@ export default function PlayerDashboard() {
 
   const unreadCount      = notifications.filter(n => !n.read).length
   const firstName        = profile?.display_name?.split(' ')[0] || 'Scholar'
-  const showTournament   = activeTournament && tournamentDest && !tournamentEliminated
-  const showDuelRejoin   = activeDuel && rejoinPath
+  const showTournament   = Boolean(activeTournament && tournamentDest)
+  const showDuelRejoin   = Boolean(activeDuel && rejoinPath)
   const hasActiveBanners = showTournament || showDuelRejoin
 
   return (
@@ -306,18 +307,20 @@ export default function PlayerDashboard() {
 
           {showTournament && (
             <div style={{
-              border: `1px solid ${activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)'}`,
+              border: `1px solid ${activeTournament.status === 'ffa' && !tournamentEliminated ? 'var(--gold)' : 'var(--burgundy)'}`,
               padding: '12px 14px',
-              background: activeTournament.status === 'ffa' ? 'rgba(176,137,68,0.05)' : 'rgba(156,59,46,0.04)',
+              background: activeTournament.status === 'ffa' && !tournamentEliminated ? 'rgba(176,137,68,0.05)' : 'rgba(156,59,46,0.04)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ color: activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)', flexShrink: 0 }}>
-                  {activeTournament.status === 'ffa' ? <Zap size={15} /> : <Trophy size={15} />}
+                <div style={{ color: activeTournament.status === 'ffa' && !tournamentEliminated ? 'var(--gold)' : 'var(--burgundy)', flexShrink: 0 }}>
+                  {activeTournament.status === 'ffa' && !tournamentEliminated ? <Zap size={15} /> : <Trophy size={15} />}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p className="ar" style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)', margin: 0 }}>{activeTournament.title}</p>
-                  <p className="ar" style={{ fontSize: 11, margin: '2px 0 0', color: activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)' }}>
-                    {TOURNAMENT_STATUS_AR[activeTournament.status] || activeTournament.status}
+                  <p className="ar" style={{ fontSize: 11, margin: '2px 0 0', color: activeTournament.status === 'ffa' && !tournamentEliminated ? 'var(--gold)' : 'var(--burgundy)' }}>
+                    {tournamentEliminated && activeTournament.status !== 'finished'
+                      ? 'خرجت من البطولة'
+                      : (TOURNAMENT_STATUS_AR[activeTournament.status] || activeTournament.status)}
                   </p>
                 </div>
                 {activeTournament.status === 'finished' && (
@@ -327,17 +330,21 @@ export default function PlayerDashboard() {
                   </button>
                 )}
               </div>
-              {activeTournament.status !== 'finished' && (
-                <button onClick={() => navigate(tournamentDest)} className="ar" style={{
-                  width: '100%', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  padding: '9px 14px', fontSize: 13, fontWeight: 500, fontFamily: 'var(--arabic)',
-                  background: activeTournament.status === 'ffa' ? 'var(--gold)' : 'var(--burgundy)',
-                  color: 'var(--paper)', border: 'none', cursor: 'pointer',
-                  transition: 'opacity 150ms',
-                }}>
-                  {activeTournament.status === 'ffa' ? 'ادخل FFA الآن' : 'متابعة البطولة'}
-                </button>
-              )}
+              <button onClick={() => navigate(tournamentDest)} className="ar" style={{
+                width: '100%', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '9px 14px', fontSize: 13, fontWeight: 500, fontFamily: 'var(--arabic)',
+                background: activeTournament.status === 'ffa' && !tournamentEliminated ? 'var(--gold)' : 'var(--burgundy)',
+                color: 'var(--paper)', border: 'none', cursor: 'pointer',
+                transition: 'opacity 150ms',
+              }}>
+                {activeTournament.status === 'finished'
+                  ? 'شاهد النتيجة النهائية'
+                  : tournamentEliminated
+                    ? 'شاهد شجرة البطولة'
+                    : activeTournament.status === 'ffa'
+                      ? 'ادخل FFA الآن'
+                      : 'متابعة البطولة'}
+              </button>
             </div>
           )}
 
