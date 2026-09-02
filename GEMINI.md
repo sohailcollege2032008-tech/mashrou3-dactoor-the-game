@@ -323,10 +323,10 @@ Main branch (`main`) is stable — do NOT push breaking changes there.
 - `duels/{duelId}`: read + write by any auth
 - `duel_queue/`: read + write by any auth
 - `duel_presence/{duelId}/{uid}`: read by any auth, write by owner uid only
-- `tournament_registrations/{tournamentId}`: read + write by any auth
+- `tournament_registrations/{tournamentId}`: read any auth; **write only your own `{uid}` entry** (the host's bulk `remove()` on cancel is rule-denied and already treated as non-fatal)
 - `tournament_duels/{tournamentId}/{duelId}`: read + write by any auth
 - `tournament_presence/{tournamentId}/{uid}`: read by any auth, write by owner uid only
-- `tournament_meta/{tournamentId}`: read + write by any auth
+- `tournament_meta/{tournamentId}`: read any auth, **write denied** (dead path — nothing reads or writes it)
 
 ### Deploy commands
 ```bash

@@ -277,7 +277,9 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
 
 ### RTDB (`database.rules.json`)
 - `rooms/{code}`: read/write any auth (per-user answer write-once, host-only scoring fields).
-- `duels`, `duel_queue`, `tournament_registrations`, `tournament_meta`: read/write any auth.
+- `duels`, `duel_queue`: read/write any auth.
+- `tournament_registrations/{tid}`: read any auth; write only your own `{uid}` entry.
+- `tournament_meta`: read any auth, write denied (unused path).
 - `tournament_duels/{tid}/{duelId}`: read any auth; write only when the node does not exist
   yet (host/CF launch), or the writer is in `players`, or the writer is `host_uid`. Answer
   writes also require `auth.uid == $userId` and that the writer is a player of that duel.

@@ -1,9 +1,9 @@
 ﻿> Read docs/ARCHITECTURE.md for the complete current-system reference (data model, state machines, Cloud Functions, rules, deployment).
 > Read docs/LESSONS.md BEFORE changing anything — mandatory testing/risk discipline from a production incident (host-tab-dependent bracket).
 
-# CLAUDE.md — Mashrou3 Dactoor: THE GAME
+# AGENTS.md — Mashrou3 Dactoor: THE GAME
 
-> Local workspace instructions. Overrides global `~/.claude/CLAUDE.md` where they conflict.
+> Local workspace instructions. Overrides global `~/.Codex/AGENTS.md` where they conflict.
 
 ---
 

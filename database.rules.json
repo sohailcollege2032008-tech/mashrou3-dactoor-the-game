@@ -77,7 +77,9 @@
     "tournament_registrations": {
       "$tournamentId": {
         ".read":  "auth != null",
-        ".write": "auth != null"
+        "$uid": {
+          ".write": "auth != null && auth.uid == $uid"
+        }
       }
     },
     "tournament_duels": {
@@ -128,7 +130,7 @@
     "tournament_meta": {
       "$tournamentId": {
         ".read":  "auth != null",
-        ".write": "auth != null"
+        ".write": "false"
       }
     }
   }
