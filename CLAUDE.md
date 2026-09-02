@@ -291,16 +291,20 @@ Propagated: `question_sets.force_rtl` → `rooms.force_rtl` (host game) and `due
 
 Two remotes:
 ```
-origin      → GitHub (https://github.com/sohailcollege2032008-tech/mashrou3-dactoor-the-game.git)
-med-royale  → Local Med Royale repo (D:\Projects\Antigravity\Web Apps\Med Royale)
+origin          → GitHub (https://github.com/sohailcollege2032008-tech/mashrou3-dactoor-the-game.git)
+source_project  → the repo this workspace was copied FROM
+                  (d:\Projects\Antigravity\Web Apps\Mashrou3 Dactoor THE GAME)
 ```
 
-**Always push to BOTH after committing:**
+**Push to `origin` only.**
 ```bash
 git push origin med-royale
-# local med-royale push (only when needed):
-git push med-royale med-royale:main
 ```
+
+`source_project` is the *other* project's repository, not a mirror of this one —
+do not push this work into it. (An earlier version of this file described a
+`med-royale` remote pointing at a local Med Royale repo; there is no such remote,
+and `git push med-royale …` fails with "repository does not exist".)
 
 **Vercel auto-deploys** on every push to `origin/med-royale`.
 Main branch (`main`) is stable — do NOT push breaking changes there.
