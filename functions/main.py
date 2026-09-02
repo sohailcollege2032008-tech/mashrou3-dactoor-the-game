@@ -72,6 +72,7 @@ def _mirror_meta(tournament_id: str, tourn: dict) -> None:
             "winner_uid":       tourn.get("winner_uid") or None,
             "winner_name":      tourn.get("winner_name") or None,
             "awards":           tourn.get("awards") or None,
+            "round_recaps":     tourn.get("round_recaps") or None,
             "host_id":          tourn.get("host_id") or None,
             "phase_started_at": tourn.get("phase_started_at") or None,
             "round_break_time": tourn.get("round_break_time") or 0,
@@ -1367,6 +1368,21 @@ def _ar_count(n: int, one: str, two: str, few: str, many: str) -> str:
     return few if 3 <= n <= 10 else many
 
 
+def _ar_qty(n: int, one: str, two: str, few: str, many: str) -> str:
+    """
+    The whole phrase, numeral included only where Arabic wants one.
+
+    A dual carries its own count — "إجابتين" already means two answers, so
+    "2 إجابتين" reads like "2 two-answers"; the singular is the same.
+    Only 3-10 and 11+ take the number. Mirrored in
+    `src/utils/arabicCount.js`, because what the server writes has to read the
+    same way as what the client renders.
+    """
+    if n == 1 or n == 2:
+        return _ar_count(n, one, two, few, many)
+    return f"{n} " + _ar_count(n, one, two, few, many)
+
+
 def _compute_awards(fs, tournament_id: str, matches: list, tourn: dict) -> list:
     """
     The honours list, built from what actually happened.
@@ -1413,8 +1429,8 @@ def _compute_awards(fs, tournament_id: str, matches: list, tourn: dict) -> list:
         uid = top_seed[0]
         score = (ffa.get(uid) or {}).get("score")
         awards.append({"key": "qualifier", "uid": uid, "name": name(uid),
-                       "value": (f"{score} " + _ar_count(score, "نقطة", "نقطتين",
-                                                         "نقاط", "نقطة"))
+                       "value": _ar_qty(score, "نقطة", "نقطتين",
+                                        "نقاط", "نقطة")
                        if score is not None else ""})
 
     fastest = None          # (ms, uid)
@@ -1437,7 +1453,7 @@ def _compute_awards(fs, tournament_id: str, matches: list, tourn: dict) -> list:
     if correct_count:
         uid, n = max(correct_count.items(), key=lambda kv: kv[1])
         awards.append({"key": "sniper", "uid": uid, "name": name(uid),
-                       "value": f"{n} " + _ar_count(
+                       "value": _ar_qty(
                            n, "إجابة صحيحة",
                            "إجابتين صحيحتين",
                            "إجابات صحيحة",
@@ -1461,6 +1477,76 @@ def _compute_awards(fs, tournament_id: str, matches: list, tourn: dict) -> list:
                        "value": f"أطاح بصاحب المركز {seeds.get(l)}"})
 
     return awards
+
+def _round_recap(fs, tournament_id: str, all_matches: list, rnd: int) -> dict:
+    """
+    A short account of a round that just ended, for the gap before the next one.
+
+    Same discipline as the honours board: every field comes from something only
+    the server writes — `is_correct`, `reaction_ms_server`, the match results,
+    the qualifier ranks — so this is a report, not a claim. Flat keys, because
+    it is mirrored into RTDB and read straight back out by the client.
+    """
+    round_matches = [m for m in all_matches if (m.get("round") or 1) == rnd]
+    if not round_matches:
+        return {}
+
+    tourn_ref = fs.collection("tournaments").document(tournament_id)
+    try:
+        ffa = {d.id: (d.to_dict() or {}) for d in tourn_ref.collection("ffa_results").get()}
+    except Exception:                                         # noqa: BLE001
+        ffa = {}
+    seeds = {uid: v.get("rank") for uid, v in ffa.items() if v.get("rank")}
+    names = {uid: (v.get("nickname") or "لاعب") for uid, v in ffa.items()}
+    for m in round_matches:
+        for slot in ("a", "b"):
+            uid = m.get(f"player_{slot}_uid")
+            if uid and m.get(f"player_{slot}_name"):
+                names.setdefault(uid, m[f"player_{slot}_name"])
+
+    def name(uid):
+        return names.get(uid) or "لاعب"
+
+    knocked = [name(m["loser_uid"]) for m in round_matches if m.get("loser_uid")]
+
+    fastest = None          # (ms, uid)
+    for _m, uid, ans in _answer_rows(tournament_id, round_matches):
+        if not ans.get("is_correct"):
+            continue
+        ms = ans.get("reaction_ms_server")
+        if not isinstance(ms, (int, float)):
+            ms = ans.get("reaction_time_ms")
+        if isinstance(ms, (int, float)) and MIN_REACTION_MS <= ms <= MAX_REACTION_MS:
+            if fastest is None or ms < fastest[0]:
+                fastest = (int(ms), uid)
+
+    # The round's biggest upset — a walkover is not one, there was no match.
+    upset = None            # (gap, winner, loser)
+    for m in round_matches:
+        w, l = m.get("winner_uid"), m.get("loser_uid")
+        if not w or not l or m.get("forced_by_host"):
+            continue
+        sw, sl = seeds.get(w), seeds.get(l)
+        if not sw or not sl or sw <= sl:
+            continue
+        if upset is None or (sw - sl) > upset[0]:
+            upset = (sw - sl, w, l)
+
+    recap = {
+        "round":     rnd,
+        "matches":   len(round_matches),
+        "out":       knocked[:8],
+        "out_count": len(knocked),
+        "at":        _now_ms(),
+    }
+    if fastest:
+        recap["fastest_name"]  = name(fastest[1])
+        recap["fastest_value"] = f"{fastest[0] / 1000:.2f} ثانية"
+    if upset:
+        recap["upset_name"]  = name(upset[1])
+        recap["upset_value"] = f"أطاح بصاحب المركز {seeds.get(upset[2])}"
+    return recap
+
 
 def _progress_round(fs, tournament_id: str, tourn: dict, rnd: int) -> None:
     """When every match of `rnd` is done: crown the champion or open the next round."""
@@ -1503,7 +1589,17 @@ def _progress_round(fs, tournament_id: str, tourn: dict, rnd: int) -> None:
     if (tourn.get("current_round") or 1) != rnd:
         return
     now = _now_ms()
-    tourn_ref.update({"phase_started_at": now, "current_round": rnd + 1})
+    patch = {"phase_started_at": now, "current_round": rnd + 1}
+    # The break used to be a countdown and nothing else. Say what just happened
+    # in it — written in the same update that opens the next round, so it lands
+    # exactly once and is never a round behind.
+    try:
+        recap = _round_recap(fs, tournament_id, all_matches, rnd)
+        if recap:
+            patch[f"round_recaps.{rnd}"] = recap
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-BR] round recap failed for %s r%d: %s", tournament_id, rnd, e)
+    tourn_ref.update(patch)
 
     launch_after = now + int(tourn.get("round_break_time") or 0)
     batch = fs.batch()

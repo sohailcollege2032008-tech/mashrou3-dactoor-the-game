@@ -217,6 +217,12 @@ try:
     aw_walkover = main._compute_awards(
         AwFs(), "TID",
         [{**AW_MATCHES[0], "forced_by_host": True}], {"total_rounds": 2})
+    recap_r1 = main._round_recap(AwFs(), "TID", AW_MATCHES, 1)
+    recap_r2 = main._round_recap(AwFs(), "TID", AW_MATCHES, 2)
+    recap_none = main._round_recap(AwFs(), "TID", AW_MATCHES, 9)
+    recap_walkover = main._round_recap(
+        AwFs(), "TID",
+        [{**AW_MATCHES[0], "forced_by_host": True}, AW_MATCHES[1]], 1)
 finally:
     main.admin_db.reference = _real_reference
 
@@ -228,6 +234,13 @@ check("awards: runner-up is the other finalist",
 check("awards: top qualifier is seed 1",
       by_key.get("qualifier", {}).get("uid") == "A"
       and by_key["qualifier"]["value"] == "30 نقطة", f"got {by_key.get('qualifier')}")
+check("awards: a dual takes no numeral in front of it",
+      main._ar_qty(2, "إجابة صحيحة", "إجابتين صحيحتين", "إجابات صحيحة", "إجابة صحيحة")
+        == "إجابتين صحيحتين"
+      and main._ar_qty(1, "نقطة", "نقطتين", "نقاط", "نقطة") == "نقطة"
+      and main._ar_qty(6, "نقطة", "نقطتين", "نقاط", "نقطة") == "6 نقاط"
+      and main._ar_qty(30, "نقطة", "نقطتين", "نقاط", "نقطة") == "30 نقطة",
+      "1/2/6/30")
 check("awards: Arabic counts 3-10 as a plural",
       main._ar_count(6, "إجابة", "إجابتين", "إجابات", "إجابة") == "إجابات"
       and main._ar_count(1, "نقطة", "نقطتين", "نقاط", "نقطة") == "نقطة"
@@ -250,6 +263,27 @@ check("awards: a walkover is not an upset",
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 print("\n===== SUMMARY =====")
+# ── Round recap ───────────────────────────────────────────────────────────────
+check("recap: names who went out this round, and how many",
+      sorted(recap_r1.get("out") or []) == sorted(["أحمد", "كريم"])
+      and recap_r1.get("out_count") == 2 and recap_r1.get("matches") == 2,
+      f"got {recap_r1.get('out')} / {recap_r1.get('out_count')}")
+check("recap: the fastest correct answer is this round's, not the tournament's",
+      recap_r1.get("fastest_value") == "0.64 ثانية"
+      and recap_r2.get("fastest_value") == "1.10 ثانية",
+      f"r1={recap_r1.get('fastest_value')} r2={recap_r2.get('fastest_value')}")
+# Seed 8 beat seed 1 in round 1 and seed 2 in round 2 — each round reports its
+# own upset, against the seed that round's loser actually held.
+check("recap: the upset is the lowest seed beating the highest, in that round",
+      recap_r1.get("upset_name") == "دينا"
+      and recap_r1.get("upset_value") == "أطاح بصاحب المركز 1"
+      and recap_r2.get("upset_value") == "أطاح بصاحب المركز 2",
+      f"r1={recap_r1.get('upset_value')} r2={recap_r2.get('upset_value')}")
+check("recap: a walkover is not an upset",
+      "upset_name" not in recap_walkover, f"got {recap_walkover.get('upset_name')}")
+check("recap: a round with no matches produces nothing at all",
+      recap_none == {}, f"got {recap_none}")
+
 failed = 0
 for name, ok, _ in results:
     if not ok:

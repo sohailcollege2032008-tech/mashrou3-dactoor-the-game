@@ -286,6 +286,19 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
   parked inside a zero-height clipping wrapper — rendered, so html2canvas still has
   something to draw, but out of the page's scroll (absolute positioning alone still
   stretched the document to the tree's ~2000px height).
+- **The round report.** The break between rounds was a countdown and nothing else.
+  `_round_recap` runs when a round closes and is written in the same update that opens
+  the next one — so it can never be a round behind — carrying that round's biggest upset,
+  its fastest correct answer, who went out, and how many matches it held. Same discipline
+  as the honours board: every field comes from something only the server writes. It is
+  mirrored into `bracket_live/{tid}/meta/round_recaps` and rendered by `RoundRecap` on the
+  live page (only while nothing is being played, so the live heroes take the screen back
+  the moment a match starts) and on the player's wait screen under the round countdown.
+- **The opponent's lamp, from inside the match.** The spectators could see who had locked
+  an answer in; the two people actually playing could not. `DuelGame`'s opponent pill now
+  carries the same lamp while the question is open, and on the reveal it says who got
+  there first (`reaction_ms_server` when the server measured it, the client's own number
+  in a regular duel). It says *whether* they answered, never what they picked.
 - **The answer lamps.** With no question on screen, a spectator had nothing to watch
   between one score change and the next. Each competitor now carries a lamp while the
   question is open — filled when their answer is in, pulsing while they are still

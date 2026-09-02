@@ -17,6 +17,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { findCorrectForDuel } from '../../utils/crypto'
 import { soundManager } from '../../utils/soundManager'
 import SoundToggle from '../../components/common/SoundToggle'
+import LockLamp from '../../components/tournament/LockLamp'
 import { WifiOff, LogOut, Flag } from 'lucide-react'
 
 const QUESTION_DURATION_MS    = 30_000
@@ -26,7 +27,15 @@ const MIN_QUESTION_DISPLAY_MS = 800   // min local display before triggering rev
 const MIN_REVEAL_DISPLAY_MS   = 1_500 // min local display before advancing to next question
 
 // ── Editorial player pill ─────────────────────────────────────────────────────
-function PlayerPill({ player, score, align = 'right' }) {
+/**
+ * `locked` is the opponent's answer state while the question is open — filled
+ * when their answer is in, pulsing while they are still choosing. It is the
+ * single biggest source of pressure in a 1v1 and the player could not see it:
+ * the spectators on the live bracket could, and the two people actually playing
+ * could not. It says WHETHER they answered, never what they picked.
+ * `note` is a line for after the reveal (who was faster).
+ */
+function PlayerPill({ player, score, align = 'right', locked = null, note = null }) {
   if (!player) return <div style={{ width: 100 }} />
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: align === 'left' ? 'row-reverse' : 'row' }}>
@@ -50,6 +59,28 @@ function PlayerPill({ player, score, align = 'right' }) {
         <p style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>
           {score ?? 0}
         </p>
+        {locked != null && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2,
+            flexDirection: align === 'left' ? 'row-reverse' : 'row',
+          }}>
+            <LockLamp locked={locked} size={5} />
+            <span className="ar" style={{
+              fontFamily: 'var(--sans)', fontSize: 9.5, fontWeight: 600, whiteSpace: 'nowrap',
+              color: locked ? 'var(--success)' : 'var(--ink-4)',
+            }}>
+              {locked ? 'قفل إجابته' : 'لسه بيفكّر'}
+            </span>
+          </span>
+        )}
+        {note && (
+          <p className="ar" style={{
+            fontFamily: 'var(--sans)', fontSize: 9.5, color: 'var(--ink-3)',
+            margin: '2px 0 0', whiteSpace: 'nowrap',
+          }}>
+            {note}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -723,6 +754,26 @@ export default function DuelGame({
   // player's pick red during that beat would tell them they were wrong before
   // anything has actually been decided.
   const awaitingResult = isRevealing && correctReveal == null
+
+  // On the reveal, say who got there first. The server stamps
+  // reaction_ms_server on a tournament duel, so prefer it over the number the
+  // tabs reported; a regular duel still only has the client's own measure.
+  const reactionOf = a => {
+    const ms = a?.reaction_ms_server ?? a?.reaction_time_ms
+    return typeof ms === 'number' && ms >= 0 ? ms : null
+  }
+  const oppSpeedNote = (() => {
+    if (!isRevealing || isObserver) return null
+    const mine = reactionOf(myAnswer)
+    const theirs = reactionOf(opponentAnswer)
+    if (!opponentAnswer) return 'مجابش'
+    if (mine == null || theirs == null) return null
+    const gap = Math.abs(mine - theirs) / 1000
+    if (gap < 0.05) return 'في نفس اللحظة'
+    return theirs < mine
+      ? `أسرع منك بـ ${gap.toFixed(1)} ث`
+      : `أبطأ منك بـ ${gap.toFixed(1)} ث`
+  })()
   const timeLeftSec    = Math.ceil(timerPct * (activeDurationMs / 1000))
 
   function choiceStyle(i) {
@@ -829,7 +880,13 @@ export default function DuelGame({
           </span>
         </div>
 
-        <PlayerPill player={opponentPlayer} score={opponentPlayer?.score} align="left" />
+        <PlayerPill
+          player={opponentPlayer}
+          score={opponentPlayer?.score}
+          align="left"
+          locked={!isObserver && !isRevealing ? !!opponentAnswer : null}
+          note={oppSpeedNote}
+        />
       </div>
 
       {/* Timer bar */}

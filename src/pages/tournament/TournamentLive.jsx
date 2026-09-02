@@ -22,6 +22,7 @@ import { motion } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import HonoursBoard from '../../components/tournament/HonoursBoard'
 import BracketBoard from '../../components/tournament/BracketBoard'
+import RoundRecap from '../../components/tournament/RoundRecap'
 import LockLamp from '../../components/tournament/LockLamp'
 
 function roundName(round, totalRounds) {
@@ -223,6 +224,17 @@ export default function TournamentLive() {
 
   const liveMatches = useMemo(() => matches.filter(m => m.status === 'active'), [matches])
   const liveCount   = liveMatches.length
+
+  // The break belongs to the round that just ended: show its report while
+  // nothing is being played, and let the live heroes take the screen back the
+  // moment a match starts.
+  const lastRecap = useMemo(() => {
+    const recaps = meta?.round_recaps
+    if (!recaps || typeof recaps !== 'object') return null
+    const entries = Object.values(recaps).filter(r => r && r.round)
+    if (entries.length === 0) return null
+    return entries.sort((a, b) => (a.round || 0) - (b.round || 0))[entries.length - 1]
+  }, [meta])
 
   // What is the tournament waiting for right now? Derived from the same
   // launch_after the launcher itself uses, so the countdown a viewer sees is
@@ -434,6 +446,13 @@ export default function TournamentLive() {
       {pace && (
         <div style={{ padding: '16px 16px 0' }}>
           <PaceBar label={pace.label} detail={pace.detail} countdownMs={pace.countdownMs} />
+        </div>
+      )}
+
+      {/* What just happened, while nothing is happening */}
+      {lastRecap && liveMatches.length === 0 && (
+        <div style={{ padding: '16px 16px 0' }}>
+          <RoundRecap recap={lastRecap} totalRounds={totalRounds} tone="paper" />
         </div>
       )}
 

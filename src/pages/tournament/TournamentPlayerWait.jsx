@@ -7,6 +7,7 @@ import { ref as rtdbRef, onValue as rtdbOnValue, get as rtdbGet, set as rtdbSet 
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import BracketBoard from '../../components/tournament/BracketBoard'
+import RoundRecap from '../../components/tournament/RoundRecap'
 import HonoursBoard from '../../components/tournament/HonoursBoard'
 import { soundManager } from '../../utils/soundManager'
 import SoundToggle from '../../components/common/SoundToggle'
@@ -180,6 +181,14 @@ export default function TournamentPlayerWait() {
   }, [tournamentId, uid])
 
   const myCurrentRound = tournament?.current_round || 1
+  const myName = ffaResults.find(r => r.uid === uid)?.nickname || null
+  const lastRecap = (() => {
+    const recaps = tournament?.round_recaps
+    if (!recaps || typeof recaps !== 'object') return null
+    const entries = Object.values(recaps).filter(r => r && r.round)
+    if (entries.length === 0) return null
+    return entries.sort((a, b) => (a.round || 0) - (b.round || 0))[entries.length - 1]
+  })()
   const myMatch = uid
     ? (allMatches.find(m =>
         m.round === myCurrentRound &&
@@ -870,6 +879,18 @@ export default function TournamentPlayerWait() {
                   <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: 0 }}>
                     {isRoundOne ? 'استعدوا — مباريات الإقصاء على وشك البدء! ⚡' : 'استعد للمباراة القادمة!'}
                   </p>
+                </div>
+              )}
+
+              {/* What the round that just ended actually did */}
+              {lastRecap && (
+                <div style={{ marginBottom: 16 }}>
+                  <RoundRecap
+                    recap={lastRecap}
+                    totalRounds={tournament.total_rounds || 0}
+                    myName={myName}
+                    tone="paper"
+                  />
                 </div>
               )}
 

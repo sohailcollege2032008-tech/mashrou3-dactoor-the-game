@@ -10,6 +10,7 @@ import { Trophy, WifiOff, Download, Loader2, Edit2, Check, X } from 'lucide-reac
 import confetti from 'canvas-confetti'
 import QuestionImage from '../../components/QuestionImage'
 import { signAnswer, validateReactionTime, verifyAnswerHash } from '../../utils/crypto'
+import { arPoints } from '../../utils/arabicCount'
 import { initActivityLogger, getActivityLogger } from '../../utils/activityLogger'
 import { getDir } from '../../utils/rtlUtils'
 import { sortPlayers } from '../../utils/gameRunner'
@@ -103,12 +104,6 @@ function FullLeaderboard({ players, myId, onClose, cutSize = null }) {
 // play it blind: a live rank tells you where you are, not whether you are IN.
 // This is the number they actually care about — the seat, and the gap to it.
 // 6 نقاط, not 6 نقطة — Arabic counts 3-10 as a plural.
-function pts(n) {
-  if (n === 1) return 'نقطة'
-  if (n === 2) return 'نقطتين'
-  return n >= 3 && n <= 10 ? 'نقاط' : 'نقطة'
-}
-
 function CutStatus({ players, myId, cutSize }) {
   if (!cutSize || !myId) return null
   if (!players || players.length <= cutSize) return null
@@ -132,10 +127,10 @@ function CutStatus({ players, myId, cutSize }) {
   // So the number shown is the one that actually overtakes them.
   const need = margin + 1
   const detail = !inCut
-    ? (margin <= 0 ? 'فارق نقاط صفر — الأسرع هو اللي يتأهل' : `محتاج ${need} ${pts(need)} تخطف المقعد ${cutSize}`)
+    ? (margin <= 0 ? 'فارق نقاط صفر — الأسرع هو اللي يتأهل' : `محتاج ${arPoints(need)} تخطف المقعد ${cutSize}`)
     : onTheBubble
       ? 'أي نقطة لأي حد بره تطلعك — اجمع'
-      : `بفارق ${margin} ${pts(margin)} عن أول واحد بره`
+      : `بفارق ${arPoints(margin)} عن أول واحد بره`
 
   return (
     <div dir="rtl" style={{
