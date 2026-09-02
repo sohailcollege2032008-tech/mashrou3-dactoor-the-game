@@ -164,16 +164,41 @@ brute-forcing a hash that no longer exists. It now reads the key through the
 Admin SDK, the same way the functions do; that a test needs admin credentials to
 know the answer is the proof a browser cannot.
 
+## Round 5 (2026-09-02) — the result left the browser too
+
+**Was:** `bracket_matches` granted the two players an unrestricted `update`, so
+`PATCH {status:'finished', winner_uid:self}` was accepted from the console —
+mid-match, before a single question was answered — and `_finalize_match` then
+trusted the stored `winner_uid` and advanced the round around it.
+
+**Now:** host and owner only, for create, update and delete alike. Nothing was
+lost by taking it away: `_finalize_match` already wrote the same result off the
+duel node's status, resolved the same way (surrender, then score, then FFA rank,
+then total reaction time), and advanced the winner. The client half was a
+duplicate that happened to be forgeable. `TournamentDuelWrapper` waits for the
+verdict instead of computing one; the client tie-break path and the two
+advancement writes went with it, and those writes had been rule-denied for a
+while already — they only ever logged a warning.
+
+**The latency question, answered rather than assumed:** the concern with moving
+a result server-side is the players staring at a spinner. Measured on
+production, the delta from the duel turning `finished` to the verdict landing on
+the match doc was **506 ms**. The status trigger fires on every question, so by
+the last one it has been warm for the whole match. The wait is staged as a beat
+— FINAL VERDICT, "جاري اعتماد النتيجة" — with a 45s ceiling after which the tab
+falls back to the wait screen; the reconciler runs every minute, so nothing is
+stranded.
+
+Evidence: `scratch/tests/tmp-w11-verdict.mjs` 13/13 — participant refused 403 on
+the self-crown write, outsider refused, the match doc untouched afterwards, and
+a match played to the end finalised server-side with the champion written on the
+tournament doc.
+
 ## What is NOT closed — read before the next event
 
 * **A published (global) deck still exposes its answers** to anyone who opens it
   in the deck browser — that is what publishing means today, because the client
   builds a duel from the plain deck. Server-side duel creation would fix it.
-* **A match player can still crown themselves in Firestore.** `bracket_matches` grants the
-  two players an unrestricted `update`, so a `PATCH {status:'finished', winner_uid:self}`
-  is accepted and `_finalize_match` trusts the stored `winner_uid`. Closing it means match
-  results become CF-only, which changes who advances the bracket — it needs a full bracket
-  re-test and is therefore deliberately left for the next round.
 * **A player inside a match is still trusted.** `.validate` caps `score` at `+2` per write
   but not the number of writes, and RTDB cannot revoke an ancestor's `.write` grant, so a
   participant can pump their own score or write fields under the opponent's answer node.

@@ -4,21 +4,20 @@
  * RTDB path (tournament_duels/{tournamentId}) and question duration.
  *
  * After the duel finishes:
- *   1. Reads final RTDB state, computes winner
- *   2. Writes result to bracket_match doc
- *   3. Advances winner to next match (or marks tournament finished)
- *   4. Writes tournament_match entry to player's game history
- *   5. Shows a post-match results screen (auto-navigates to wait after 15 s)
+ *   1. Waits for the Cloud Function's verdict on the bracket match — the result,
+ *      the advancement and the champion are all written server-side; a player
+ *      can no longer write a match doc at all
+ *   2. Writes a tournament_match entry to the player's own game history
+ *   3. Shows a post-match results screen (auto-navigates to wait after 15 s)
  */
 import React, { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import {
-  doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocs, collection, onSnapshot
+  doc, getDoc, setDoc, serverTimestamp, getDocs, collection, onSnapshot
 } from 'firebase/firestore'
 import { ref as rtdbRef, get, onValue } from 'firebase/database'
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import { resolveMatchTie } from '../../utils/tournamentUtils'
 import { soundManager } from '../../utils/soundManager'
 import DuelGame from '../duel/DuelGame'
 import { Loader2, Trophy, XCircle, Timer, ArrowRight } from 'lucide-react'
@@ -209,6 +208,38 @@ function getRoundLabel(round, totalRounds) {
   return `الجولة ${round}`
 }
 
+/**
+ * Wait for the Cloud Function's verdict on this match.
+ *
+ * Resolves with the finalised match doc, or null if it has not landed in time —
+ * the caller then falls back to the wait screen rather than inventing a result.
+ * `_finalize_match` runs off the duel node's status write, and that trigger has
+ * been warm all match long (it fires on every question), so this is normally a
+ * second or two.
+ */
+function awaitVerdict(tournamentId, matchId, timeoutMs = 45000) {
+  return new Promise(resolve => {
+    let unsub = null
+    let done  = false
+    const finish = v => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      if (unsub) unsub()
+      resolve(v)
+    }
+    const timer = setTimeout(() => finish(null), timeoutMs)
+    unsub = onSnapshot(
+      doc(db, 'tournaments', tournamentId, 'bracket_matches', matchId),
+      snap => {
+        const m = snap.data()
+        if (m?.status === 'finished' && m.winner_uid) finish(m)
+      },
+      e => { console.error('[Bracket] verdict listener:', e); finish(null) },
+    )
+  })
+}
+
 export default function TournamentDuelWrapper() {
   const { tournamentId, matchId } = useParams()
   const navigate   = useNavigate()
@@ -222,6 +253,7 @@ export default function TournamentDuelWrapper() {
   const [matchResult,    setMatchResult]    = useState(null)
   const [autoNavSeconds, setAutoNavSeconds] = useState(null)
   const [nextOpponent,   setNextOpponent]   = useState(null)
+  const [settling,       setSettling]       = useState(false)
 
   // Live subscription rather than a single read: arriving a moment before the
   // duel_id is written used to dead-end on "لم تبدأ المباراة بعد" with no retry.
@@ -307,95 +339,30 @@ export default function TournamentDuelWrapper() {
       const playerUids = Object.keys(duelData?.players || {})
       if (playerUids.length < 2) throw new Error('بيانات اللاعبين غير مكتملة')
 
-      const [uidA, uidB] = playerUids
-      const scoreA = duelData.players?.[uidA]?.score ?? 0
-      const scoreB = duelData.players?.[uidB]?.score ?? 0
-
-      let winnerUid, loserUid, tieBreaker
-
-      // Surrender is treated exactly like a forfeit — the surrenderer loses and
-      // the other player wins. The bracket has no draw outcome, so a surrender
-      // must never fall through to score comparison or FFA-rank ordering.
-      // TODO(server): _resolve_winner must honour surrender_by too
-      if (duelData.surrender_by) {
-        loserUid   = duelData.surrender_by
-        winnerUid  = playerUids.find(u => u !== loserUid)
-        tieBreaker = null
-      } else if (duelData.forfeit_by) {
-        loserUid   = duelData.forfeit_by
-        winnerUid  = playerUids.find(u => u !== loserUid)
-        tieBreaker = null
-      } else if (scoreA === scoreB) {
-        if (scoreA === 0) {
-          const [ffaA, ffaB] = await Promise.all([
-            getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uidA)),
-            getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uidB)),
-          ])
-          const rankA = ffaA.data()?.rank ?? Infinity
-          const rankB = ffaB.data()?.rank ?? Infinity
-          winnerUid  = rankA <= rankB ? uidA : uidB
-          loserUid   = winnerUid === uidA ? uidB : uidA
-          tieBreaker = 'ffa_rank'
-        } else {
-          const result = resolveMatchTie(duelData, playerUids)
-          winnerUid  = result.winnerUid
-          loserUid   = result.loserUid
-          tieBreaker = result.tieBreaker
-        }
-      } else {
-        winnerUid  = scoreA > scoreB ? uidA : uidB
-        loserUid   = winnerUid === uidA ? uidB : uidA
-        tieBreaker = null
+      // The verdict belongs to the server. A player used to work out the winner
+      // right here and write it onto the bracket match — which put crowning
+      // yourself one updateDoc away. `_finalize_match` resolves it the moment
+      // the duel node turns 'finished', and the rules now let only the host and
+      // the owner write a match, so we wait for the server's answer instead.
+      setSettling(true)
+      const verdict = await awaitVerdict(tournamentId, matchId)
+      setSettling(false)
+      if (!verdict) {
+        // Nothing is lost: the reconciler runs every minute, and the wait
+        // screen shows the outcome the moment it lands.
+        navigate(`/tournament/${tournamentId}/wait`, { replace: true })
+        return
       }
 
-      const matchRef = doc(db, 'tournaments', tournamentId, 'bracket_matches', matchId)
-      await updateDoc(matchRef, {
-        status:         'finished',
-        winner_uid:     winnerUid,
-        loser_uid:      loserUid,
-        player_a_score: duelData.players?.[match.player_a_uid]?.score ?? 0,
-        player_b_score: duelData.players?.[match.player_b_uid]?.score ?? 0,
-        tie_broken_by:  tieBreaker,
-        finished_at:    serverTimestamp(),
-      })
+      const winnerUid  = verdict.winner_uid
+      const loserUid   = verdict.loser_uid || playerUids.find(u => u !== winnerUid) || null
+      const tieBreaker = verdict.tie_broken_by ?? null
+      const iAmA       = uid === match.player_a_uid
 
-      const winnerName = winnerUid === match.player_a_uid
-        ? match.player_a_name : match.player_b_name
-
-      if (match.next_match_id) {
-        try {
-          const nextRef  = doc(db, 'tournaments', tournamentId, 'bracket_matches', match.next_match_id)
-          const nextSnap = await getDoc(nextRef)
-          if (nextSnap.exists()) {
-            // Slot is decided by match number parity, not by which slot happens
-            // to be empty — "first empty slot" put both winners in the wrong
-            // seats whenever two matches finished out of order.
-            const slot = (match.match_number ?? 1) % 2 === 1 ? 'player_a' : 'player_b'
-            await updateDoc(nextRef, {
-              [`${slot}_uid`]:  winnerUid,
-              [`${slot}_name`]: winnerName,
-            })
-          }
-        } catch (e) {
-          console.warn('[Bracket] Could not advance winner client-side:', e.code || e.message)
-        }
-      } else {
-        try {
-          await updateDoc(doc(db, 'tournaments', tournamentId), {
-            winner_uid:  winnerUid,
-            winner_name: winnerName,
-            status:      'finished',
-          })
-        } catch (e) {
-          console.warn('[Bracket] Could not update tournament status client-side:', e.code || e.message)
-        }
-      }
-
-      const myScore       = duelData.players?.[uid]?.score ?? 0
+      const myScore       = (iAmA ? verdict.player_a_score : verdict.player_b_score) ?? 0
+      const opponentScore = (iAmA ? verdict.player_b_score : verdict.player_a_score) ?? 0
       const oppUid        = playerUids.find(u => u !== uid)
-      const opponentScore = duelData.players?.[oppUid]?.score ?? 0
-      const opponentName  = uid === match.player_a_uid
-        ? match.player_b_name : match.player_a_name
+      const opponentName  = iAmA ? match.player_b_name : match.player_a_name
 
       try {
         await setDoc(
@@ -534,6 +501,34 @@ export default function TournamentDuelWrapper() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Loader2 size={28} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
+      </div>
+    )
+  }
+
+  // ── Awaiting the official verdict ─────────────────────────────────────────
+  // The scores are in but the result is not the players' to declare. This beat
+  // belongs to the server, so it is shown as one: the judgement is being sealed.
+  if (settling) {
+    return (
+      <div className="paper-grain" style={{
+        minHeight: '100vh', background: 'var(--paper)', color: 'var(--ink)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 18, padding: 24,
+      }} dir="rtl">
+        <div className="folio" style={{ color: 'var(--ink-4)' }}>FINAL VERDICT</div>
+        <Loader2 size={26} className="animate-spin" style={{ color: 'var(--gold)' }} />
+        <p className="ar" style={{
+          fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 500,
+          color: 'var(--ink)', margin: 0, textAlign: 'center',
+        }}>
+          جاري اعتماد النتيجة
+        </p>
+        <p className="ar" style={{
+          fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink-3)',
+          margin: 0, textAlign: 'center', maxWidth: 260, lineHeight: 1.7,
+        }}>
+          النتيجة بتتحسب على السيرفر — ثواني وتظهر
+        </p>
       </div>
     )
   }

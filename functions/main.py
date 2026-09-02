@@ -1099,14 +1099,16 @@ def _finalize_match(fs, tournament_id: str, match_id: str) -> bool:
     Write a finished duel's result onto its bracket match, push the winner into
     the next match and progress the round.
 
-    IMPORTANT: advancement must happen even when the match was ALREADY
-    finalised by a player's browser tab.  A client tab can write the match
-    result (it is a participant), but its own advancement write is denied by
-    the security rules (it is not yet a participant of the next match).  If we
-    skip 'finished' matches here, the winner is lost forever — which is what
-    happened in production on 2026-08-14 (two of four round-1 winners never
-    reached round 2).  Every step below is idempotent; the reconciler calls
-    this same code as a backstop.
+    IMPORTANT: advancement must happen even when the match is ALREADY marked
+    finished.  The host force-finish button writes the result directly, and a
+    previous invocation may have written it too, but neither of those advances
+    the winner into the next match on its own.  If we skip 'finished' matches
+    here, the winner is lost forever — which is what happened in production on
+    2026-08-14 (two of four round-1 winners never reached round 2).  Every step
+    below is idempotent; the reconciler calls this same code as a backstop.
+
+    Players cannot write a bracket match at all any more, so this is the only
+    place a played match becomes a result.
     """
     tourn_ref = fs.collection("tournaments").document(tournament_id)
     match_ref = tourn_ref.collection("bracket_matches").document(match_id)
@@ -1122,7 +1124,7 @@ def _finalize_match(fs, tournament_id: str, match_id: str) -> bool:
     tourn = tourn_ref.get().to_dict() or {}
 
     if match.get("status") == "finished" and match.get("winner_uid"):
-        # A client tab (or a previous invocation) already finalised the match.
+        # The host force-finish (or a previous invocation) already wrote it.
         winner, loser, tie_breaker = match["winner_uid"], match.get("loser_uid"), match.get("tie_broken_by")
     else:
         winner, loser, tie_breaker = _resolve_winner(fs, tournament_id, duel, match)
@@ -1149,7 +1151,7 @@ def _finalize_match(fs, tournament_id: str, match_id: str) -> bool:
 
         _claim(fs.transaction(), match_ref)
         if not claimed["v"]:
-            # Lost the finalise race to a client tab — reload and use its winner.
+            # Lost the finalise race — reload and use the winner that landed.
             match = match_ref.get().to_dict() or {}
             winner = match.get("winner_uid")
             if not winner:
@@ -1382,8 +1384,8 @@ def tournament_reconciler(event: scheduler_fn.ScheduledEvent) -> None:
             for m in matches:
                 rnd = m.get("round") or 1
 
-                # A match finalised by a client tab still needs its winner
-                # advanced server-side (client advancement is rule-denied).
+                # A match finished by the host force-finish still needs its
+                # winner advanced — that button writes the result only.
                 if m.get("status") == "finished" and m.get("winner_uid") and m.get("next_match_id"):
                     _advance_winner_slot(fs, tournament_id, m)
                     continue
