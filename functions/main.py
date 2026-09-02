@@ -1069,10 +1069,19 @@ def on_tournament_written(event: firestore_fn.Event[firestore_fn.Change]) -> Non
     tournament, players sat on 'Awaiting your bracket' forever.
     """
     after = event.data.after
-    if after is None:
-        return
-    tourn = after.to_dict() or {}
     tournament_id = event.params["tournamentId"]
+
+    if after is None:
+        # Tournament deleted — take its spectator mirror with it, otherwise the
+        # mirror outlives every tournament it ever described and grows forever.
+        try:
+            admin_db.reference(f"{LIVE_PATH}/{tournament_id}").delete()
+            logger.info("[CF-LIVE] removed mirror for deleted tournament %s", tournament_id)
+        except Exception as e:                                # noqa: BLE001
+            logger.exception("[CF-LIVE] mirror cleanup failed %s: %s", tournament_id, e)
+        return
+
+    tourn = after.to_dict() or {}
 
     # Mirror on every phase — the spectator page needs registration and FFA too.
     _mirror_meta(tournament_id, tourn)
