@@ -157,6 +157,19 @@ start, duel score). What is worth keeping from the process:
   scheduled start lands 1.18s after its second; a walkover seats its winner in
   1.3s instead of up to 60. None of those were guesses, and one of them (the
   walkover) was a bug found *by* measuring.
+- **A probe that hand-writes state a Cloud Function also writes is racing it.**
+  The visual scene for the pre-match story writes two finished round-1 matches,
+  then the tournament doc as `bracket` — which wakes the bracket generator, whose
+  batch overwrote one of them. The screenshot came back with seed 1's story
+  showing the qualifier fallback instead of "فاز على … 6–2", and the first
+  instinct was to look for a client bug. There was none: the data at read time
+  really did lack a winner. Scaffolding that collides with a trigger has to
+  settle — write it, then poll it back and rewrite until it reads the way the
+  scene needs — or the probe is testing the function's version of the world.
+- **Look at the screenshot, do not just count the assertions.** The same run
+  reported `path lines: 1` where the previous one said 2, and that single number
+  was the only thing that caught it. A visual pass whose output is only PASS/FAIL
+  lines would have shipped a story panel with half its story missing.
 
 ---
 
