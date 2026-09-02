@@ -34,6 +34,7 @@ initialize_app()
 REVEAL_DURATION_MS    = 4_000
 BASE_PATH             = "tournament_duels"
 LIVE_PATH             = "bracket_live"   # public spectator mirror (no question text)
+KEYS_PATH             = "duel_keys"      # server-only answer key (never sent to a client)
 MIN_REACTION_MS       = 50        # below this = suspiciously fast / clock error
 MAX_REACTION_MS       = 65_000    # above this = question expired already
 
@@ -191,6 +192,184 @@ def _find_correct_c(duel_id: str, qi: int, question: object) -> object:
     return None
 
 
+# ── Answer key (server-only) ─────────────────────────────────────────────────
+# The duel node used to carry correct_hash = sha256("duel:{duelId}:{qi}:{i}").
+# A participant reads their own duel node, and a tournament duel's id IS the
+# match id ("r1m1"), so four SHA-256 calls handed them the answer before they
+# answered. The plain key lives here instead: no client may read it (rules),
+# the tournament's host may write it (so the host tab can still launch a
+# match), and the Admin SDK reads it when scoring. Consequence, and the point:
+# the server is now the only thing that can decide whether an answer is right.
+
+def _write_duel_key(tournament_id: str, duel_id: str, main: list, tb: list) -> None:
+    try:
+        admin_db.reference(f"{KEYS_PATH}/{tournament_id}/{duel_id}").set(
+            {"main": list(main), "tb": list(tb), "at": _now_ms()})
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-KEY] write failed %s/%s: %s", tournament_id, duel_id, e)
+
+
+def _duel_key(tournament_id: str, duel_id: str) -> object:
+    try:
+        return admin_db.reference(f"{KEYS_PATH}/{tournament_id}/{duel_id}").get()
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-KEY] read failed %s/%s: %s", tournament_id, duel_id, e)
+        return None
+
+
+def _split_answer_key(questions: list, duel_id: str) -> tuple:
+    """
+    Return (questions with every answer field removed, list of correct indices).
+
+    The list is index-aligned with `questions` even when an entry is unusable —
+    answers are looked up by index, and a shorter list would silently shift
+    every later question onto the wrong answer. -1 marks "no answer known".
+    """
+    safe, key = [], []
+    for qi, q in enumerate(questions):
+        if not isinstance(q, dict):
+            logger.error("[CF-KEY] question %d is not a dict (duel %s)", qi, duel_id)
+            safe.append({"question": "", "choices": [], "invalid": True})
+            key.append(-1)
+            continue
+        c = q.get("correct")
+        if isinstance(c, bool) or not isinstance(c, int):
+            logger.error("[CF-KEY] question %d has no usable `correct` (duel %s)", qi, duel_id)
+            key.append(-1)
+        else:
+            key.append(int(c))
+        safe.append({k: v for k, v in q.items() if k not in ("correct", "correct_hash")})
+    return safe, key
+
+
+def _correct_for(tournament_id: str, duel_id: str, qi: int, question: object,
+                 key: object = None) -> object:
+    """
+    The correct index for one question of a tournament duel.
+
+    Prefers the server-only key. A tiebreaker is appended to `questions` at
+    index len(main) + n, which is exactly where it sits in the reserve list, so
+    the same lookup covers it. Falls back to the old in-node hash for duels
+    launched before the key existed.
+    """
+    k = key if key is not None else _duel_key(tournament_id, duel_id)
+    if isinstance(k, dict):
+        main = _to_list(k.get("main"))
+        tb   = _to_list(k.get("tb"))
+        c = None
+        if qi < len(main):
+            c = main[qi]
+        else:
+            j = qi - len(main)
+            if 0 <= j < len(tb):
+                c = tb[j]
+        if isinstance(c, int) and not isinstance(c, bool) and c >= 0:
+            return c
+    return _find_correct_c(duel_id, qi, question)
+
+
+def _recover_correct_from_deck(duel: dict, question: object) -> object:
+    """
+    Last resort for a duel with neither a key nor a hash — e.g. the launcher
+    created the node but its key write failed. Tournament duels never shuffle
+    answer choices, so the deck's own `correct` index still applies; the
+    question is matched by its text. One Firestore read, failure path only.
+    """
+    if not isinstance(question, dict):
+        return None
+    text    = question.get("question")
+    deck_id = duel.get("deck_id")
+    if not text or not deck_id:
+        return None
+    try:
+        deck = admin_fs.client().collection("question_sets").document(deck_id).get().to_dict() or {}
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-KEY] deck recovery read failed %s: %s", deck_id, e)
+        return None
+    for q in ((deck.get("questions") or {}).get("questions") or []):
+        if isinstance(q, dict) and q.get("question") == text:
+            c = q.get("correct")
+            if isinstance(c, int) and not isinstance(c, bool):
+                return c
+    return None
+
+
+def _score_question(tournament_id: str, duel_ref, duel: dict, qi: int) -> bool:
+    """
+    Score one question of a tournament duel. Returns True if it scored.
+
+    Idempotent by design: `answers/{qi}/correct_reveal` is the marker, and it is
+    written in the same multi-path update as the points, so a second caller —
+    the reveal trigger, the reconciler, a retry — is a no-op. Called from three
+    places on purpose: the answer trigger (both players answered), the reveal
+    trigger (someone ran out of time, so the answer trigger never fired), and
+    the reconciler (every tab died).
+    """
+    if not isinstance(duel, dict):
+        return False
+    answers_qi = _answers_for_qi(duel, qi)
+    if answers_qi.get("correct_reveal") is not None:
+        return False
+
+    player_uids = list((duel.get("players") or {}).keys())
+    if not player_uids:
+        return False
+
+    questions = _to_list(duel.get("questions"))
+    question  = questions[qi] if qi < len(questions) else None
+    duel_id   = duel.get("match_id") or duel_ref.key
+    correct_c = _correct_for(tournament_id, duel_id, qi, question)
+    if correct_c is None:
+        correct_c = _recover_correct_from_deck(duel, question)
+        if correct_c is not None:
+            logger.warning("[CF-KEY] recovered qi=%d from the deck (tournament=%s duel=%s)",
+                           qi, tournament_id, duel_id)
+    if correct_c is None:
+        logger.error("[CF] no answer key for qi=%d (tournament=%s duel=%s) — question unscored",
+                     qi, tournament_id, duel_id)
+        return False
+
+    # Rank correct answers by reaction time; clamp forged ultra-fast times so
+    # they cannot steal the first-correct slot.
+    def _safe_reaction(ans: dict) -> int:
+        ms = ans.get("reaction_time_ms")
+        if not isinstance(ms, (int, float)) or ms < MIN_REACTION_MS:
+            return MAX_REACTION_MS
+        return min(int(ms), MAX_REACTION_MS)
+
+    correct_list = [
+        (uid, ans) for uid, ans in answers_qi.items()
+        if uid in player_uids and isinstance(ans, dict)
+        and ans.get("selected_choice") == correct_c
+    ]
+    correct_list.sort(key=lambda x: _safe_reaction(x[1]))
+    rank_map = {uid: i for i, (uid, _) in enumerate(correct_list)}
+
+    updates = {f"answers/{qi}/correct_reveal": correct_c}
+    live_scores = {}
+    for p_uid in player_uids:
+        base = ((duel.get("players") or {}).get(p_uid) or {}).get("score") or 0
+        live_scores[p_uid] = base
+        ans = answers_qi.get(p_uid)
+        if not isinstance(ans, dict):
+            continue
+        is_ok = (ans.get("selected_choice") == correct_c)
+        rank  = rank_map.get(p_uid, 99)
+        pts   = (2 if rank == 0 else 1) if is_ok else 0
+        updates[f"answers/{qi}/{p_uid}/is_correct"]    = is_ok
+        updates[f"answers/{qi}/{p_uid}/points_earned"] = pts
+        if pts > 0:
+            updates[f"players/{p_uid}/score"] = base + pts
+            live_scores[p_uid] = base + pts
+
+    duel_ref.update(updates)
+    _mirror_live(tournament_id, duel_id, {
+        "qi": qi, "total": len(questions), "scores": live_scores, "status": "revealing",
+    })
+    logger.info("[CF] scored qi=%d — tournament=%s duel=%s", qi, tournament_id, duel_id)
+    return True
+
+
 # ── Function 1 ─────────────────────────────────────────────────────────────────
 
 @db_fn.on_value_written(
@@ -254,67 +433,10 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
     if not captured["won"]:
         return  # client timer or another CF invocation won the race
 
-    # ── Score answers ─────────────────────────────────────────────────────────
-    pre_duel  = captured["duel"]
-    questions = _to_list(pre_duel.get("questions"))
-    question  = questions[current_qi] if current_qi < len(questions) else None
-    correct_c = _find_correct_c(duel_id, current_qi, question)
-
-    # Sort correct answers by ascending reaction_time_ms (first = rank 0 = 2 pts).
-    # Clamp reaction_time_ms to a valid range so forged ultra-fast times don't
-    # steal the first-correct slot; anything outside the bounds is treated as
-    # the worst possible time (MAX_REACTION_MS) for ranking purposes.
-    def _safe_reaction(ans: dict) -> int:
-        ms = ans.get("reaction_time_ms")
-        if not isinstance(ms, (int, float)) or ms < MIN_REACTION_MS:
-            return MAX_REACTION_MS    # invalid → push to the back
-        return min(int(ms), MAX_REACTION_MS)
-
-    correct_list = [
-        (uid, ans) for uid, ans in answers_qi.items()
-        if uid in player_uids
-        and isinstance(ans, dict)
-        and ans.get("selected_choice") == correct_c
-    ]
-    correct_list.sort(key=lambda x: _safe_reaction(x[1]))
-    rank_map = {uid: i for i, (uid, _) in enumerate(correct_list)}
-
-    updates: dict = {}
-    # Reveal the resolved correct index so clients can highlight without plain `correct`
-    if correct_c is not None:
-        updates[f"answers/{current_qi}/correct_reveal"] = correct_c
-
-    for p_uid in player_uids:
-        ans = answers_qi.get(p_uid)
-        if not isinstance(ans, dict):
-            continue
-        is_ok = (ans.get("selected_choice") == correct_c)
-        rank  = rank_map.get(p_uid, 99)
-        pts   = (2 if rank == 0 else 1) if is_ok else 0
-
-        updates[f"answers/{current_qi}/{p_uid}/is_correct"]    = is_ok
-        updates[f"answers/{current_qi}/{p_uid}/points_earned"] = pts
-
-        if is_ok and pts > 0:
-            cur_score = (
-                ((pre_duel.get("players") or {}).get(p_uid) or {}).get("score") or 0
-            )
-            updates[f"players/{p_uid}/score"] = cur_score + pts
-
-    if updates:
-        duel_ref.update(updates)
-
-    # Spectator mirror: question number + running scores, no question text.
-    live_scores = {}
-    for p_uid in player_uids:
-        base = ((pre_duel.get("players") or {}).get(p_uid) or {}).get("score") or 0
-        live_scores[p_uid] = updates.get(f"players/{p_uid}/score", base)
-    _mirror_live(tournament_id, pre_duel.get("match_id") or duel_id, {
-        "qi":     current_qi,
-        "total":  len(questions),
-        "scores": live_scores,
-        "status": "revealing",
-    })
+    # Scoring itself lives in _score_question so the reveal trigger and the
+    # reconciler score the same way — a player who never answers means this
+    # trigger never fires, and the client can no longer score for itself.
+    _score_question(tournament_id, duel_ref, captured["duel"], current_qi)
 
     logger.info("[CF] Reveal claimed — tournament=%s duel=%s qi=%d",
                 tournament_id, duel_id, current_qi)
@@ -398,6 +520,15 @@ def on_tournament_reveal_started(event: db_fn.Event[db_fn.Change]) -> None:
 
     tournament_id = event.params["tournamentId"]
     duel_id       = event.params["duelId"]
+
+    # Score first. When a player never answers, the answer trigger never fires,
+    # and the client can no longer score for itself — this is the only place the
+    # question gets resolved, so it must happen before the reveal phase elapses.
+    duel_ref_early = admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}")
+    early = duel_ref_early.get()
+    if isinstance(early, dict) and early.get("status") == "revealing":
+        _score_question(tournament_id, duel_ref_early, early,
+                        early.get("current_question_index") or 0)
 
     # Sleep for the remainder of the reveal phase
     reveal_ts  = after_val if isinstance(after_val, (int, float)) else _now_ms()
@@ -520,34 +651,6 @@ def on_ffa_room_finished(event: db_fn.Event[db_fn.Change]) -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _hash_correct(duel_id: str, qi: int, correct_idx: int) -> str:
-    """Mirror of crypto.js hashCorrectForDuel — sha256("duel:{id}:{qi}:{idx}")."""
-    return hashlib.sha256(f"duel:{duel_id}:{qi}:{correct_idx}".encode()).hexdigest()
-
-
-def _strip_correct(questions: list, duel_id: str) -> list:
-    """Replace each question's plain `correct` with `correct_hash`."""
-    out = []
-    for qi, q in enumerate(questions):
-        if not isinstance(q, dict):
-            # Preserve length: answer hashes are bound to the question's FINAL index,
-            # so dropping an element shifted every later question onto a wrong index
-            # and made them permanently unscoreable.
-            logger.error("[CF-BR] question %d is not a dict — placeholder kept (duel/match %s)",
-                         qi, duel_id)
-            # A null/scalar entry would be dropped by RTDB and collapse the array into a
-            # sparse object, so keep the slot filled with a harmless unscoreable question.
-            out.append({"question": "", "choices": [], "invalid": True})
-            continue
-        if q.get("correct") is None:
-            logger.error("[CF-BR] question %d missing `correct` — will be unscored (duel/match %s)",
-                         qi, duel_id)
-            out.append(q)
-            continue
-        safe = {k: v for k, v in q.items() if k != "correct"}
-        safe["correct_hash"] = _hash_correct(duel_id, qi, q["correct"])
-        out.append(safe)
-    return out
 
 
 def _total_rounds_for(size: int) -> int:
@@ -806,12 +909,15 @@ def _launch_match(fs, tournament_id: str, tourn: dict, match: dict) -> bool:
         ffa = tourn_ref.collection("ffa_results").document(uid).get().to_dict() or {}
         return ffa.get("avatar_url") or ""
 
-    # Hash both sets in one pass. A tiebreaker is appended to `questions` at
-    # index len(questions) + i, and the answer hash is bound to that index, so
-    # hashing the reserve separately (from 0) left it permanently unscoreable.
-    all_safe = _strip_correct(questions + tiebreakers, match_id)
+    # Split main + reserve in one pass: a tiebreaker is appended to `questions`
+    # at index len(questions) + n, which is exactly where its key sits in the
+    # reserve list. The key itself never enters the duel node — it goes to
+    # duel_keys, which no client can read.
+    all_safe, all_key = _split_answer_key(questions + tiebreakers, match_id)
     safe_questions   = all_safe[:len(questions)]
     safe_tiebreakers = all_safe[len(questions):]
+    main_key         = all_key[:len(questions)]
+    tb_key           = all_key[len(questions):]
 
     payload = {
         "tournament_id": tournament_id,
@@ -859,6 +965,11 @@ def _launch_match(fs, tournament_id: str, tourn: dict, match: dict) -> bool:
         return payload
 
     _try_transaction(duel_ref, create_fn)
+    if won["v"]:
+        # Only the launcher that actually created the node may write the key:
+        # each launcher shuffles its own reserve questions, so a key written by
+        # the loser would not match the questions that are really in the node.
+        _write_duel_key(tournament_id, match_id, main_key, tb_key)
     _mark_match_active(fs, tournament_id, match_id)
     if won["v"]:
         logger.info("[CF-BR] launched match %s for tournament %s", match_id, tournament_id)
@@ -1076,9 +1187,11 @@ def on_tournament_written(event: firestore_fn.Event[firestore_fn.Change]) -> Non
         # mirror outlives every tournament it ever described and grows forever.
         try:
             admin_db.reference(f"{LIVE_PATH}/{tournament_id}").delete()
-            logger.info("[CF-LIVE] removed mirror for deleted tournament %s", tournament_id)
+            admin_db.reference(f"{KEYS_PATH}/{tournament_id}").delete()
+            logger.info("[CF-LIVE] removed mirror + answer keys for deleted tournament %s",
+                        tournament_id)
         except Exception as e:                                # noqa: BLE001
-            logger.exception("[CF-LIVE] mirror cleanup failed %s: %s", tournament_id, e)
+            logger.exception("[CF-LIVE] cleanup failed %s: %s", tournament_id, e)
         return
 
     tourn = after.to_dict() or {}
@@ -1323,8 +1436,11 @@ def tournament_reconciler(event: scheduler_fn.ScheduledEvent) -> None:
                     # same idempotent advance the reveal trigger uses.
                     r_ts = duel.get("reveal_started_at") or 0
                     if r_ts and now - r_ts > REVEAL_DURATION_MS + RECONCILE_GRACE_MS:
-                        if _advance_reveal(
-                                admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}")):
+                        d_ref = admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}")
+                        # Score before advancing, or the question is lost for good.
+                        _score_question(tournament_id, d_ref, duel,
+                                        duel.get("current_question_index") or 0)
+                        if _advance_reveal(d_ref):
                             logger.info("[CF-REC] advanced stale reveal %s/%s",
                                         tournament_id, duel_id)
 

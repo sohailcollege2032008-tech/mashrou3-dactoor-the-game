@@ -128,16 +128,44 @@ Verified: `scratch/tests/tmp-e-rules-probe.cjs` — `E-read-foreign-duel` 200 �
 (5/5) is the regression guard for the read rule: participant reads, host reads,
 outsider denied, outsider denied on a child path, unlaunched duel reads null.
 
+## Round 4 (2026-09-02) — the answer left the browser
+
+The participant-side leak, which Round 3 could only document.
+
+**Was:** the duel node carried `correct_hash = sha256("duel:{duelId}:{qi}:{i}")`.
+Both players may read their own duel node, and a tournament duel id IS the match
+id (`r1m1`), so four SHA-256 calls gave a participant the answer before they
+picked one. The salt was never secret; it only looked like one.
+
+**Now:** the plain key lives at `duel_keys/{tid}/{duelId}` — `.read` is `false`
+for every client, `.write` is the tournament host only (so the host tab can
+still launch a match), and the Admin SDK reads it when scoring. The duel node
+carries no answer field at all.
+
+**What that forced, and why it is the right shape:** the server is the only
+thing that can decide whether an answer is right, so scoring moved there.
+`_score_question` has three callers — the answer trigger (both answered), the
+reveal trigger (someone timed out, so the answer trigger never fires), and the
+reconciler (every tab died) — and is idempotent on `answers/{qi}/correct_reveal`,
+which is written in the same multi-path update as the points. A duel with
+neither key nor hash is recovered from the deck by question text.
+
+The client only opens the reveal phase now. While the server resolves the
+answer, the reveal UI holds its judgement rather than painting the player's pick
+red. Regular duels (`duels/`) are untouched — they still score in the browser and
+still use `correct_hash`, because there is no Cloud Function behind them.
+
+Evidence: `scratch/tests/tmp-w10-server-scoring.mjs` 16/16 (including a match
+where one player never answers, scored by the reveal trigger),
+`suite-tournament-w6` 37/37 in real browsers, `functions/test_main_pure.py`
+18/18. The suite failed on the first run at exactly the right place — the
+harness could no longer work out the correct answer, because it was
+brute-forcing a hash that no longer exists. It now reads the key through the
+Admin SDK, the same way the functions do; that a test needs admin credentials to
+know the answer is the proof a browser cannot.
+
 ## What is NOT closed — read before the next event
 
-* **A participant can still recover the correct answer for their own current
-  question.** They may read their own duel node, and the hash salt is derived
-  from ids they know, so four SHA-256 calls give them the answer before they
-  answer. Closing this means the salt has to include a server-only secret, which
-  in turn means the client can no longer score a question by itself — the
-  timeout path (`DuelGame.triggerReveal`) currently does exactly that when a
-  player never answers. So it needs server-authoritative scoring for the timeout
-  case first. This is the single biggest remaining fairness hole.
 * **A published (global) deck still exposes its answers** to anyone who opens it
   in the deck browser — that is what publishing means today, because the client
   builds a duel from the plain deck. Server-side duel creation would fix it.

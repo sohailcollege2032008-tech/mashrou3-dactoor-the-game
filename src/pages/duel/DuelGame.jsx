@@ -307,6 +307,17 @@ export default function DuelGame({
 
       if (!iWon) { revealInProgressRef.current = false; return }
 
+      // A tournament duel is scored by the Cloud Function. The answer key lives
+      // in `duel_keys`, which this browser cannot read — that is the whole point:
+      // a participant used to be able to brute-force the in-node hash and learn
+      // the answer before answering. All this tab does now is open the reveal
+      // phase; on_tournament_reveal_started resolves the answer, writes
+      // correct_reveal and the points, and then advances.
+      if (duelPath !== 'duels') {
+        await update(rtdbRef(rtdb, `${duelPath}/${duelId}`), { reveal_started_at: serverNow() })
+        return
+      }
+
       const qi = currentDuel.current_question_index
       const question = currentDuel.questions?.[qi]
       const answersSnap = await rtdbGet(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}`))
@@ -603,6 +614,11 @@ export default function DuelGame({
   const myAnswer       = currentAnswers[uid]
   const opponentAnswer = opponentUid ? currentAnswers[opponentUid] : null
   const correctReveal  = currentAnswers.correct_reveal ?? question?.correct ?? null
+  // In a tournament duel the answer is resolved server-side, so there is a beat
+  // between entering the reveal phase and correct_reveal landing. Painting the
+  // player's pick red during that beat would tell them they were wrong before
+  // anything has actually been decided.
+  const awaitingResult = isRevealing && correctReveal == null
   const timeLeftSec    = Math.ceil(timerPct * (activeDurationMs / 1000))
 
   function choiceStyle(i) {
@@ -617,6 +633,10 @@ export default function DuelGame({
       if (i === selectedChoice) return { background: 'var(--ink)', color: 'var(--paper)', border: '1px solid var(--ink)' }
       return { background: 'var(--paper)', color: 'var(--ink-4)', border: '1px solid var(--rule)', opacity: 0.35 }
     }
+    if (awaitingResult) {
+      if (i === selectedChoice) return { background: 'var(--ink)', color: 'var(--paper)', border: '1px solid var(--ink)' }
+      return { background: 'var(--paper)', color: 'var(--ink-4)', border: '1px solid var(--rule)', opacity: 0.35 }
+    }
     const isCorrect   = i === correctReveal
     const wasMyChoice = i === myAnswer?.selected_choice
     if (isCorrect) return { background: 'rgba(34,197,94,0.07)', border: '2px solid #22c55e', color: 'var(--ink)' }
@@ -627,6 +647,10 @@ export default function DuelGame({
   function choiceLetterStyle(i) {
     if (!isRevealing && !hasAnswered) return { border: '1px solid var(--rule)', color: 'var(--ink-3)', background: 'transparent' }
     if (!isRevealing && i === selectedChoice) return { border: '1px solid var(--paper-2)', color: 'var(--paper)', background: 'transparent' }
+    if (awaitingResult) {
+      if (i === selectedChoice) return { border: '1px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)' }
+      return { border: '1px solid var(--rule)', color: 'var(--ink-4)', background: 'transparent' }
+    }
     const isCorrect   = i === correctReveal
     const wasMyChoice = i === myAnswer?.selected_choice
     if (isCorrect)   return { border: '1px solid #22c55e', background: '#22c55e', color: 'var(--paper)' }
@@ -774,8 +798,8 @@ export default function DuelGame({
                 fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
                 ...choiceLetterStyle(i),
               }}>
-                {isRevealing && i === correctReveal ? '✓' :
-                 isRevealing && i === myAnswer?.selected_choice && i !== correctReveal ? '✗' :
+                {!awaitingResult && isRevealing && i === correctReveal ? '✓' :
+                 !awaitingResult && isRevealing && i === myAnswer?.selected_choice && i !== correctReveal ? '✗' :
                  String.fromCharCode(65 + i)}
               </span>
               <span dir={duel.force_rtl ? 'rtl' : 'auto'} style={{ flex: 1, fontFamily: 'var(--serif)', fontSize: 15, fontWeight: 500, lineHeight: 1.4, textAlign: 'right' }}>
@@ -784,6 +808,15 @@ export default function DuelGame({
             </button>
           ))}
         </div>
+
+        {/* The server is resolving the answer */}
+        {awaitingResult && (
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <span className="ar" style={{ fontFamily: 'var(--arabic)', fontSize: 13, color: 'var(--ink-3)' }}>
+              بيتم التحقق من الإجابة…
+            </span>
+          </div>
+        )}
 
         {/* Waiting for opponent */}
         {hasAnswered && !isRevealing && (

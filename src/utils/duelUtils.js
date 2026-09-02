@@ -80,3 +80,30 @@ export async function stripCorrectForRtdb(questions, duelId) {
     })
   )
 }
+
+// ── Tournament duels: the answer never reaches the browser ────────────────────
+// stripCorrectForRtdb (above) is still used by regular duels, where the client
+// has to score for itself. It is not enough for a tournament: a participant can
+// read their own duel node and the duel id IS the match id, so four SHA-256
+// calls recover the answer before they answer. Tournament duels therefore ship
+// questions with no answer field at all, and the plain key goes to `duel_keys`,
+// which no client can read — only the Cloud Functions score.
+export function splitAnswerKey(questions) {
+  const safe = []
+  const key  = []
+  questions.forEach((q, qi) => {
+    if (!q || typeof q !== 'object') {
+      console.warn(`[duelUtils] question ${qi} is not an object — placeholder kept`)
+      safe.push({ question: '', choices: [], invalid: true })
+      key.push(-1)
+      return
+    }
+    const { correct, correct_hash: _drop, ...rest } = q
+    key.push(Number.isInteger(correct) ? correct : -1)
+    if (!Number.isInteger(correct)) {
+      console.warn(`[duelUtils] question ${qi} has no usable correct index`)
+    }
+    safe.push(rest)
+  })
+  return { safe, key }
+}

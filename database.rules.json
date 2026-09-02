@@ -127,6 +127,14 @@
         }
       }
     },
+    "duel_keys": {
+      "$tournamentId": {
+        "$duelId": {
+          ".read":  "false",
+          ".write": "auth != null && root.child('bracket_live').child($tournamentId).child('meta').child('host_id').val() == auth.uid"
+        }
+      }
+    },
     "bracket_live": {
       "$tournamentId": {
         ".read":  "auth != null",

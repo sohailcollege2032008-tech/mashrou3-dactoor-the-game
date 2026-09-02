@@ -12,12 +12,12 @@ import {
   doc, onSnapshot, updateDoc, getDoc,
   collection, writeBatch
 } from 'firebase/firestore'
-import { ref as rtdbRef, onValue, update, remove, runTransaction } from 'firebase/database'
+import { ref as rtdbRef, onValue, update, set, remove, runTransaction } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import {
   generateBracketMatches, getQuestionsForRound
 } from '../../utils/tournamentUtils'
-import { stripCorrectForRtdb } from '../../utils/duelUtils'
+import { splitAnswerKey } from '../../utils/duelUtils'
 import BracketTree from '../../components/tournament/BracketTree'
 import TournamentCountdown from '../../components/tournament/TournamentCountdown'
 import { soundManager } from '../../utils/soundManager'
@@ -410,12 +410,16 @@ export default function TournamentBracket() {
         ? unusedQs.slice(0, 3)
         : [...freshDeckQs].sort(() => Math.random() - 0.5).slice(0, 3)
 
-      // Hash both sets in one pass: a tiebreaker is appended to `questions` at
-      // index questions.length + i, and the answer hash is bound to that index.
-      // Hashing them separately (from 0) made every tiebreaker unscoreable.
-      const allSafe         = await stripCorrectForRtdb([...questions, ...tiebreakerQuestions], duelId)
+      // Split main + reserve in one pass: a tiebreaker is appended to `questions`
+      // at index questions.length + n, which is exactly where its key sits in
+      // the reserve list. The answers themselves never enter the duel node —
+      // they go to `duel_keys`, which no client can read, so only the Cloud
+      // Functions can decide whether an answer is right.
+      const { safe: allSafe, key: allKey } = splitAnswerKey([...questions, ...tiebreakerQuestions])
       const safeQuestions   = allSafe.slice(0, questions.length)
       const safeTiebreakers = allSafe.slice(questions.length)
+      const mainKey         = allKey.slice(0, questions.length)
+      const tbKey           = allKey.slice(questions.length)
 
       const payload = {
         tournament_id:        tournamentId,
@@ -457,7 +461,16 @@ export default function TournamentBracket() {
         created_at: Date.now(),
       }
 
-      await runTransaction(duelRef, current => (current === null ? payload : undefined))
+      const created = await runTransaction(duelRef, current => (current === null ? payload : undefined))
+
+      // Only the launcher that actually created the node writes the key: the
+      // Cloud Function shuffles its own reserve questions, so a key from the
+      // launcher that lost the race would not match the questions in the node.
+      if (created.committed) {
+        await set(rtdbRef(rtdb, `duel_keys/${tournamentId}/${duelId}`), {
+          main: mainKey, tb: tbKey, at: Date.now(),
+        })
+      }
 
       await updateDoc(
         doc(db, 'tournaments', tournamentId, 'bracket_matches', match.match_id),
