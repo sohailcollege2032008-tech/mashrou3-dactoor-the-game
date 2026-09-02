@@ -135,7 +135,7 @@
             ".validate": "newData.isString()"
           },
           "question_started_at": {
-            ".write": "auth != null && (root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid || auth.token.email == 'sohailcollege2032008@gmail.com' || (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() && root.child('tournament_duels').child($tournamentId).child($duelId).child('status').val() != 'playing'))",
+            ".write": "auth != null && (root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid || auth.token.email == 'sohailcollege2032008@gmail.com' || (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() && (!data.exists() || root.child('tournament_duels').child($tournamentId).child($duelId).child('status').val() != 'playing')))",
             ".validate": "newData.isNumber() && newData.val() <= now + 2000"
           },
           "reveal_started_at": {

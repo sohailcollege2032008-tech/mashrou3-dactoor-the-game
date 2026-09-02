@@ -116,6 +116,50 @@ that date, not against the backlog.
 
 ---
 
+## Addendum 2026-09-02 (later) — taking writes away from the client
+
+Four rounds of moving authority server-side (answer key, match result, scheduled
+start, duel score). What is worth keeping from the process:
+
+- **RTDB child rules grant; they never revoke.** `.write` is additive from the
+  root, so a rule on `players/$uid/score` cannot take back a grant made at the
+  duel node — the `.validate` capping a write at `+2` was guarding a door that
+  had no lock. The fix is always to narrow the *ancestor* and re-grant the
+  specific children. And a `.validate: "false"` on a child is the way to say
+  "server only": admin writes bypass validate entirely.
+- **A multi-path `update()` is evaluated per child path.** That is what makes the
+  narrow shape usable: `{status, reveal_started_at}` and `{status, forfeit_by}`
+  still go through as single atomic writes with no grant at the node. A
+  `runTransaction` on the node does NOT — it is a whole-node `set`, so anything
+  that used one had to move to a transaction on the specific child.
+- **The deployed RTDB rules CAN be read back.** An earlier addendum concluded
+  there was no getter for them (`getSecurityRules()` only covers Firestore and
+  Storage). There is one, over REST:
+  `GET {databaseURL}/.settings/rules.json?access_token=…` with a token minted
+  from the service account (`app.options.credential.getAccessToken()`). Parsed
+  and compared against `database.rules.json` it proved the deploy landed exactly
+  — the same check that was already being done for Firestore. Strip `//` comments
+  before parsing; the console adds them.
+- **Deploy order flips for a restriction.** A new path needs its rule deployed
+  *before* the code that uses it. A restriction is the opposite: push the client
+  first, let it roll out, then deploy the rules — otherwise the still-cached old
+  client is the one that gets denied. Check `dist/assets` hashes against the
+  production `index.html` to know the rollout actually landed.
+- **When a test can no longer cheat, that is the result.** The `w6` suite failed
+  the first run after the answer key moved, because the harness was brute-forcing
+  a hash that no longer existed. Needing admin credentials to know the correct
+  answer is the proof a browser cannot. Same shape for the score lock: the probe
+  asserts fifteen refusals *and* that every legitimate client write still works —
+  a rules change that only proves the first half is how you ship a frozen game.
+- **Measure the latency you are introducing, do not estimate it.** Moving the
+  match result server-side puts a wait on the players' screens, so the probe
+  reports it: 506 ms (the trigger is warm — it fires on every question). The
+  scheduled start lands 1.18s after its second; a walkover seats its winner in
+  1.3s instead of up to 60. None of those were guesses, and one of them (the
+  walkover) was a bug found *by* measuring.
+
+---
+
 ## TL;DR
 
 The tournament broke because the system was a house of cards and the tests

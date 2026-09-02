@@ -232,15 +232,85 @@ itself, the unassigned one is refused) and `tmp-w13-walkover.mjs` 12/12 (host
 awards both round-1 matches; the winner is seated in 1.3s, the round holds while
 a sibling is unplayed, and advances when it is not).
 
+## Round 7 (2026-09-02) — the score left the browser
+
+The plainest hole of the lot, and the last one inside a match.
+
+**Was:** `tournament_duels/{tid}/{duelId}` granted `.write` to either player. An
+RTDB child rule cannot revoke what an ancestor granted, and `players/{me}/score`
+sits inside that node — so the `.validate` capping a single write at `+2` was
+capping the wrong thing. Nothing capped the *number* of writes: nine PATCHes were
+nine points. The same grant covered `questions` (write your own `correct` in),
+`total_questions` (end the match early), `tiebreaker_questions`, `host_uid`, and
+every field under the opponent's answer.
+
+**Now:** the node grant is creation-by-the-declared-host plus the host, and the
+fields a player's tab actually drives are granted one at a time — `status`, the
+two clocks, `current_question_index`, `forfeit_by`, `surrender_by`, and its own
+answer. Two facts about RTDB rules make this shape work: a child `.write` grants
+where the parent does not, and a multi-path update is evaluated per child path
+(so the reveal claim and the forfeit still go through as single atomic writes).
+
+**What had to change in the client, and why it was free:** both remaining
+whole-node writes were transactions that the server already did.
+`waiting → playing` is now the same atomic claim on `status`, and only the tab
+that wins it writes the clock — a player may write `question_started_at` while it
+is still absent (or the duel is not yet playing) and never again, so a tab that
+wakes up late cannot restart a running question. `triggerNextOrFinish` is gone
+for tournament duels, because the write that advanced the question was also a
+write that could set a score. The reveal trigger appends the tiebreaker,
+finishes, or moves on, and the reconciler repeats it if that invocation is
+lost. Regular duels keep the client path — nothing runs
+behind them.
+
+**And while the answer node was open:** reaction time was self-reported, and the
+first-correct bonus (2 vs 1) is what decides a tied question. The client now
+stamps `at` with RTDB's server timestamp, the rule accepts nothing but `now`, and
+`_score_question` measures `at - question_started_at`. `question_started_at`
+itself became unwritable by a player once the question is running — rewriting it
+mid-question restarted the timer for both players and would have skewed every
+measurement. (The e2e caught the first version of that rule: both tabs raced the
+5s auto-start, and the loser's clock write was refused with a console error. The
+loser should never have been writing it — the claim decides who does.)
+`is_correct`, `points_earned` and the measured `reaction_ms_server` are
+`.validate: false`: no client can write them, admin writes bypass validate,
+so the bonus and the speed tiebreaker are both decided on numbers no player can
+shape.
+
+Evidence: `scratch/tests/tmp-w14-score-lock.mjs` 29/29 (run twice, once per
+version of the clock rule) — fifteen refusals
+(own score, opponent score, the whole node, an injected `correct`, the question
+count, the tiebreaker pool, `host_uid`, `match_id`, `is_correct`,
+`points_earned`, `reaction_ms_server`, a forged `at`, `correct_reveal`, an
+outsider, and restarting a running question's clock), the duel unchanged after
+all of them, then every legitimate write going through and the match playing to a
+server-resolved forfeit. The harness reported 900ms on an answer the server
+measured at 199ms, and the server's number is the one that was used.
+
 ## What is NOT closed — read before the next event
 
 * **A published (global) deck still exposes its answers** to anyone who opens it
   in the deck browser — that is what publishing means today, because the client
   builds a duel from the plain deck. Server-side duel creation would fix it.
-* **A player inside a match is still trusted.** `.validate` caps `score` at `+2` per write
-  but not the number of writes, and RTDB cannot revoke an ancestor's `.write` grant, so a
-  participant can pump their own score or write fields under the opponent's answer node.
-  The rules changes above stop *outsiders*, not participants.
+* **The FFA room is still wide open, and it is the gate into the bracket.**
+  `rooms/{code}` grants `.write` to any signed-in user at the node itself, so the
+  same trick Round 7 closed for a duel — PATCH `players/{me}/score` — works on the
+  qualifier, and the qualifier decides who enters the bracket at all. It is not a
+  small fix: `rooms` is shared with the whole host-run game system, where a player
+  tab legitimately writes reveal data, scores (`increment`), the question index
+  and the runner locks (`useUnattendedGameRunner` — that is what lets a host walk
+  away). Locking the node means moving that loop server-side for every game mode,
+  not just tournaments. Until then the FFA is only as honest as the people in the
+  room, and `on_ffa_room_finished` ranks whatever scores it finds. **This is the
+  next one to do**, and it is bigger than everything in rounds 1–7 put together.
+* **An answer written without `at` still falls back to the self-reported reaction
+  time.** The rule accepts `at` only as the server's own stamp, and the new client
+  always sends it, but it is not yet *required* — a tab from before this change
+  would otherwise have its answers refused outright. So a hand-crafted write that
+  simply omits `at` can still claim 50ms and take the first-correct bonus.
+  Requiring it is one line (`reaction_time_ms`'s `.validate`, checking
+  `newData.parent().child('at').val() == now`) and should be done once the client
+  rollout has settled.
 * **The FFA game loop still needs at least one player tab.** The room is created,
   started and finalised server-side now, but the question timer and the reveal are
   driven by `useUnattendedGameRunner` inside whichever player tab claims the lock. That
@@ -250,8 +320,13 @@ a sibling is unplayed, and advances when it is not).
 
 ## Evidence
 
-* `functions/test_main_pure.py` — 14/14 pass: surrender / forfeit / 0–0 FFA-rank fallback,
-  hash-index preservation including an appended tiebreaker, out-of-range round assignment.
+* `functions/test_main_pure.py` — **18/18** pass: surrender / forfeit / 0–0 FFA-rank
+  fallback, answer-key index alignment including an appended tiebreaker (and the legacy
+  hash still decoding), out-of-range round assignment.
+* `scratch/tests/suite-tournament-w6.mjs` — **37/37**, real browsers, a whole tournament
+  from the assignment panel to the champion, re-run after every round below. It is the
+  regression gate: it caught the one bug rounds 4–7 introduced (both tabs racing the
+  auto-start, the loser's clock write refused).
 * `scratch/tests/tmp-w5-ffa-double.mjs` — host tab + two player tabs against the local dev
   server. **Before the fix: FAIL** — `reveal_locks` is `null` for every question and
   `next_locks` is `[null, p02, p02]`, i.e. the host revealed and advanced outside the lock
@@ -261,9 +336,30 @@ a sibling is unplayed, and advances when it is not).
   instant); the live room measurement above is the reproduction, and what the test proves
   is that the double-execution window is now closed.
 * `firestore.rules` + `database.rules.json` compile; `npm run build` and eslint clean.
+* **The deployed rules were read back and compared, not assumed.** Firestore via
+  `getSecurityRules().getFirestoreRuleset()`, RTDB via
+  `GET {databaseURL}/.settings/rules.json` with a service-account access token — both
+  identical to the repo files after the last deploy of each.
 
 ## Deploy order (matters)
 
-Push the client first, then the rules. The new RTDB rule lets the host write to a duel only
-when `host_uid` is present, and that field is written by the new client and CF code — rules
-first would lock the host out of every duel launched by an old tab.
+**Push the client first, then the rules** — for every change in this document. A new path
+needs its rule deployed *before* the code that uses it, but every round here is a
+*restriction*, and for those the order is the other way round: the still-cached old client
+is the one that gets denied. Two concrete reasons from these rounds:
+
+* the RTDB rule lets the host write to a duel only when `host_uid` is present, and that
+  field is written by the new client and CF code — rules first would lock the host out of
+  every duel launched by an old tab;
+* the duel node lock refuses the old client's whole-node transactions (auto-start,
+  advance). Both have server fallbacks, so an old tab degrades rather than breaks — but it
+  degrades to a 25s start and a reconciler-paced advance.
+
+Check the rollout actually landed before deploying rules: compare the `dist/assets` hashes
+against the ones in the production `index.html`. And check nothing is live first —
+`status in ('registration','ffa','bracket')` must be empty.
+
+The probes for rounds 4–7 (`tmp-w10`…`tmp-w14`) live in the gitignored harness
+(`scratch/tests/`, which holds `tokens.json` and so cannot be tracked). They are the
+evidence for every claim above; run them from that directory with the Admin credentials in
+place.

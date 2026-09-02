@@ -426,3 +426,13 @@ Used in: `UploadQuestionsModal.jsx` (AI tab)
     the duel-status finalizer never fires for it. `on_bracket_match_written`
     handles the already-finished case (seat the winner, progress the round) —
     without that branch a walkover waits up to a minute for the reconciler.
+18. **A player's tab never writes the tournament duel node itself.** The node
+    grant is host-only (plus creation by the declared `host_uid`); each field a
+    player drives is granted individually, because an RTDB child rule cannot
+    revoke an ancestor's grant and `players/{uid}/score` lives in that node.
+    So: no `runTransaction` on `tournament_duels/{tid}/{duelId}` from a player
+    tab — use a transaction on the specific child (`status` is the claim) and a
+    multi-path `update()` for the rest, which is evaluated per child path.
+    `is_correct`, `points_earned`, `reaction_ms_server` are `.validate: false`
+    and `at` must be RTDB's server timestamp; the server measures reaction time
+    from `at - question_started_at`, so never make the client the source of it.

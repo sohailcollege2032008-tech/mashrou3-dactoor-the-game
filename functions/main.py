@@ -1741,6 +1741,15 @@ def tournament_reconciler(event: scheduler_fn.ScheduledEvent) -> None:
                     # so on_tournament_reveal_started completes it.
                     q_dur   = duel.get("question_duration_ms") or 30_000
                     q_start = duel.get("question_started_at") or 0
+                    if not q_start:
+                        # Playing with no clock: the tab that claimed the start
+                        # died between the status flip and the clock write. Every
+                        # timer downstream reads this field, so give it one.
+                        admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}").update(
+                            {"question_started_at": now})
+                        logger.info("[CF-REC] duel %s/%s was playing with no clock",
+                                    tournament_id, duel_id)
+                        continue
                     if q_start and now - q_start > q_dur + RECONCILE_GRACE_MS:
                         admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}").update(
                             {"status": "revealing", "reveal_started_at": now})

@@ -213,7 +213,12 @@ once-a-minute reconciler that repairs whatever is still stuck.
 4. Duel still `waiting` after 25s → **`on_tournament_duel_status` CF** force-starts it.
    A match neither player opens no longer freezes while showing LIVE on the bracket.
 5. **Question progression (CFs)**: answers → reveal → scoring → next question → finish;
-   tiebreaker question appended when scores tie > 0.
+   tiebreaker question appended when scores tie > 0. A tournament duel is advanced
+   **server-side only** — the client opens the reveal phase (`status` + `reveal_started_at`)
+   and nothing else; `triggerNextOrFinish` in `DuelGame` returns early for a tournament
+   duel, because the whole-node transaction it used to run was also a write that could set
+   a score. Scoring reads the key from `duel_keys` and measures reaction time from the
+   server-stamped `at`.
 6. Duel `finished` → **`on_tournament_duel_status` CF** writes the result onto the match,
    seeds the winner into the next match (**slot chosen by match-number parity**, not by
    which slot happens to be free) and bumps `current_round` when the round is complete.
@@ -298,11 +303,26 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
   makes it safe to show an in-progress match to eliminated players, and what makes a
   live bracket affordable: one RTDB subscription instead of one Firestore read per
   match per viewer per refresh (63 reads for a 32-player bracket).
-- `tournament_duels/{tid}/{duelId}`: read any auth; write only when the node does not exist
-  yet (host/CF launch), or the writer is in `players`, or the writer is `host_uid`. Answer
-  writes also require `auth.uid == $userId` and that the writer is a player of that duel.
+- `tournament_duels/{tid}/{duelId}`: read by a player of the duel, the host, or anyone when
+  the node does not exist yet. **Write at the node itself is the host only** (plus creation
+  by whoever declares themselves `host_uid`) — a participant grant there reached
+  `players/{me}/score`, `questions`, `total_questions` and `host_uid`, and an RTDB child
+  rule cannot revoke what an ancestor granted. A player's tab is granted the fields it
+  actually drives, one at a time:
+  `status`, `reveal_started_at`, `current_question_index`, `forfeit_by`, `surrender_by`,
+  and `answers/{qi}/{own uid}`. `question_started_at` too, but only while it is still
+  absent or the duel is not yet `playing` — that is the `waiting → playing` claim, and only
+  the tab that wins the `status` transaction writes it; rewriting a running question's clock
+  would restart the timer for both players and skew every measured reaction time.
   `forfeit_by` accepts self, the other player of the duel, or the host; `surrender_by` is
-  self-only.
+  self-only. Under an answer, `is_correct`, `points_earned` and `reaction_ms_server` are
+  `.validate: false` (admin writes bypass validate), and `at` is accepted only as
+  RTDB's own server timestamp — that is what makes reaction time server-measured rather
+  than self-reported.
+  > Two rule facts this shape depends on: a child `.write` **grants** where the parent does
+  > not, and a multi-path `update()` is evaluated **per child path** — which is why the
+  > reveal claim (`{status, reveal_started_at}`) and the forfeit (`{status, forfeit_by}`)
+  > still work as single atomic writes.
 - `duel_presence`, `tournament_presence`: write self only.
 - `host_rooms/{hostId}`: owner only.
 - `duel_keys/{tid}/{duelId}`: **read denied to every client**, write host only. The plain

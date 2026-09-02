@@ -248,17 +248,24 @@ export default function DuelGame({
 
     const startGame = setTimeout(async () => {
       try {
-        // The clock goes first, while the duel is still 'waiting'. That is the
-        // only window the rules allow a player to write it — rewriting it once
-        // the question is running would restart the timer for both players and
-        // skew every measured reaction time — so a tab that wakes up late is
-        // refused here instead of resetting a question in progress.
-        await set(rtdbRef(rtdb, `${duelPath}/${duelId}/question_started_at`),
-          Date.now() + serverOffsetRef.current)
-        await runTransaction(rtdbRef(rtdb, `${duelPath}/${duelId}/status`), current => {
-          if (current !== 'waiting') return current
-          return 'playing'
-        })
+        // `status` is the claim, and only the tab that wins it writes the clock —
+        // the loser must not even try, because the rules let a player write
+        // question_started_at only while it is still absent (or the duel is not
+        // yet playing). Rewriting a running question's clock would restart the
+        // timer for both players and skew every measured reaction time, so a tab
+        // that wakes up late is refused rather than allowed to reset it.
+        // Aborting (returning undefined) rather than re-writing the same value,
+        // so `committed` means "this tab is the one that started the match" —
+        // the update function can run more than once against cached data, and a
+        // captured flag would lie about a retry.
+        const claim = await runTransaction(
+          rtdbRef(rtdb, `${duelPath}/${duelId}/status`),
+          current => (current === 'waiting' ? 'playing' : undefined),
+        )
+        if (claim.committed) {
+          await set(rtdbRef(rtdb, `${duelPath}/${duelId}/question_started_at`),
+            Date.now() + serverOffsetRef.current)
+        }
       } catch (e) { console.error('auto-start error:', e) }
     }, 5000)
     return () => clearTimeout(startGame)
