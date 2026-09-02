@@ -12,6 +12,12 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
+            // Before the react rule: framer's own paths only, so it cannot be
+            // stolen by the substring match — and the chunk stops being named
+            // after whichever small component happened to share it.
+            if (id.includes('framer-motion') || id.includes('motion-dom') || id.includes('motion-utils')) {
+              return 'vendor-motion'
+            }
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router') || id.includes('zustand')) {
               return 'vendor-react'
             }
