@@ -43,6 +43,9 @@ DUEL_AUTOSTART_MS     = 25_000    # duel stuck in 'waiting' this long → force 
 MAX_TRIGGER_SLEEP_S   = 480       # hard cap on in-function waiting
 QUESTIONS_PER_MATCH   = 5
 LAUNCH_GRACE_MS       = 3_000     # let the host tab win the launch race when open
+ROOM_CODE_CHARSET     = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # same set the host client uses
+FFA_LOBBY_GRACE_MS    = 10_000    # players land in the room before question 1 starts
+SCHEDULE_WINDOW_MS    = 65_000    # how far ahead the starter picks a scheduled tournament up
 RECONCILE_GRACE_MS    = 10_000    # window past duration before reconciler force-advances
                                   # (mobile browsers throttle background timers, so give the
                                   #  owning tab a wide margin before the server steps in)
@@ -636,6 +639,268 @@ def on_ffa_room_finished(event: db_fn.Event[db_fn.Change]) -> None:
     batch.update(tourn_ref, {"status": "bracket", "current_round": 1, "phase_started_at": int(time.time() * 1000)})
     batch.commit()
     logger.info("[CF-FFA] tournament %s finalized → bracket", tournament_id)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FFA PHASE — server-side launch
+# ══════════════════════════════════════════════════════════════════════════════
+# The qualifier used to start only inside the host's open lobby tab: a
+# scheduled tournament whose host had closed the tab never began, and the
+# players sat watching a countdown that had already reached zero. The launch is
+# the same shape as TournamentLobby.launchFFA (room, players, config, then the
+# phase flip on the tournament doc) so both can run — whoever claims the
+# tournament doc first owns the room, and the loser deletes the room it made.
+
+
+def _to_ms(value) -> int:
+    """Firestore timestamp | epoch ms | None → epoch ms (0 when absent)."""
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+    ts = getattr(value, "timestamp", None)
+    if callable(ts):
+        try:
+            return int(ts() * 1000)
+        except Exception:                                     # noqa: BLE001
+            return 0
+    return 0
+
+
+def _rounds_for_top_cut(top_cut: int) -> int:
+    n, rounds = 1, 0
+    while n * 2 <= (top_cut or 0):
+        n *= 2
+        rounds += 1
+    return max(rounds, 1)
+
+
+def _actual_top_cut(registered: int, desired: int) -> int:
+    cap = min(desired or 0, registered)
+    n = 1
+    while n * 2 <= cap:
+        n *= 2
+    return n
+
+
+def _missing_assignments(round_questions: dict, planned_rounds: int) -> list:
+    """
+    Rounds without enough assigned questions. Assignment is mandatory — the
+    manual launch refuses without it, and so must this one, or a scheduled
+    tournament would quietly run on the legacy random fallback.
+    """
+    rq = round_questions or {}
+    missing = []
+    if len(_to_list(rq.get("ffa"))) < 1:
+        missing.append("ffa")
+    for r in range(1, planned_rounds + 1):
+        if len(_to_list(rq.get(str(r)))) < QUESTIONS_PER_MATCH:
+            missing.append(str(r))
+    return missing
+
+
+def _gen_room_code() -> str:
+    """A free 6-char room code, in the host client's charset."""
+    for _ in range(12):
+        code = "".join(random.choice(ROOM_CODE_CHARSET) for _ in range(6))
+        if admin_db.reference(f"rooms/{code}/code").get() is None:
+            return code
+    return "T" + "".join(random.choice(ROOM_CODE_CHARSET) for _ in range(5))
+
+
+def _start_ffa_room(room_code: str) -> bool:
+    """lobby → playing, once. Aborts if anyone already started it."""
+    def start_fn(current):
+        if current is None or current.get("status") != "lobby":
+            raise _Abort()
+        return {
+            **current,
+            "status": "playing",
+            "current_question_index": 0,
+            "question_started_at": _now_ms(),
+        }
+
+    started = _try_transaction(admin_db.reference(f"rooms/{room_code}"), start_fn)
+    if started:
+        logger.info("[CF-FFA] started room %s", room_code)
+    return started
+
+
+def _launch_ffa(fs, tournament_id: str, tourn: dict) -> str:
+    """
+    Create the FFA room and move the tournament into the qualifier phase.
+
+    Returns the room code, or "" when it did not launch (already launched, too
+    few players, or rounds without questions). Safe to call twice, and safe to
+    call while the host tab is doing the same thing.
+    """
+    if (tourn.get("status") or "") != "registration":
+        return ""
+
+    regs = admin_db.reference(f"tournament_registrations/{tournament_id}").get() or {}
+    if not isinstance(regs, dict) or len(regs) < 2:
+        logger.info("[CF-FFA] %s has %d registrations — not launching",
+                    tournament_id, len(regs) if isinstance(regs, dict) else 0)
+        return ""
+
+    cap = tourn.get("top_cut") or 8
+    missing = _missing_assignments(tourn.get("round_questions"), _rounds_for_top_cut(cap))
+    if missing:
+        logger.error("[CF-FFA] %s not launched — rounds without questions: %s",
+                     tournament_id, ", ".join(missing))
+        return ""
+
+    deck_id = tourn.get("deck_id")
+    deck = (fs.collection("question_sets").document(deck_id).get().to_dict() or {}) if deck_id else {}
+    deck_block = deck.get("questions") or {}
+    deck_qs = _to_list(deck_block.get("questions"))
+    if not deck_qs:
+        logger.error("[CF-FFA] %s not launched — deck %s has no questions",
+                     tournament_id, deck_id)
+        return ""
+
+    ffa_idxs = _to_list((tourn.get("round_questions") or {}).get("ffa"))
+    picked = [deck_qs[i] for i in ffa_idxs
+              if isinstance(i, int) and 0 <= i < len(deck_qs)]
+    room_questions = {**deck_block, "questions": picked or deck_qs}
+
+    players_obj = {}
+    for uid, reg in regs.items():
+        if not isinstance(reg, dict):
+            continue
+        players_obj[reg.get("uid") or uid] = {
+            "user_id": reg.get("uid") or uid,
+            "nickname": reg.get("nickname") or "لاعب",
+            "avatar_url": reg.get("avatar_url"),
+            "score": 0,
+        }
+
+    actual = _actual_top_cut(len(players_obj), cap)
+    if actual < 2:
+        logger.info("[CF-FFA] %s resolved to a bracket of %d — not launching",
+                    tournament_id, actual)
+        return ""
+
+    timer_seconds = int(round((tourn.get("ffa_question_duration") or 30_000) / 1000))
+    now = _now_ms()
+    code = _gen_room_code()
+
+    # The room is written BEFORE the phase flip on purpose: a player tab reacts
+    # to the flip by reading rooms/{code}/status, and a room that is not there
+    # yet leaves it sitting on the wait screen with nothing to retry.
+    admin_db.reference(f"rooms/{code}").set({
+        "code": code,
+        "host_id": tourn.get("host_id"),
+        "question_set_id": deck_id,
+        "title": (tourn.get("title") or "بطولة") + " — FFA",
+        "questions": room_questions,
+        "force_rtl": bool(deck.get("force_rtl")),
+        "tournament_id": tournament_id,
+        "status": "lobby",
+        "current_question_index": 0,
+        "players": players_obj,
+        "config": {
+            "scoring_mode": "ranked",
+            "first_correct_points": 3,
+            "points_decrement": 1,
+            "timer_seconds": timer_seconds,
+            "auto_accept": True,
+            "shuffle_questions": True,
+            "auto_mode": True,
+            "auto_timer": timer_seconds,
+            "unattended_mode": True,
+            # Marks the room as one nobody has to press start on. A host-launched
+            # room has no auto_start_at, so the reconciler never force-starts a
+            # lobby the host is deliberately holding open.
+            "auto_start_at": now + FFA_LOBBY_GRACE_MS,
+        },
+        "created_at": now,
+    })
+
+    claimed = {"v": False}
+    tourn_ref = fs.collection("tournaments").document(tournament_id)
+
+    @admin_fs.transactional
+    def _claim(txn, target):
+        data = target.get(transaction=txn).to_dict() or {}
+        if (data.get("status") or "") != "registration" or data.get("ffa_room_id"):
+            return
+        claimed["v"] = True
+        txn.update(target, {
+            "status": "ffa",
+            "actual_top_cut": actual,
+            "total_rounds": _total_rounds_for(actual),
+            "ffa_room_id": code,
+            "phase_started_at": now,
+        })
+
+    _claim(fs.transaction(), tourn_ref)
+
+    if not claimed["v"]:
+        # The host tab (or a concurrent invocation) launched first — take the
+        # orphan room back out so it cannot be joined by a stale link.
+        admin_db.reference(f"rooms/{code}").delete()
+        logger.info("[CF-FFA] %s was already launched — dropped spare room %s",
+                    tournament_id, code)
+        return ""
+
+    logger.info("[CF-FFA] launched %s — room %s, %d players, top cut %d",
+                tournament_id, code, len(players_obj), actual)
+    return code
+
+
+# ── Function 8 — scheduled FFA launch ─────────────────────────────────────────
+
+@scheduler_fn.on_schedule(
+    schedule="* * * * *",
+    region="europe-west1",
+    memory=options.MemoryOption.MB_512,
+    timeout_sec=180,
+)
+def tournament_starter(event: scheduler_fn.ScheduledEvent) -> None:
+    """
+    Start scheduled tournaments without anyone's tab being open.
+
+    Runs every minute, but does not launch on the minute: a tournament due
+    inside the next window is waited out to the second, the same way the reveal
+    trigger waits out a reveal phase. A tournament whose time passed while
+    nobody was watching launches immediately.
+    """
+    fs = admin_fs.client()
+    try:
+        pending = fs.collection("tournaments").where("status", "==", "registration").get()
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-START] query failed: %s", e)
+        return
+
+    due_list = []
+    now = _now_ms()
+    for doc in pending:
+        tourn = doc.to_dict() or {}
+        due = _to_ms(tourn.get("scheduled_start_at"))
+        if not due:
+            continue                      # manual start — the host owns it
+        if due > now + SCHEDULE_WINDOW_MS:
+            continue                      # not in this window
+        due_list.append((due, doc.id, tourn))
+
+    due_list.sort(key=lambda item: item[0])
+
+    for due, tournament_id, tourn in due_list:
+        try:
+            wait_ms = due - _now_ms()
+            if wait_ms > 0:
+                time.sleep(min(wait_ms, SCHEDULE_WINDOW_MS) / 1000.0)
+            fresh = fs.collection("tournaments").document(tournament_id).get().to_dict() or {}
+            code = _launch_ffa(fs, tournament_id, fresh)
+            if not code:
+                continue
+            time.sleep(FFA_LOBBY_GRACE_MS / 1000.0)
+            _start_ffa_room(code)
+        except Exception as e:                                # noqa: BLE001
+            logger.exception("[CF-START] %s failed: %s", tournament_id, e)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1238,6 +1503,22 @@ def on_bracket_match_written(event: firestore_fn.Event[firestore_fn.Change]) -> 
     # complete. Everything below is launch gating and returns early a lot.
     _mirror_match(tournament_id, match_id, match)
 
+    if match.get("status") == "finished" and match.get("winner_uid"):
+        # A match that was decided without a duel — the host awarded it against
+        # an absent player — still needs its winner seated in the next match and
+        # the round moved along. _finalize_match hangs off the duel node status,
+        # and a walkover never had a duel, so this is that path. Both calls are
+        # idempotent, which is what makes it safe to run on every match write.
+        fs = admin_fs.client()
+        try:
+            _advance_winner_slot(fs, tournament_id, {**match, "match_id": match_id})
+            tourn = fs.collection("tournaments").document(tournament_id).get().to_dict() or {}
+            _progress_round(fs, tournament_id, tourn, match.get("round") or 1)
+        except Exception as e:                                # noqa: BLE001
+            logger.exception("[CF-BR] walkover follow-up failed %s/%s: %s",
+                             tournament_id, match_id, e)
+        return
+
     if match.get("status") != "pending":
         return
     if not match.get("player_a_uid") or not match.get("player_b_uid"):
@@ -1360,12 +1641,27 @@ def tournament_reconciler(event: scheduler_fn.ScheduledEvent) -> None:
 
     for doc in stalled_ffa:
         tournament_id = doc.id
+        tourn = doc.to_dict() or {}
         try:
             tourn_ref = fs.collection("tournaments").document(tournament_id)
             if len(tourn_ref.collection("ffa_results").limit(1).get()) > 0:
                 tourn_ref.update({"status": "bracket", "current_round": 1,
                                   "phase_started_at": _now_ms()})
                 logger.info("[CF-REC] ffa_results present — flipped %s to bracket", tournament_id)
+                continue
+
+            # A server-launched room whose starter died before it pressed start.
+            # Only rooms carrying auto_start_at qualify — a host-launched lobby
+            # is the host's to open, however long they hold it.
+            room_code = tourn.get("ffa_room_id")
+            if not room_code:
+                continue
+            room = admin_db.reference(f"rooms/{room_code}").get() or {}
+            start_at = (room.get("config") or {}).get("auto_start_at") or 0
+            stale = start_at and _now_ms() > start_at + RECONCILE_GRACE_MS
+            if room.get("status") == "lobby" and stale:
+                _start_ffa_room(room_code)
+                logger.info("[CF-REC] force-started stalled FFA room %s", room_code)
         except Exception as e:                                # noqa: BLE001
             logger.exception("[CF-REC] ffa recovery failed %s: %s", tournament_id, e)
 

@@ -318,9 +318,9 @@ Main branch (`main`) is stable — do NOT push breaking changes there.
 - `tournaments/{id}`: read any auth; create any auth; update/delete **host, owner email, or the declared winner**
 - `tournaments/{id}/registrations/{uid}`: read by any auth, write by owner uid only
 - `tournaments/{id}/ffa_results/{uid}`: read any auth; **write host or owner email only**
-- `tournaments/{id}/bracket_matches/{matchId}`: read any auth; **create/delete host or owner email only**; update host, owner email, or the two players in the match
+- `tournaments/{id}/bracket_matches/{matchId}`: read any auth; **create/update/delete host or owner email only** — a player cannot write a match at all (the result comes from `_finalize_match`)
 
-> Players cannot create `ffa_results` or `bracket_matches`. Anything that must
+> Players cannot write `ffa_results` or `bracket_matches` at all. Anything that must
 > happen without the host's tab open therefore belongs in a Cloud Function
 > (admin SDK bypasses rules) — see the bracket orchestration functions.
 
@@ -394,9 +394,12 @@ Used in: `UploadQuestionsModal.jsx` (AI tab)
     `ValueError: Value must not be none.` and kills the invocation. Use the
     `_Abort` exception + `_try_transaction()` helper in `functions/main.py`.
     (This is the opposite of the JS SDK, where returning `undefined` aborts.)
-11. **Answer hashes are bound to the question's final index.** Tiebreaker
-    questions get appended to `questions`, so they must be hashed with
-    `questions.length + i`, not from 0 — hash them in one pass with the main set.
+11. **Answer keys are bound to the question's final index.** A tournament duel
+    carries no `correct` at all: the plain key lives at `duel_keys/{tid}/{duelId}`
+    (no client may read it) and the server scores from it. Tiebreakers are
+    appended to `questions`, so they are keyed at `len(main) + i` — split them in
+    one pass with the main set (`_split_answer_key` / `splitAnswerKey`).
+    Regular duels (`duels/`) still use `correct_hash` and score in the browser.
 12. **One live tournament at a time.** The host dashboard lists every active
     tournament and `TournamentCreate` warns before a second one is started;
     with two live, players and host can end up in different brackets.
@@ -409,3 +412,17 @@ Used in: `UploadQuestionsModal.jsx` (AI tab)
     exists the round count is fixed — questions are already assigned per round
     and matches may have played. Lowering the cap must release the dropped
     rounds' questions back to the pool (`reshapeAssignments`).
+15. **Two launchers, so the FFA launch is a claim.** `TournamentLobby` and the
+    `tournament_starter` CF can both launch. Each claims the tournament doc in a
+    transaction (`status === 'registration'` and no `ffa_room_id`) and the loser
+    deletes the room it just created. Never go back to an unconditional
+    `updateDoc` of `{status:'ffa', ffa_room_id}` — it points the tournament at
+    one room while the players are already in the other.
+16. **`config.auto_start_at` marks a room nobody has to start.** Only rooms
+    carrying it are force-started (by the starter itself, or the reconciler if
+    that invocation died). A host-launched lobby has no `auto_start_at` and is
+    the host's to open, however long they hold it.
+17. **A walkover has no duel.** ⚡ حسم writes a result with nothing behind it, so
+    the duel-status finalizer never fires for it. `on_bracket_match_written`
+    handles the already-finished case (seat the winner, progress the round) —
+    without that branch a walkover waits up to a minute for the reconciler.

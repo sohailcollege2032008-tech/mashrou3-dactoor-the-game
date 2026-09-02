@@ -179,11 +179,19 @@ registration ──(launch FFA)──▶ ffa ──(room finished)──▶ brac
 
 ### Phase I — FFA (registration → ffa)
 1. Host creates tournament (deck, top-cut, timings, optional scheduled start) → `tournament_registrations/{id}/{uid}` written by players via `/tournament/join` (code).
-2. Host "ابدأ مرحلة FFA" (or auto-start at `scheduled_start_at`):
+2. Host "ابدأ مرحلة FFA" — or, for a scheduled tournament, **`tournament_starter` CF** with
+   no tab open anywhere:
    - `actual_top_cut` = largest power of 2 ≤ min(top_cut, registrations)
    - `total_rounds = log2(actual_top_cut)`
    - Creates `rooms/{code}` with all registrants pre-seeded + **autopilot config** (auto/unattended).
-3. Host clicks Start Game once; the FFA then **runs itself** (players' runners).
+   - Both paths **claim** the phase in a transaction on the tournament doc (status still
+     `registration`, no `ffa_room_id`); the loser deletes the room it just created and joins
+     the winner's. An unconditional write here would point the tournament at one room while
+     the players were already in the other.
+3. Host clicks Start Game once — or, for a server-launched room, it starts itself
+   `FFA_LOBBY_GRACE_MS` (10s) after the flip, which is what `config.auto_start_at` marks.
+   A host-launched lobby carries no `auto_start_at` and is never force-started, however
+   long the host holds it open. The FFA then **runs itself** (players' runners).
 4. Room `finished` → **`on_ffa_room_finished` CF** (or host page) writes `ffa_results/{uid}` (rank, advanced) with random tie-break at the cut → tournament → `bracket`, `current_round: 1`.
 
 ### Phase II — Bracket
@@ -252,9 +260,10 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
 | `on_tournament_reveal_started` | `tournament_duels/{tid}/{duelId}/reveal_started_at` (null→value) | Sleeps remaining reveal time, then atomically advances to next question — or finishes with optional **tiebreaker extension** (equal non-zero scores append a reserve question). |
 | `on_ffa_room_finished` | `rooms/{code}/status` (→ `finished`, with `tournament_id`) | Writes `ffa_results` + flips tournament to `bracket` server-side (skips if the host client already wrote them to avoid conflicting tie shuffles). |
 | `on_tournament_written` | `tournaments/{tid}` | Status → `bracket` and no matches yet ⇒ generate `bracket_matches` from `ffa_results`, and sync `actual_top_cut` / `total_rounds` / `current_round` / `phase_started_at`. |
-| `on_bracket_match_written` | `tournaments/{tid}/bracket_matches/{matchId}` | Pending match with both players ⇒ sleep out the phase wait (+3s so the host tab wins when open), then create the duel at `tournament_duels/{tid}/{match_id}` and flip the match to `active`. |
+| `on_bracket_match_written` | `tournaments/{tid}/bracket_matches/{matchId}` | Mirrors the match for spectators. Pending match with both players ⇒ sleep out the phase wait (+3s so the host tab wins when open), then create the duel at `tournament_duels/{tid}/{match_id}` and flip the match to `active`. Already finished with a winner ⇒ seat the winner in the next match and progress the round — that is the **walkover** path (⚡ حسم against an absent player writes a result with no duel behind it, so the duel-status finalizer never fires). |
 | `on_tournament_duel_status` | `tournament_duels/{tid}/{duelId}/status` | `waiting` ⇒ force-start after 25s. `finished` ⇒ resolve the winner (forfeit → score → FFA rank at 0–0 → speed), write the match result, advance the winner and progress the round or crown the champion. |
-| `tournament_reconciler` | schedule `* * * * *` | Safety net over every bracket-phase tournament: regenerate missing brackets, launch overdue matches, restart frozen duels, finalize finished ones, reopen matches whose duel vanished, move rounds along. |
+| `tournament_starter` | schedule `* * * * *` | Launches scheduled tournaments with no tab open. Picks up anything due inside the next 65s, **waits out the remainder in-function** so the start lands on the scheduled second (measured: ~1.2s late), then creates the room, claims the phase, and starts the room after the lobby grace. Refuses to launch with fewer than 2 registrations or any round without assigned questions. |
+| `tournament_reconciler` | schedule `* * * * *` | Safety net over every bracket-phase tournament: regenerate missing brackets, launch overdue matches, restart frozen duels, finalize finished ones, reopen matches whose duel vanished, move rounds along. Also flips a stuck `ffa` to `bracket` when results exist, and starts a server-launched FFA room whose starter died before it could. |
 
 ---
 
@@ -262,16 +271,18 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
 
 ### Firestore (`firestore.rules`)
 - `profiles/{uid}`: read any auth; write owner only. Subcollections likewise (+ `played_questions` readable by any auth for duel unions).
-- `question_sets`: read any auth; create any auth; update/delete creator or owner email.
+- `question_sets`: read only when `is_global == true`, or by the deck's host, or the owner email
+  (a deck carries every plain `correct`); create any auth; update/delete creator or owner email.
 - `authorized_hosts`: read any auth; write owner email only.
 - `notifications/{uid}/items`: read owner only; write any auth (needed for unattended mode).
 - `tournaments/{id}`: read any auth; create any auth; update/delete host or owner email **or champion** (`request.resource.data.winner_uid == request.auth.uid`).
 - `tournaments/{id}/registrations`: write self only.
 - `tournaments/{id}/ffa_results`: read any auth; write host or owner.
-- `tournaments/{id}/bracket_matches`: create/delete host/owner; update host/owner **or the two match participants** (players write their own match results; the champion finalizes the tournament).
-  > The participant `update` is unrestricted by field, so a match player can write
-  > `{status:'finished', winner_uid:self}` and `_finalize_match` will trust it. Known gap —
-  > see `functions/security_audit.md` (Round 2, "What is NOT closed").
+- `tournaments/{id}/bracket_matches`: **host or owner only**, create / update / delete alike.
+  The two participants used to be allowed to update their own match — that is how the
+  winner's tab recorded the result, and it also meant either player could write
+  `{status:'finished', winner_uid:self}` mid-match. Results are server-side now
+  (`_finalize_match`), and `TournamentDuelWrapper` waits for that verdict.
 - `tournaments/{id}`: update/delete host or owner only. There is **no** "the declared winner
   may finish the tournament" clause — it was a self-crowning vector and was removed.
 
@@ -294,9 +305,12 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
   self-only.
 - `duel_presence`, `tournament_presence`: write self only.
 - `host_rooms/{hostId}`: owner only.
-- The `correct` field is **not** written to RTDB by the server (`_strip_correct` removes it and
-  writes `correct_hash` instead). There is no rule blocking it — an earlier version of this
-  document claimed there was. Anything that writes questions to RTDB must strip it itself.
+- `duel_keys/{tid}/{duelId}`: **read denied to every client**, write host only. The plain
+  answer key of a tournament duel lives here and is read by the Admin SDK when scoring.
+- The `correct` field is **not** written to RTDB for a tournament duel (`_split_answer_key`
+  separates it out; the client's `splitAnswerKey` does the same). There is no rule blocking
+  it — an earlier version of this document claimed there was. Anything that writes questions
+  to RTDB must strip it itself. Regular duels (`duels/`) still carry `correct_hash`.
 
 Rules are deployed from the repo (`firebase deploy --only firestore:rules`, `--only database`). Any new path needs a rule before the code lands (a missing rule fails silently as `PERMISSION_DENIED`).
 

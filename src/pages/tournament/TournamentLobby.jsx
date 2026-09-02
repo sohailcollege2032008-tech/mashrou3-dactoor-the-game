@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  doc, onSnapshot, updateDoc, getDoc, deleteDoc
+  doc, onSnapshot, updateDoc, getDoc, deleteDoc, runTransaction
 } from 'firebase/firestore'
 import { ref as rtdbRef, onValue, set, remove } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
@@ -14,7 +14,6 @@ import {
 } from '../../utils/tournamentUtils'
 import { Copy, Check, Settings } from 'lucide-react'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
-import { soundManager } from '../../utils/soundManager'
 import SoundToggle from '../../components/common/SoundToggle'
 
 const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -233,12 +232,33 @@ export default function TournamentLobby() {
         created_at: Date.now(),
       })
 
-      await updateDoc(doc(db, 'tournaments', tournamentId), {
-        status:         'ffa',
-        actual_top_cut: actualTopCut,
-        total_rounds:   Math.log2(actualTopCut),
-        ffa_room_id:    roomCode,
+      // Claim the phase rather than announce it. A scheduled tournament is also
+      // launched server-side (tournament_starter), and an unconditional write
+      // here would point the tournament at this room while the players were
+      // already in the other one. Whoever claims wins; the loser removes the
+      // room it just made and joins the winner's.
+      const ownedRoom = await runTransaction(db, async txn => {
+        const ref  = doc(db, 'tournaments', tournamentId)
+        const snap = await txn.get(ref)
+        const data = snap.data() || {}
+        if (data.status !== 'registration' || data.ffa_room_id) {
+          return data.ffa_room_id || null
+        }
+        txn.update(ref, {
+          status:         'ffa',
+          actual_top_cut: actualTopCut,
+          total_rounds:   Math.log2(actualTopCut),
+          ffa_room_id:    roomCode,
+        })
+        return roomCode
       })
+
+      if (ownedRoom !== roomCode) {
+        await remove(rtdbRef(rtdb, `rooms/${roomCode}`)).catch(() => {})
+        if (!ownedRoom) throw new Error('البطولة مش في مرحلة التسجيل')
+        navigate(`/host/game/${ownedRoom}`)
+        return
+      }
 
       navigate(`/host/game/${roomCode}`)
     } catch (e) {

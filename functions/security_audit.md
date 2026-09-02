@@ -194,6 +194,44 @@ the self-crown write, outsider refused, the match doc untouched afterwards, and
 a match played to the end finalised server-side with the champion written on the
 tournament doc.
 
+## Round 6 (2026-09-02) — the tournament no longer needs a tab
+
+Not a leak: a stall. Both of these were on the list of things only a browser did.
+
+**A scheduled tournament never began.** `scheduled_start_at` was a countdown in
+the host's lobby tab and nothing more — the auto-launch was a React effect on
+`timeLeft <= 0`. Host closes the tab, and the players watch a countdown reach
+zero and sit there. `tournament_starter` (every minute) now picks up anything due
+inside the next 65s and **waits out the remainder in-function**, so the launch
+lands on the scheduled second rather than on the next cron tick: measured 1.18s
+late on production. It creates the room, seeds the players from the
+registrations, claims the phase, and starts the room 10s later so nobody has to
+press start.
+
+It refuses the same things the manual button refuses: fewer than two
+registrations, and any round without assigned questions. That second one matters
+— without the check a scheduled tournament would quietly fall through to the
+legacy random-question fallback, which is exactly the behaviour constraint 13
+exists to prevent.
+
+**The launch is now a claim, not an announcement.** Two launchers exist, so the
+tournament doc is claimed in a transaction (status still `registration`, no
+`ffa_room_id`) and the loser deletes the room it just created. The client side
+does this too. An unconditional write would have pointed the tournament at one
+room while the players were already in the other.
+
+**A walkover left its winner nowhere.** ⚡ حسم against an absent player writes a
+result with no duel behind it, and the finalizer hangs off the duel node's
+status — so the winner sat in a finished match until the once-a-minute
+reconciler noticed. `on_bracket_match_written` now handles an already-finished
+match: seat the winner, progress the round. Measured 1.3s instead of up to 60s.
+
+Evidence: `scratch/tests/tmp-w12-scheduled-start.mjs` 13/13 (two tournaments due
+at the same second, no tab open anywhere — the assigned one launches and starts
+itself, the unassigned one is refused) and `tmp-w13-walkover.mjs` 12/12 (host
+awards both round-1 matches; the winner is seated in 1.3s, the round holds while
+a sibling is unplayed, and advances when it is not).
+
 ## What is NOT closed — read before the next event
 
 * **A published (global) deck still exposes its answers** to anyone who opens it
@@ -203,8 +241,12 @@ tournament doc.
   but not the number of writes, and RTDB cannot revoke an ancestor's `.write` grant, so a
   participant can pump their own score or write fields under the opponent's answer node.
   The rules changes above stop *outsiders*, not participants.
-* **The FFA phase still depends on the host's tab** (launch, scheduled start, finalisation).
-  Only the recovery paths are server-side.
+* **The FFA game loop still needs at least one player tab.** The room is created,
+  started and finalised server-side now, but the question timer and the reveal are
+  driven by `useUnattendedGameRunner` inside whichever player tab claims the lock. That
+  is inherent while the players are the ones answering — a fully server-run FFA would
+  mean scoring N players in a Cloud Function — but it is worth knowing: an FFA where
+  every tab closes freezes on the current question until one reopens.
 
 ## Evidence
 
