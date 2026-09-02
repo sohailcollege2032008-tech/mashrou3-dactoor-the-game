@@ -39,8 +39,37 @@ const PHASE_LABEL = {
   finished:     'انتهت',
 }
 
+/**
+ * The lamp that carries a live match for someone who cannot see the question.
+ * `locked` null = not answering right now (no lamp at all), false = still
+ * thinking, true = answer is in. It never says what was picked, or whether it
+ * was right — that would hand the answer to a spectator with a second device.
+ */
+function LockLamp({ locked, size = 6 }) {
+  if (locked == null) return null
+  if (locked) {
+    return (
+      <span aria-label="قفل إجابته" title="قفل إجابته" style={{
+        width: size, height: size, borderRadius: '50%', flexShrink: 0,
+        background: 'var(--success)',
+      }} />
+    )
+  }
+  return (
+    <motion.span
+      aria-label="لسه بيفكّر" title="لسه بيفكّر"
+      animate={{ opacity: [1, 0.25, 1] }}
+      transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+      style={{
+        width: size, height: size, borderRadius: '50%', flexShrink: 0,
+        border: '1px solid var(--ink-4)', background: 'transparent',
+      }}
+    />
+  )
+}
+
 /** One side of a match card. */
-function Side({ name, uid, score, isWinner, isLoser, isMe, live }) {
+function Side({ name, uid, score, isWinner, isLoser, isMe, live, locked = null }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -60,13 +89,16 @@ function Side({ name, uid, score, isWinner, isLoser, isMe, live }) {
           }}>أنت</span>
         )}
       </span>
-      <span className="folio" style={{
-        fontSize: 13, minWidth: 18, textAlign: 'center',
-        color: live ? 'var(--gold)' : 'var(--ink-3)',
-        fontWeight: live ? 700 : 400,
-        opacity: isLoser ? 0.45 : 1,
-      }}>
-        {typeof score === 'number' ? score : '·'}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        <LockLamp locked={locked} />
+        <span className="folio" style={{
+          fontSize: 13, minWidth: 18, textAlign: 'center',
+          color: live ? 'var(--gold)' : 'var(--ink-3)',
+          fontWeight: live ? 700 : 400,
+          opacity: isLoser ? 0.45 : 1,
+        }}>
+          {typeof score === 'number' ? score : '·'}
+        </span>
       </span>
     </div>
   )
@@ -77,6 +109,9 @@ function MatchCard({ m, totalRounds, uid }) {
   const isFinished = m.status === 'finished'
   const live       = m.live || null
   const scores     = live?.scores || null
+  // Only while the question is open — during the reveal the score says it all.
+  const lockable   = isLive && live?.status === 'question'
+  const lockOf     = u => (lockable ? !!(live.locked || {})[u] : null)
 
   const aScore = scores?.[m.a_uid] ?? (isFinished ? m.a_score : undefined)
   const bScore = scores?.[m.b_uid] ?? (isFinished ? m.b_score : undefined)
@@ -112,6 +147,7 @@ function MatchCard({ m, totalRounds, uid }) {
 
       <Side
         name={m.a_name} uid={m.a_uid} score={aScore} live={isLive}
+        locked={lockOf(m.a_uid)}
         isMe={uid && m.a_uid === uid}
         isWinner={isFinished && m.winner_uid === m.a_uid}
         isLoser={isFinished && m.winner_uid && m.winner_uid !== m.a_uid}
@@ -119,6 +155,7 @@ function MatchCard({ m, totalRounds, uid }) {
       <div style={{ borderTop: '1px solid var(--rule)' }} />
       <Side
         name={m.b_name} uid={m.b_uid} score={bScore} live={isLive}
+        locked={lockOf(m.b_uid)}
         isMe={uid && m.b_uid === uid}
         isWinner={isFinished && m.winner_uid === m.b_uid}
         isLoser={isFinished && m.winner_uid && m.winner_uid !== m.b_uid}
@@ -192,7 +229,7 @@ function PaceBar({ label, detail, countdownMs }) {
 }
 
 /** One competitor inside the live hero strip. */
-function HeroSide({ name, uidSide, score, leader, uid }) {
+function HeroSide({ name, uidSide, score, leader, uid, locked = null }) {
   const isLeader = leader === uidSide
   return (
     <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
@@ -215,6 +252,19 @@ function HeroSide({ name, uidSide, score, leader, uid }) {
       }}>
         {score}
       </p>
+      {locked != null && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 7,
+        }}>
+          <LockLamp locked={locked} size={7} />
+          <span className="ar" style={{
+            fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 600,
+            color: locked ? 'var(--success)' : 'var(--ink-4)',
+          }}>
+            {locked ? 'قفل إجابته' : 'لسه بيفكّر'}
+          </span>
+        </span>
+      )}
     </div>
   )
 }
@@ -228,6 +278,11 @@ function LiveHero({ m, totalRounds, uid }) {
   const aScore = scores[m.a_uid] ?? 0
   const bScore = scores[m.b_uid] ?? 0
   const leader = aScore === bScore ? null : (aScore > bScore ? m.a_uid : m.b_uid)
+  // The lamps belong to the open question only; on the reveal the numbers move
+  // and the lamps would just be repeating what everyone can already see.
+  const lockable = live.status === 'question'
+  const locks    = live.locked || {}
+  const lockOf   = u => (lockable ? !!locks[u] : null)
 
   return (
     <div style={{
@@ -250,9 +305,11 @@ function LiveHero({ m, totalRounds, uid }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <HeroSide name={m.a_name} uidSide={m.a_uid} score={aScore} leader={leader} uid={uid} />
+        <HeroSide name={m.a_name} uidSide={m.a_uid} score={aScore} leader={leader} uid={uid}
+                  locked={lockOf(m.a_uid)} />
         <span className="folio" style={{ fontSize: 11, color: 'var(--ink-4)' }}>VS</span>
-        <HeroSide name={m.b_name} uidSide={m.b_uid} score={bScore} leader={leader} uid={uid} />
+        <HeroSide name={m.b_name} uidSide={m.b_uid} score={bScore} leader={leader} uid={uid}
+                  locked={lockOf(m.b_uid)} />
       </div>
 
       {total > 0 && (

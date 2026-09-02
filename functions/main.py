@@ -428,6 +428,18 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
 
     answers_qi = _answers_for_qi(duel, current_qi)
 
+    # A spectator watching a knockout match is shown no question text at all,
+    # so the tension has to come from somewhere: mirror WHO has locked an
+    # answer in — never what they picked, never whether it is right. The
+    # spectator's question counter used to move only when a question was
+    # scored, a whole question behind the players; this moves it with them.
+    _mirror_live(tournament_id, duel_id, {
+        "qi":     current_qi,
+        "total":  duel.get("total_questions") or len(_to_list(duel.get("questions"))),
+        "status": "question",
+        "locked": {u: True for u in player_uids if u in answers_qi},
+    })
+
     if not all(p in answers_qi for p in player_uids):
         return  # someone hasn't answered yet
 
@@ -559,6 +571,16 @@ def on_tournament_reveal_started(event: db_fn.Event[db_fn.Change]) -> None:
     # ── Atomically advance to next question (or finish) ───────────────────────
     duel_ref = admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}")
     if _advance_reveal(duel_ref):
+        # Nothing mirrored the advance itself, so the lock lamps of the question
+        # that just ended would stay lit over the next one. Clear them, and
+        # carry the counter across in the same write.
+        moved = duel_ref.get() or {}
+        _mirror_live(tournament_id, duel_id, {
+            "qi":     moved.get("current_question_index") or 0,
+            "total":  moved.get("total_questions") or 0,
+            "status": moved.get("status") or "playing",
+            "locked": None,
+        })
         logger.info("[CF] Advanced duel — tournament=%s duel=%s", tournament_id, duel_id)
 
 # ── Function 3 ─────────────────────────────────────────────────────────────────

@@ -271,6 +271,12 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
 - **The honours board.** See step 7 above.
 - **The live bracket** at `/tournament/:id/live` — one RTDB subscription, no question text,
   open to any signed-in viewer including eliminated players.
+- **The answer lamps.** With no question on screen, a spectator had nothing to watch
+  between one score change and the next. Each competitor now carries a lamp while the
+  question is open — filled when their answer is in, pulsing while they are still
+  thinking — and the question counter moves with the players instead of a question
+  behind them (nothing used to mirror the advance itself). The lamps are dropped during
+  the reveal: the numbers are moving then, and repeating what everyone can see is noise.
 
 ### Player histories
 - `game_history` entries: `tournament_ffa` (after FFA), `tournament_match` (per match), `tournament_summary` (eliminated players + finalists + champion: `final_result` ∈ champion|finalist|semi_finalist|eliminated_bracket|eliminated_ffa).
@@ -325,7 +331,11 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
   makes it safe to show an in-progress match to eliminated players, and what makes a
   live bracket affordable: one RTDB subscription instead of one Firestore read per
   match per viewer per refresh (63 reads for a 32-player bracket). `meta.awards` carries
-  the honours list once the tournament is finished.
+  the honours list once the tournament is finished. `matches/{id}/live.locked` is the
+  answer-lock map for the open question — `{uid: true}`, written by the answer trigger
+  as each answer lands and cleared on the advance. It says who has answered, never what
+  they picked or whether it was right; a spectator with a second device learns nothing
+  from it.
 - `tournament_duels/{tid}/{duelId}`: read by a player of the duel, the host, or anyone when
   the node does not exist yet. **Write at the node itself is the host only** (plus creation
   by whoever declares themselves `host_uid`) — a participant grant there reached
