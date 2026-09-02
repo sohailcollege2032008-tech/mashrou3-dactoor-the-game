@@ -930,7 +930,15 @@ export default function DuelGame({
                         +{answer.points_earned}
                       </span>
                     )}
-                    <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>{answer.reaction_time_ms}ms</span>
+                    {/* The same source as the speed note above the question, or
+                        the two of them disagree on the same screen: the server
+                        measures both players off one clock, each tab only its
+                        own stopwatch. */}
+                    {reactionOf(answer) != null && (
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-4)' }}>
+                        {reactionOf(answer)}ms
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <span className="ar" style={{ fontSize: 11, color: 'var(--ink-4)' }}>لم يجب</span>
