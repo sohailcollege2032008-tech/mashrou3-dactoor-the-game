@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  doc, onSnapshot, updateDoc, getDoc, deleteDoc, runTransaction
+  doc, onSnapshot, updateDoc, deleteDoc, runTransaction
 } from 'firebase/firestore'
 import { ref as rtdbRef, onValue, set, remove } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
@@ -14,6 +14,7 @@ import {
 } from '../../utils/tournamentUtils'
 import { Copy, Check, Settings } from 'lucide-react'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
+import { loadTournamentDeck } from '../../utils/deckLoader'
 import SoundToggle from '../../components/common/SoundToggle'
 
 const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -41,6 +42,7 @@ export default function TournamentLobby() {
   const [tournament,    setTournament]    = useState(null)
   const [registrations, setRegistrations] = useState([])
   const [deckQs,        setDeckQs]        = useState([])
+  const [deckIssue, setDeckIssue] = useState(null)
   const [launching,     setLaunching]     = useState(false)
   const [copied,        setCopied]        = useState(false)
   const [error,         setError]         = useState(null)
@@ -69,12 +71,21 @@ export default function TournamentLobby() {
     return () => unsub()
   }, [tournamentId])
 
+  // The lobby is where the host is standing before anything starts, so a deck
+  // that has been deleted has to be said out loud here — not discovered as a
+  // permissions error in the console at the moment of launch.
+  const deckId          = tournament?.deck_id
+  const tournamentReady = !!tournament
   useEffect(() => {
-    if (!tournament?.deck_id) return
-    getDoc(doc(db, 'question_sets', tournament.deck_id))
-      .then(d => setDeckQs(d.data()?.questions?.questions || []))
-      .catch(console.error)
-  }, [tournament?.deck_id])
+    if (!tournamentReady) return
+    let cancelled = false
+    loadTournamentDeck(deckId).then(res => {
+      if (cancelled) return
+      setDeckQs(res.questions)
+      setDeckIssue(res.ok ? null : res.message)
+    })
+    return () => { cancelled = true }
+  }, [deckId, tournamentReady])
 
   useEffect(() => {
     if (!tournament) return
@@ -180,8 +191,14 @@ export default function TournamentLobby() {
       // questions for.
       const actualTopCut = computeActualTopCut(registrations.length, tournament.top_cut || 8)
 
-      const deckDoc = await getDoc(doc(db, 'question_sets', tournament.deck_id))
-      const deckData = deckDoc.data()
+      const deck = await loadTournamentDeck(tournament.deck_id)
+      if (!deck.ok) {
+        setLaunching(false)
+        autoLaunchedRef.current = false
+        setError(`مش ممكن أبدأ التصفيات — ${deck.short}`)
+        return
+      }
+      const deckData = deck.raw
       const roomCode = genRoomCode()
       const timerSeconds = Math.round(tournament.ffa_question_duration / 1000)
 
@@ -537,6 +554,22 @@ export default function TournamentLobby() {
         {error && (
           <div style={{ border: '1px solid var(--alert)', background: 'rgba(180,48,57,0.06)', padding: '10px 14px', marginBottom: 16 }}>
             <p className="ar" style={{ fontSize: 13, color: 'var(--alert)', margin: 0 }}>{error}</p>
+          </div>
+        )}
+
+        {deckIssue && (
+          <div style={{
+            border: '1px solid var(--alert)', background: 'rgba(180,48,57,0.06)',
+            padding: '10px 14px', marginBottom: 16,
+          }}>
+            <p className="folio" style={{
+              fontSize: 9, letterSpacing: '0.18em', color: 'var(--alert)', margin: '0 0 3px',
+            }}>
+              DECK
+            </p>
+            <p className="ar" style={{ fontSize: 13, color: 'var(--ink)', margin: 0, lineHeight: 1.6 }}>
+              {deckIssue}
+            </p>
           </div>
         )}
 

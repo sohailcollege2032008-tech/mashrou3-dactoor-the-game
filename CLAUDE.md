@@ -317,7 +317,10 @@ Main branch (`main`) is stable — do NOT push breaking changes there.
 - `profiles/{uid}`: read by any auth user, write by owner only
 - `profiles/{uid}/played_questions/{deckId}`: read by any auth (opponent needs it), write by owner only
 - `profiles/{uid}/game_history/{entryId}`: read by any auth, write by owner only
-- `question_sets/{setId}`: read + write by any auth user
+- `question_sets/{setId}`: read by the deck's host, the owner email, or anyone when
+  `is_global == true`; a **non-existent** deck is also readable (`resource == null`) so a
+  deleted deck reads as missing instead of denied — see `src/utils/deckLoader.js`.
+  Create by any auth user; update/delete by the deck's host or the owner email
 - `authorized_hosts/{docId}`: read by any auth, write by owner email only
 - `tournaments/{id}`: read any auth; create any auth; update/delete **host, owner email, or the declared winner**
 - `tournaments/{id}/registrations/{uid}`: read by any auth, write by owner uid only

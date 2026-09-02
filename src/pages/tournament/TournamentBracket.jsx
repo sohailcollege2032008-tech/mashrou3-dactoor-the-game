@@ -9,7 +9,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  doc, onSnapshot, updateDoc, getDoc,
+  doc, onSnapshot, updateDoc,
   collection, writeBatch
 } from 'firebase/firestore'
 import { ref as rtdbRef, onValue, update, set, remove, runTransaction } from 'firebase/database'
@@ -26,6 +26,7 @@ import { Trophy, Download, Play, Loader2, ChevronRight, Settings, Flag, AlertTri
 import html2canvas from 'html2canvas'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
 import BracketBoard from '../../components/tournament/BracketBoard'
+import { loadTournamentDeck } from '../../utils/deckLoader'
 import useIsNarrow from '../../hooks/useIsNarrow'
 
 function getRoundName(round, totalRounds) {
@@ -74,6 +75,7 @@ export default function TournamentBracket() {
   const [matches,     setMatches]     = useState([])
   const [ffaResults,  setFfaResults]  = useState([])
   const [deckQs,      setDeckQs]      = useState([])
+  const [deckIssue,   setDeckIssue]   = useState(null)   // why the deck is unusable
   const [generating,  setGenerating]  = useState(false)
   const [exporting,   setExporting]   = useState(false)
   const [showCountdown, setShowCountdown] = useState(false)
@@ -144,12 +146,20 @@ export default function TournamentBracket() {
     return () => unsub()
   }, [tournamentId])
 
+  // A deck a tournament points at can be gone — hosts delete decks. Say so in
+  // words on the page instead of leaving a permissions error in the console.
+  const deckId          = tournament?.deck_id
+  const tournamentReady = !!tournament
   useEffect(() => {
-    if (!tournament?.deck_id) return
-    getDoc(doc(db, 'question_sets', tournament.deck_id))
-      .then(d => setDeckQs(d.data()?.questions?.questions || []))
-      .catch(console.error)
-  }, [tournament?.deck_id])
+    if (!tournamentReady) return
+    let cancelled = false
+    loadTournamentDeck(deckId).then(res => {
+      if (cancelled) return
+      setDeckQs(res.questions)
+      setDeckIssue(res.ok ? null : { reason: res.reason, message: res.message })
+    })
+    return () => { cancelled = true }
+  }, [deckId, tournamentReady])
 
   useEffect(() => {
     const activeMatches = matches.filter(
@@ -397,11 +407,17 @@ export default function TournamentBracket() {
     const duelId  = match.match_id
     const duelRef = rtdbRef(rtdb, `tournament_duels/${tournamentId}/${duelId}`)
 
+    // A missing deck is a thing to tell the host, not an exception to log: it is
+    // an expected state (they deleted it) and throwing only put a stack trace in
+    // the console next to the sentence that already explains it.
+    const deck = await loadTournamentDeck(tournament.deck_id)
+    if (!deck.ok) {
+      setError(`مش ممكن أشغّل الماتش — ${deck.short}`)
+      return
+    }
+
     try {
-      const deckSnap    = await getDoc(doc(db, 'question_sets', tournament.deck_id))
-      const deckData    = deckSnap.data() || {}
-      const freshDeckQs = deckData.questions?.questions || []
-      if (freshDeckQs.length === 0) throw new Error('لا توجد أسئلة في الـ Deck')
+      const freshDeckQs = deck.questions
 
       const questions = getQuestionsForRound(match.round, tournament, freshDeckQs, 5)
       if (questions.length === 0) throw new Error('لا توجد أسئلة لهذه الجولة')
@@ -439,7 +455,7 @@ export default function TournamentBracket() {
         tiebreaker_used:      0,
         is_tiebreaker:        false,
         config:               { questionCount: safeQuestions.length, shuffleQuestions: false, shuffleAnswers: false },
-        force_rtl:            deckData.force_rtl || false,
+        force_rtl:            deck.raw?.force_rtl || false,
         status:               'waiting',
         current_question_index: 0,
         question_started_at:  null,
@@ -670,6 +686,29 @@ export default function TournamentBracket() {
           onComplete={handleCountdownComplete}
         />
       )}
+      {deckIssue && (
+        <div style={{
+          margin: '16px 20px 0', border: '1px solid var(--alert)', borderRadius: 4,
+          background: 'color-mix(in srgb, var(--alert) 6%, var(--paper))',
+          padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10,
+        }}>
+          <AlertTriangle size={15} style={{ color: 'var(--alert)', flexShrink: 0, marginTop: 2 }} />
+          <div style={{ minWidth: 0 }}>
+            <p className="folio" style={{
+              fontSize: 9, letterSpacing: '0.18em', color: 'var(--alert)', margin: '0 0 3px',
+            }}>
+              DECK
+            </p>
+            <p className="ar" style={{
+              fontFamily: 'var(--sans)', fontSize: 13.5, color: 'var(--ink)',
+              lineHeight: 1.6, margin: 0,
+            }}>
+              {deckIssue.message}
+            </p>
+          </div>
+        </div>
+      )}
+
       {showQPanel && (
         <QuestionAssignmentPanel
           deckQs={deckQs}

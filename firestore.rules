@@ -30,6 +30,14 @@ service cloud.firestore {
       // by its host, the owner, and — for the duel/DeckBrowser flows — anyone
       // when the deck is explicitly published as global.
       allow read: if request.auth != null && (
+        // A deck that is not there reads as MISSING, not as forbidden. The rule
+        // cannot evaluate is_global on a document that does not exist, so a
+        // deleted deck came back as permission-denied and the host saw a
+        // permissions error for a deck they had simply deleted. Existence was
+        // never the secret — the questions are, and those are still gated below.
+        // (A query never evaluates this branch: `resource` is the document being
+        // returned, so it is never null for a listed doc.)
+        resource == null ||
         resource.data.is_global == true ||
         resource.data.host_id == request.auth.uid ||
         request.auth.token.email == 'sohailcollege2032008@gmail.com'

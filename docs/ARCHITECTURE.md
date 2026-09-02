@@ -319,7 +319,16 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
 
 ### Firestore (`firestore.rules`)
 - `profiles/{uid}`: read any auth; write owner only. Subcollections likewise (+ `played_questions` readable by any auth for duel unions).
-- `question_sets`: read only when `is_global == true`, or by the deck's host, or the owner email
+- `question_sets`: read only when `is_global == true`, or by the deck's host, or the owner
+  email — **plus `resource == null`**, so a deck that has been deleted reads as *missing*
+  rather than *forbidden*. Without that clause the rule cannot evaluate `is_global` on a
+  document that is not there, and a host who deleted a deck a tournament still pointed at
+  got `PERMISSION_DENIED` in the console and nothing on screen. Existence was never the
+  secret; the questions are, and they are still gated. (A query never reaches that clause:
+  `resource` is the document being returned, so it is never null for a listed doc.)
+  `src/utils/deckLoader.js` turns every outcome — missing, denied, empty, offline — into
+  one sentence, and the host's lobby and bracket pages render it as a banner and refuse to
+  launch with the short form of the same fact
   (a deck carries every plain `correct`); create any auth; update/delete creator or owner email.
 - `authorized_hosts`: read any auth; write owner email only.
 - `notifications/{uid}/items`: read owner only; write any auth (needed for unattended mode).
