@@ -6,7 +6,7 @@ import {
 import { ref as rtdbRef, onValue as rtdbOnValue, get as rtdbGet, set as rtdbSet } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
-import BracketTree from '../../components/tournament/BracketTree'
+import BracketBoard from '../../components/tournament/BracketBoard'
 import HonoursBoard from '../../components/tournament/HonoursBoard'
 import { soundManager } from '../../utils/soundManager'
 import SoundToggle from '../../components/common/SoundToggle'
@@ -1017,12 +1017,18 @@ export default function TournamentPlayerWait() {
               </button>
 
               {showBracket && (
-                <div style={{ overflowX: 'auto', marginBottom: 24, direction: 'ltr' }}>
+                <div style={{
+                  marginBottom: 24, padding: 12,
+                  background: '#14120E', border: '1px solid #3A362C',
+                }}>
                   {allMatches.length > 0 ? (
-                    <BracketTree
+                    <BracketBoard
                       matches={allMatches}
                       totalRounds={tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)}
-                      tournamentTitle={tournament.title}
+                      myUid={uid}
+                      currentRound={tournament.current_round || null}
+                      tone="dark"
+                      emptyNote="الشجرة لسه ماتعملتش"
                     />
                   ) : (
                     <div style={{ textAlign: 'center', padding: 24, color: 'var(--ink-4)' }}>

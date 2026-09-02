@@ -21,6 +21,8 @@ import { Loader2, Trophy, ArrowRight, Radio } from 'lucide-react'
 import { motion } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import HonoursBoard from '../../components/tournament/HonoursBoard'
+import BracketBoard from '../../components/tournament/BracketBoard'
+import LockLamp from '../../components/tournament/LockLamp'
 
 function roundName(round, totalRounds) {
   if (!totalRounds) return `الجولة ${round}`
@@ -37,147 +39,6 @@ const PHASE_LABEL = {
   ffa:          'التصفيات جارية',
   bracket:      'الأدوار الإقصائية',
   finished:     'انتهت',
-}
-
-/**
- * The lamp that carries a live match for someone who cannot see the question.
- * `locked` null = not answering right now (no lamp at all), false = still
- * thinking, true = answer is in. It never says what was picked, or whether it
- * was right — that would hand the answer to a spectator with a second device.
- */
-function LockLamp({ locked, size = 6 }) {
-  if (locked == null) return null
-  if (locked) {
-    return (
-      <span aria-label="قفل إجابته" title="قفل إجابته" style={{
-        width: size, height: size, borderRadius: '50%', flexShrink: 0,
-        background: 'var(--success)',
-      }} />
-    )
-  }
-  return (
-    <motion.span
-      aria-label="لسه بيفكّر" title="لسه بيفكّر"
-      animate={{ opacity: [1, 0.25, 1] }}
-      transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
-      style={{
-        width: size, height: size, borderRadius: '50%', flexShrink: 0,
-        border: '1px solid var(--ink-4)', background: 'transparent',
-      }}
-    />
-  )
-}
-
-/** One side of a match card. */
-function Side({ name, uid, score, isWinner, isLoser, isMe, live, locked = null }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      gap: 8, padding: '7px 10px',
-      background: isWinner ? 'rgba(176,137,68,0.10)' : 'transparent',
-    }}>
-      <span className="ar" style={{
-        fontSize: 13, color: 'var(--ink)', fontWeight: isWinner ? 700 : 500,
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        opacity: isLoser ? 0.45 : 1,
-      }}>
-        {name || <span style={{ color: 'var(--ink-4)' }}>—</span>}
-        {isMe && uid && (
-          <span className="folio" style={{
-            marginInlineStart: 6, color: 'var(--gold)', fontSize: 9,
-            border: '1px solid var(--gold)', padding: '1px 4px',
-          }}>أنت</span>
-        )}
-      </span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-        <LockLamp locked={locked} />
-        <span className="folio" style={{
-          fontSize: 13, minWidth: 18, textAlign: 'center',
-          color: live ? 'var(--gold)' : 'var(--ink-3)',
-          fontWeight: live ? 700 : 400,
-          opacity: isLoser ? 0.45 : 1,
-        }}>
-          {typeof score === 'number' ? score : '·'}
-        </span>
-      </span>
-    </div>
-  )
-}
-
-function MatchCard({ m, totalRounds, uid }) {
-  const isLive     = m.status === 'active'
-  const isFinished = m.status === 'finished'
-  const live       = m.live || null
-  const scores     = live?.scores || null
-  // Only while the question is open — during the reveal the score says it all.
-  const lockable   = isLive && live?.status === 'question'
-  const lockOf     = u => (lockable ? !!(live.locked || {})[u] : null)
-
-  const aScore = scores?.[m.a_uid] ?? (isFinished ? m.a_score : undefined)
-  const bScore = scores?.[m.b_uid] ?? (isFinished ? m.b_score : undefined)
-
-  return (
-    <div style={{
-      border: `1px solid ${isLive ? 'var(--gold)' : 'var(--rule)'}`,
-      background: 'var(--paper-2)',
-      minWidth: 190, maxWidth: 240,
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '4px 8px', borderBottom: '1px solid var(--rule)',
-      }}>
-        <span className="folio" style={{ fontSize: 9, color: 'var(--ink-4)' }}>
-          {roundName(m.round, totalRounds)} · {m.match_number}
-        </span>
-        {isLive ? (
-          <motion.span
-            animate={{ opacity: [1, 0.35, 1] }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-            className="folio"
-            style={{ fontSize: 9, color: 'var(--gold)', display: 'flex', alignItems: 'center', gap: 4 }}
-          >
-            <Radio size={9} /> مباشر
-          </motion.span>
-        ) : isFinished ? (
-          <span className="folio" style={{ fontSize: 9, color: 'var(--success)' }}>خلص</span>
-        ) : (
-          <span className="folio" style={{ fontSize: 9, color: 'var(--ink-4)' }}>مستنية</span>
-        )}
-      </div>
-
-      <Side
-        name={m.a_name} uid={m.a_uid} score={aScore} live={isLive}
-        locked={lockOf(m.a_uid)}
-        isMe={uid && m.a_uid === uid}
-        isWinner={isFinished && m.winner_uid === m.a_uid}
-        isLoser={isFinished && m.winner_uid && m.winner_uid !== m.a_uid}
-      />
-      <div style={{ borderTop: '1px solid var(--rule)' }} />
-      <Side
-        name={m.b_name} uid={m.b_uid} score={bScore} live={isLive}
-        locked={lockOf(m.b_uid)}
-        isMe={uid && m.b_uid === uid}
-        isWinner={isFinished && m.winner_uid === m.b_uid}
-        isLoser={isFinished && m.winner_uid && m.winner_uid !== m.b_uid}
-      />
-
-      {isLive && live?.total ? (
-        <div style={{ padding: '3px 8px', borderTop: '1px solid var(--rule)' }}>
-          <span className="folio" style={{ fontSize: 9, color: 'var(--ink-3)' }}>
-            سؤال <span dir="ltr">{Math.min((live.qi ?? 0) + 1, live.total)}/{live.total}</span>
-          </span>
-        </div>
-      ) : null}
-
-      {isFinished && m.tie_breaker ? (
-        <div style={{ padding: '3px 8px', borderTop: '1px solid var(--rule)' }}>
-          <span className="folio" style={{ fontSize: 9, color: 'var(--ink-4)' }}>
-            {m.tie_breaker === 'ffa_rank' ? 'حُسم بترتيب التصفيات' : 'حُسم بسؤال فاصل'}
-          </span>
-        </div>
-      ) : null}
-    </div>
-  )
 }
 
 /** A line from the host, shown to everyone watching. Auto-hides after 15
@@ -338,7 +199,6 @@ export default function TournamentLive() {
   const uid = session?.uid || null
 
   const [data, setData]       = useState(undefined)   // undefined = loading, null = missing
-  const [focusRound, setFocus] = useState(null)
   const [now, setNow]          = useState(() => Date.now())
   const confettiRef = useRef(false)
   const clockOffset = useServerClock()
@@ -360,15 +220,6 @@ export default function TournamentLive() {
       .filter(m => m && typeof m === 'object')
       .sort((a, b) => (a.round - b.round) || (a.match_number - b.match_number))
   }, [data])
-
-  const rounds = useMemo(() => {
-    const by = new Map()
-    matches.forEach(m => {
-      if (!by.has(m.round)) by.set(m.round, [])
-      by.get(m.round).push(m)
-    })
-    return [...by.entries()].sort((a, b) => a[0] - b[0])
-  }, [matches])
 
   const liveMatches = useMemo(() => matches.filter(m => m.status === 'active'), [matches])
   const liveCount   = liveMatches.length
@@ -504,8 +355,6 @@ export default function TournamentLive() {
     )
   }
 
-  const shownRounds = focusRound == null ? rounds : rounds.filter(([r]) => r === focusRound)
-
   return (
     <div dir="rtl" className="paper-grain" style={{
       minHeight: '100svh', background: 'var(--paper)', display: 'flex', flexDirection: 'column',
@@ -638,34 +487,9 @@ export default function TournamentLive() {
         </div>
       )}
 
-      {/* Round filter — a 32-player bracket does not fit a phone screen */}
-      {rounds.length > 1 && (
-        <div style={{
-          display: 'flex', gap: 6, overflowX: 'auto', padding: '16px 16px 0',
-        }}>
-          <button onClick={() => setFocus(null)} className="folio" style={{
-            fontSize: 10, padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
-            border: `1px solid ${focusRound == null ? 'var(--ink)' : 'var(--rule)'}`,
-            background: focusRound == null ? 'var(--ink)' : 'transparent',
-            color: focusRound == null ? 'var(--paper)' : 'var(--ink-3)',
-          }}>
-            الكل
-          </button>
-          {rounds.map(([r]) => (
-            <button key={r} onClick={() => setFocus(r)} className="ar" style={{
-              fontSize: 12, padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
-              border: `1px solid ${focusRound === r ? 'var(--ink)' : 'var(--rule)'}`,
-              background: focusRound === r ? 'var(--ink)' : 'transparent',
-              color: focusRound === r ? 'var(--paper)' : 'var(--ink-3)',
-            }}>
-              {roundName(r, totalRounds)}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* The tree */}
-      <div style={{ flex: 1, overflowX: 'auto', padding: 16 }}>
+      {/* The bracket. A column tree on a laptop, and on a phone one round at a
+          time plus a follow-a-player path — never a sideways scroller. */}
+      <div style={{ flex: 1, padding: 16 }}>
         {matches.length === 0 ? (
           <div style={{
             border: '1px dashed var(--rule)', padding: 24, textAlign: 'center',
@@ -682,21 +506,13 @@ export default function TournamentLive() {
             </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', minWidth: 'max-content' }}>
-            {shownRounds.map(([r, list]) => (
-              <div key={r} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <p className="folio" style={{
-                  fontSize: 10, letterSpacing: '0.18em', color: 'var(--ink-4)',
-                  margin: '0 0 2px', textAlign: 'center',
-                }}>
-                  {roundName(r, totalRounds)}
-                </p>
-                {list.map(m => (
-                  <MatchCard key={m.match_id} m={m} totalRounds={totalRounds} uid={uid} />
-                ))}
-              </div>
-            ))}
-          </div>
+          <BracketBoard
+            matches={matches}
+            totalRounds={totalRounds}
+            myUid={uid}
+            currentRound={meta?.current_round || null}
+            tone="paper"
+          />
         )}
       </div>
 

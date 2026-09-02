@@ -271,6 +271,21 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
 - **The honours board.** See step 7 above.
 - **The live bracket** at `/tournament/:id/live` — one RTDB subscription, no question text,
   open to any signed-in viewer including eliminated players.
+- **The bracket, on a phone.** `BracketBoard` (`src/components/tournament/`) is the
+  on-screen bracket everywhere now — the live page, the player's wait screen, and the
+  host's bracket page on a narrow viewport. A column tree is the right shape on a laptop
+  and it keeps it there; on a phone it was a sideways scroller with the final off the
+  edge of the screen, so narrow viewports get **ROUND** (one round at a time, full-width
+  rows, from a rail that shows each round's progress and where the live matches are) and
+  **PATH** (one player's route, one row per round — the only view whose size does not
+  grow with the bracket: 32 players is still five rows). Tap any name to follow them.
+  It normalises both match shapes, so the spectator mirror (`a_uid/a_name/a_score`) and
+  Firestore (`player_a_uid/…`) render through the same component, and takes a `tone`
+  because the wait screen shows it inside a dark panel.
+  `BracketTree` stays as the host's image-export source: on a narrow host viewport it is
+  parked inside a zero-height clipping wrapper — rendered, so html2canvas still has
+  something to draw, but out of the page's scroll (absolute positioning alone still
+  stretched the document to the tree's ~2000px height).
 - **The answer lamps.** With no question on screen, a spectator had nothing to watch
   between one score change and the next. Each competitor now carries a lamp while the
   question is open — filled when their answer is in, pulsing while they are still

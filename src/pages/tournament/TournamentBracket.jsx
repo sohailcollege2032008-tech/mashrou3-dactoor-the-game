@@ -25,6 +25,8 @@ import SoundToggle from '../../components/common/SoundToggle'
 import { Trophy, Download, Play, Loader2, ChevronRight, Settings, Flag, AlertTriangle } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
+import BracketBoard from '../../components/tournament/BracketBoard'
+import useIsNarrow from '../../hooks/useIsNarrow'
 
 function getRoundName(round, totalRounds) {
   if (round === totalRounds)     return 'النهائي'
@@ -66,6 +68,7 @@ export default function TournamentBracket() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
   const bracketRef = useRef(null)
+  const narrow     = useIsNarrow()
 
   const [tournament,  setTournament]  = useState(null)
   const [matches,     setMatches]     = useState([])
@@ -795,14 +798,48 @@ export default function TournamentBracket() {
               <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink-3)' }}>جاري توليد الـ Bracket…</p>
             </div>
           ) : matches.length > 0 ? (
-            <div style={{ overflowX: 'auto' }}>
-              <BracketTree
-                matches={matches}
-                totalRounds={totalRounds}
-                bracketRef={bracketRef}
-                tournamentTitle={tournament.title}
-              />
-            </div>
+            <>
+              {/* On a phone the column tree is a sideways scroller, so the host
+                  reads the same round-by-round board the players get. The tree
+                  itself stays mounted either way — it is the element the image
+                  export renders, so it is parked off-screen rather than
+                  unmounted (display:none would give html2canvas nothing). */}
+              {narrow && (
+                <div style={{
+                  marginBottom: 20, padding: 12,
+                  background: '#14120E', border: '1px solid #3A362C',
+                }}>
+                  <BracketBoard
+                    matches={matches}
+                    totalRounds={totalRounds}
+                    currentRound={tournament.current_round || null}
+                    tone="dark"
+                  />
+                </div>
+              )}
+              {/* A 32-player tree is ~2000px tall, and an absolutely positioned
+                  element still extends the document's scrollable area — which
+                  gave the phone a page that scrolled far past its own content.
+                  A zero-height clipping parent takes it out of the scroll while
+                  leaving the tree its natural size for the export to render. */}
+              <div style={narrow
+                ? { position: 'relative', height: 0, overflow: 'hidden' }
+                : undefined}
+                aria-hidden={narrow ? 'true' : undefined}
+              >
+                <div style={narrow
+                  ? { position: 'absolute', top: 0, left: 0, width: 'max-content', pointerEvents: 'none' }
+                  : { overflowX: 'auto' }}
+                >
+                  <BracketTree
+                    matches={matches}
+                    totalRounds={totalRounds}
+                    bracketRef={bracketRef}
+                    tournamentTitle={tournament.title}
+                  />
+                </div>
+              </div>
+            </>
           ) : (
             <p className="ar" style={{ textAlign: 'center', padding: '48px 0', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--ink-3)', fontSize: 15 }}>
               جاري تحميل نتائج FFA لتوليد الـ Bracket…
