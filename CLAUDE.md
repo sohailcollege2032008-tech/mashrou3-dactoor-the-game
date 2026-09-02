@@ -440,3 +440,9 @@ Used in: `UploadQuestionsModal.jsx` (AI tab)
     `is_correct`, `points_earned`, `reaction_ms_server` are `.validate: false`
     and `at` must be RTDB's server timestamp; the server measures reaction time
     from `at - question_started_at`, so never make the client the source of it.
+19. **The honours board is server-computed, and must stay that way.** `_compute_awards`
+    runs when the champion is crowned and reads only fields a client cannot write
+    (`is_correct`, `reaction_ms_server`, the qualifier ranks, the match results).
+    Don't move any of it into the browser — a medal computed from a self-reported
+    number is a medal anyone can mint. New award? Add it there, and add a case to
+    `functions/test_main_pure.py`.

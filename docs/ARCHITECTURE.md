@@ -222,7 +222,14 @@ once-a-minute reconciler that repairs whatever is still stuck.
 6. Duel `finished` → **`on_tournament_duel_status` CF** writes the result onto the match,
    seeds the winner into the next match (**slot chosen by match-number parity**, not by
    which slot happens to be free) and bumps `current_round` when the round is complete.
-7. Final match winner → tournament `finished` + `winner_uid/name`.
+7. Final match winner → tournament `finished` + `winner_uid/name` + **`awards`** — the
+   honours list (`_compute_awards`), written in the same update as the champion so a
+   viewer never sees a finished tournament with an empty honours board. Every entry is
+   derived from a field only the server writes (`is_correct`, `reaction_ms_server`, the
+   qualifier ranks, the match results), so a medal cannot be farmed from a browser:
+   champion, runner-up, top qualifier, fastest correct answer of the whole event, most
+   correct answers, and the biggest seed upset (walkovers excluded — no duel behind them).
+   Rendered by `HonoursBoard` on the live page and on every player's end screen.
 8. **`tournament_reconciler`** (every minute) re-runs any of the above that did not
    happen: missing bracket, overdue launch, frozen duel, unfinalized result, stalled round.
 
@@ -249,6 +256,21 @@ from the lobby for as long as `status === 'registration'` — the moment the rea
 turnout is known. Lowering it deletes the trailing rounds from `round_questions`
 (the panel's `reshapeAssignments`), returning those questions to the side pool.
 Once the bracket exists the cap is locked (`editableTopCut={false}` in `TournamentBracket`).
+
+### What the players and spectators actually see
+- **The qualifier cut line.** `PlayerGameView` reads `actual_top_cut` once per game and
+  shows every player where the last qualifying seat is: in / on the bubble / out, the gap
+  in points either way, and a dashed cut line drawn across the full leaderboard. The
+  qualifier is the tensest part of an event and it used to be played blind — a live rank
+  tells you where you are, not whether you are through.
+- **The pre-match story.** The 5s VS countdown before a knockout match carries each
+  player's seed, how they got here ("فاز على … 6–2", "تأهل بالغياب", "تأهل من التصفيات في
+  المركز 3") and what the winner walks away with. Computed in `TournamentDuelWrapper`
+  (two qualifier docs + the previous round) and passed to `DuelGame` as `vsIntro`; regular
+  duels pass nothing and are unchanged.
+- **The honours board.** See step 7 above.
+- **The live bracket** at `/tournament/:id/live` — one RTDB subscription, no question text,
+  open to any signed-in viewer including eliminated players.
 
 ### Player histories
 - `game_history` entries: `tournament_ffa` (after FFA), `tournament_match` (per match), `tournament_summary` (eliminated players + finalists + champion: `final_result` ∈ champion|finalist|semi_finalist|eliminated_bracket|eliminated_ffa).
@@ -302,7 +324,8 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
   status, scores and the current question NUMBER — never question text — which is what
   makes it safe to show an in-progress match to eliminated players, and what makes a
   live bracket affordable: one RTDB subscription instead of one Firestore read per
-  match per viewer per refresh (63 reads for a 32-player bracket).
+  match per viewer per refresh (63 reads for a 32-player bracket). `meta.awards` carries
+  the honours list once the tournament is finished.
 - `tournament_duels/{tid}/{duelId}`: read by a player of the duel, the host, or anyone when
   the node does not exist yet. **Write at the node itself is the host only** (plus creation
   by whoever declares themselves `host_uid`) — a participant grant there reached

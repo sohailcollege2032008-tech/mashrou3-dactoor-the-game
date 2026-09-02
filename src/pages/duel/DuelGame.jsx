@@ -55,6 +55,71 @@ function PlayerPill({ player, score, align = 'right' }) {
   )
 }
 
+// One side of the pre-match story. Module scope, not a closure inside VsStory —
+// a component created during render is remounted on every pass.
+function StorySide({ side, align }) {
+  return (
+    <div style={{
+      flex: 1, minWidth: 0, textAlign: align,
+      display: 'flex', flexDirection: 'column', gap: 3,
+      alignItems: align === 'right' ? 'flex-end' : 'flex-start',
+    }}>
+      {side?.seed ? (
+        <span className="folio" style={{
+          fontSize: 9, color: 'var(--gold)', border: '1px solid var(--gold)',
+          padding: '1px 6px', letterSpacing: '0.12em',
+        }}>
+          SEED {side.seed}
+        </span>
+      ) : <span />}
+      {side?.path && (
+        <span className="ar" style={{
+          fontFamily: 'var(--sans)', fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.5,
+        }}>
+          {side.path}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ── Pre-match story (tournament duels) ───────────────────────────────────────
+// Five seconds of dead countdown used to be all a player got before a knockout
+// match. This is the same five seconds with the stakes in it: where each of you
+// came from, and what the winner walks away with.
+function VsStory({ intro, myUid, oppUid }) {
+  if (!intro) return null
+  const mine = intro.sides?.[myUid]
+  const theirs = oppUid ? intro.sides?.[oppUid] : null
+  if (!mine && !theirs && !intro.stake) return null
+
+  return (
+    <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Left column is MINE, to sit under my own pill — the VS row above is
+          laid out left-to-right (me, VS, them), so mirroring this block would
+          put each player's seed under the other one's name. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <StorySide side={mine} align="left" />
+        <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--rule)' }} />
+        <StorySide side={theirs} align="right" />
+      </div>
+      {intro.stake && (
+        <div style={{
+          textAlign: 'center', padding: '6px 10px',
+          borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)',
+          background: 'color-mix(in srgb, var(--gold) 6%, transparent)',
+        }}>
+          <span className="ar" style={{
+            fontFamily: 'var(--serif)', fontSize: 13, fontWeight: 500, color: 'var(--gold)',
+          }}>
+            {intro.stake}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Timer bar (thin ink rule) ─────────────────────────────────────────────────
 function TimerBar({ pct }) {
   const color = pct > 0.5 ? 'var(--ink)' : pct > 0.25 ? 'var(--gold)' : 'var(--alert)'
@@ -85,6 +150,7 @@ export default function DuelGame({
   duelIdOverride,
   isObserver        = false,
   tournamentBadge   = null,
+  vsIntro           = null,
 } = {}) {
   const { duelId: duelIdParam } = useParams()
   const duelId  = duelIdOverride || duelIdParam
@@ -606,6 +672,8 @@ export default function DuelGame({
           <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>VS</span>
           <PlayerPill player={opponentPlayer} score={0} align="left" />
         </div>
+
+        <VsStory intro={vsIntro} myUid={uid} oppUid={opponentUid} />
 
         {/* Round label */}
         {roundLabel && (

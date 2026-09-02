@@ -20,6 +20,7 @@ import { useServerClock } from '../../hooks/useServerClock'
 import { Loader2, Trophy, ArrowRight, Radio } from 'lucide-react'
 import { motion } from 'framer-motion'
 import confetti from 'canvas-confetti'
+import HonoursBoard from '../../components/tournament/HonoursBoard'
 
 function roundName(round, totalRounds) {
   if (!totalRounds) return `الجولة ${round}`
@@ -506,6 +507,13 @@ export default function TournamentLive() {
               {meta.winner_name}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Honours */}
+      {meta?.status === 'finished' && meta?.awards?.length > 0 && (
+        <div style={{ padding: '16px 16px 0' }}>
+          <HonoursBoard awards={meta.awards} myUid={uid} />
         </div>
       )}
 

@@ -254,6 +254,7 @@ export default function TournamentDuelWrapper() {
   const [autoNavSeconds, setAutoNavSeconds] = useState(null)
   const [nextOpponent,   setNextOpponent]   = useState(null)
   const [settling,       setSettling]       = useState(false)
+  const [vsIntro,        setVsIntro]        = useState(null)
 
   // Live subscription rather than a single read: arriving a moment before the
   // duel_id is written used to dead-end on "لم تبدأ المباراة بعد" with no retry.
@@ -315,6 +316,66 @@ export default function TournamentDuelWrapper() {
       .catch(() => { if (!cancelled) setNextOpponent(null) })
     return () => { cancelled = true }
   }, [matchResult, match, tournamentId])
+
+  // ── The story the players get during the 5s VS countdown ──────────────────
+  // Where each of them came from and what the winner walks away with. Read once
+  // per match: the two qualifier results, and the bracket for the round before
+  // this one.
+  useEffect(() => {
+    if (!ready || !match || !tournament) return
+    const uidA = match.player_a_uid
+    const uidB = match.player_b_uid
+    if (!uidA || !uidB) return
+    let cancelled = false
+
+    const run = async () => {
+      const [ffaA, ffaB, allMatches] = await Promise.all([
+        getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uidA)).catch(() => null),
+        getDoc(doc(db, 'tournaments', tournamentId, 'ffa_results', uidB)).catch(() => null),
+        (match.round || 1) > 1
+          ? getDocs(collection(db, 'tournaments', tournamentId, 'bracket_matches')).catch(() => null)
+          : Promise.resolve(null),
+      ])
+      if (cancelled) return
+
+      const prev = allMatches
+        ? allMatches.docs.map(d => d.data())
+            .filter(m => m.status === 'finished' && (m.round || 1) === (match.round || 1) - 1)
+        : []
+
+      const pathFor = (playerUid, ffaSnap) => {
+        const won = prev.find(m => m.winner_uid === playerUid)
+        if (won) {
+          const isA   = won.player_a_uid === playerUid
+          const oppNm = (isA ? won.player_b_name : won.player_a_name) || 'خصمه'
+          if (won.forced_by_host) return `تأهل بالغياب أمام ${oppNm}`
+          const mine  = (isA ? won.player_a_score : won.player_b_score) ?? 0
+          const other = (isA ? won.player_b_score : won.player_a_score) ?? 0
+          const how = won.tie_broken_by === 'speed' ? ' بالسرعة'
+            : won.tie_broken_by === 'ffa_rank' ? ' بترتيب التصفيات' : ''
+          return `فاز على ${oppNm} ${mine}–${other}${how}`
+        }
+        const rank = ffaSnap?.exists() ? ffaSnap.data().rank : null
+        return rank ? `تأهل من التصفيات في المركز ${rank}` : null
+      }
+
+      const seedOf = snap => (snap?.exists() ? snap.data().rank : null) || null
+      const nextLabel = getRoundLabel((match.round || 1) + 1, tournament.total_rounds)
+
+      setVsIntro({
+        stake: !match.next_match_id
+          ? 'الفايز بطل البطولة'
+          : `الفايز يروح ${nextLabel}`,
+        sides: {
+          [uidA]: { seed: seedOf(ffaA), path: pathFor(uidA, ffaA) },
+          [uidB]: { seed: seedOf(ffaB), path: pathFor(uidB, ffaB) },
+        },
+      })
+    }
+
+    run().catch(() => {})
+    return () => { cancelled = true }
+  }, [ready, match, tournament, tournamentId])
 
   const uid = session?.uid
   const isHostOrOwner = ready && tournament &&
@@ -698,6 +759,7 @@ export default function TournamentDuelWrapper() {
       duelIdOverride={duelId}
       isObserver={false}
       tournamentBadge={badge}
+      vsIntro={vsIntro}
     />
   )
 }

@@ -71,6 +71,7 @@ def _mirror_meta(tournament_id: str, tourn: dict) -> None:
             "actual_top_cut":   tourn.get("actual_top_cut") or 0,
             "winner_uid":       tourn.get("winner_uid") or None,
             "winner_name":      tourn.get("winner_name") or None,
+            "awards":           tourn.get("awards") or None,
             "host_id":          tourn.get("host_id") or None,
             "phase_started_at": tourn.get("phase_started_at") or None,
             "round_break_time": tourn.get("round_break_time") or 0,
@@ -1311,6 +1312,134 @@ def _resolve_winner(fs, tournament_id: str, duel: dict, match: dict):
     return winner, (uid_b if winner == uid_a else uid_a), "speed"
 
 
+def _answer_rows(tournament_id: str, matches: list):
+    """
+    Every scored answer of the tournament, as (match, uid, answer) rows.
+
+    Reads `answers` per match rather than the whole `tournament_duels/{tid}`
+    subtree, so the question text never has to come down just to count medals.
+    """
+    for m in matches:
+        duel_id = m.get("duel_id") or m.get("match_id")
+        if not duel_id:
+            continue
+        answers = admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}/answers").get()
+        if not isinstance(answers, (dict, list)):
+            continue
+        per_q = answers.values() if isinstance(answers, dict) else answers
+        for q in per_q:
+            if not isinstance(q, dict):
+                continue
+            for uid, ans in q.items():
+                if uid == "correct_reveal" or not isinstance(ans, dict):
+                    continue
+                yield m, uid, ans
+
+
+def _ar_count(n: int, one: str, two: str, few: str, many: str) -> str:
+    """Arabic counts 3-10 as a plural and 11+ as a singular. 6 إجابات, not 6 إجابة."""
+    if n == 1:
+        return one
+    if n == 2:
+        return two
+    return few if 3 <= n <= 10 else many
+
+
+def _compute_awards(fs, tournament_id: str, matches: list, tourn: dict) -> list:
+    """
+    The honours list, built from what actually happened.
+
+    Every input is a field only the server writes — `is_correct`,
+    `reaction_ms_server`, the qualifier ranks, the match results — so an award
+    cannot be farmed by a tab. Each entry is {key, uid, name, value}; the labels
+    live in the client, the facts live here.
+    """
+    tourn_ref = fs.collection("tournaments").document(tournament_id)
+    try:
+        ffa = {d.id: (d.to_dict() or {}) for d in tourn_ref.collection("ffa_results").get()}
+    except Exception:                                         # noqa: BLE001
+        ffa = {}
+
+    names = {uid: (v.get("nickname") or "لاعب") for uid, v in ffa.items()}
+    for m in matches:
+        for slot in ("a", "b"):
+            uid = m.get(f"player_{slot}_uid")
+            if uid and m.get(f"player_{slot}_name"):
+                names.setdefault(uid, m[f"player_{slot}_name"])
+    seeds = {uid: v.get("rank") for uid, v in ffa.items() if v.get("rank")}
+
+    def name(uid):
+        return names.get(uid) or "لاعب"
+
+    awards = []
+    total_rounds = tourn.get("total_rounds") or 0
+    final = next((m for m in matches
+                  if (m.get("round") or 1) == total_rounds and m.get("winner_uid")), None)
+
+    if final:
+        champ = final["winner_uid"]
+        awards.append({"key": "champion", "uid": champ, "name": name(champ), "value": ""})
+        runner = final.get("loser_uid") or (
+            final.get("player_b_uid") if champ == final.get("player_a_uid")
+            else final.get("player_a_uid"))
+        if runner:
+            awards.append({"key": "runner_up", "uid": runner, "name": name(runner), "value": ""})
+
+    # Top of the qualifier — the seat everyone was chasing.
+    top_seed = min(seeds.items(), key=lambda kv: kv[1], default=None)
+    if top_seed:
+        uid = top_seed[0]
+        score = (ffa.get(uid) or {}).get("score")
+        awards.append({"key": "qualifier", "uid": uid, "name": name(uid),
+                       "value": (f"{score} " + _ar_count(score, "نقطة", "نقطتين",
+                                                         "نقاط", "نقطة"))
+                       if score is not None else ""})
+
+    fastest = None          # (ms, uid)
+    correct_count = {}
+    for _m, uid, ans in _answer_rows(tournament_id, matches):
+        if not ans.get("is_correct"):
+            continue
+        correct_count[uid] = correct_count.get(uid, 0) + 1
+        ms = ans.get("reaction_ms_server")
+        if not isinstance(ms, (int, float)):
+            ms = ans.get("reaction_time_ms")
+        if isinstance(ms, (int, float)) and MIN_REACTION_MS <= ms <= MAX_REACTION_MS:
+            if fastest is None or ms < fastest[0]:
+                fastest = (int(ms), uid)
+
+    if fastest:
+        awards.append({"key": "fastest", "uid": fastest[1], "name": name(fastest[1]),
+                       "value": f"{fastest[0] / 1000:.2f} ثانية"})
+
+    if correct_count:
+        uid, n = max(correct_count.items(), key=lambda kv: kv[1])
+        awards.append({"key": "sniper", "uid": uid, "name": name(uid),
+                       "value": f"{n} " + _ar_count(
+                           n, "إجابة صحيحة",
+                           "إجابتين صحيحتين",
+                           "إجابات صحيحة",
+                           "إجابة صحيحة")})
+
+    # The biggest upset: the lowest seed that took out the highest one.
+    upset = None            # (gap, winner, loser)
+    for m in matches:
+        w, l = m.get("winner_uid"), m.get("loser_uid")
+        if not w or not l or m.get("forced_by_host"):
+            continue
+        sw, sl = seeds.get(w), seeds.get(l)
+        if not sw or not sl or sw <= sl:
+            continue
+        gap = sw - sl
+        if upset is None or gap > upset[0]:
+            upset = (gap, w, l)
+    if upset:
+        _gap, w, l = upset
+        awards.append({"key": "upset", "uid": w, "name": name(w),
+                       "value": f"أطاح بصاحب المركز {seeds.get(l)}"})
+
+    return awards
+
 def _progress_round(fs, tournament_id: str, tourn: dict, rnd: int) -> None:
     """When every match of `rnd` is done: crown the champion or open the next round."""
     tourn_ref = fs.collection("tournaments").document(tournament_id)
@@ -1330,8 +1459,20 @@ def _progress_round(fs, tournament_id: str, tourn: dict, rnd: int) -> None:
             winner = final["winner_uid"]
             name = final.get("player_a_name") if winner == final.get("player_a_uid") \
                 else final.get("player_b_name")
-            tourn_ref.update({"status": "finished", "winner_uid": winner, "winner_name": name})
-            logger.info("[CF-BR] tournament %s finished — champion %s", tournament_id, name)
+            patch = {"status": "finished", "winner_uid": winner, "winner_name": name}
+            # The honours list is written with the champion, in the same update, so
+            # a viewer never sees a finished tournament with no honours and then
+            # watches them pop in a second later.
+            try:
+                awards = _compute_awards(fs, tournament_id, all_matches,
+                                         {**tourn, "winner_uid": winner})
+                if awards:
+                    patch["awards"] = awards
+            except Exception as e:                            # noqa: BLE001
+                logger.exception("[CF-BR] awards failed for %s: %s", tournament_id, e)
+            tourn_ref.update(patch)
+            logger.info("[CF-BR] tournament %s finished — champion %s, %d awards",
+                        tournament_id, name, len(patch.get("awards") or []))
         return
 
     # Open the next round.  current_round is bumped first so the launcher sees a

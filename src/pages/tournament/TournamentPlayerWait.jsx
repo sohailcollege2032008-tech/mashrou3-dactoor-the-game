@@ -7,6 +7,7 @@ import { ref as rtdbRef, onValue as rtdbOnValue, get as rtdbGet, set as rtdbSet 
 import { db, rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import BracketTree from '../../components/tournament/BracketTree'
+import HonoursBoard from '../../components/tournament/HonoursBoard'
 import { soundManager } from '../../utils/soundManager'
 import SoundToggle from '../../components/common/SoundToggle'
 import { Loader2, Trophy, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
@@ -563,14 +564,14 @@ export default function TournamentPlayerWait() {
                 style={{
                   padding: '13px 28px', background: 'var(--ink)', color: 'var(--paper)',
                   border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                  marginBottom: 12,
+                  display: 'block', margin: '0 auto 12px',
                 }}
               >
                 شاهد شجرة البطولة
               </button>
               <button
                 onClick={() => navigate('/player/dashboard')}
-                style={{ background: 'none', border: 'none', color: 'var(--ink-3)', fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+                style={{ background: 'none', border: 'none', color: 'var(--ink-3)', fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline', display: 'block', margin: '0 auto' }}
               >
                 عودة للرئيسية
               </button>
@@ -599,14 +600,14 @@ export default function TournamentPlayerWait() {
                 style={{
                   padding: '13px 28px', background: 'var(--ink)', color: 'var(--paper)',
                   border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                  marginBottom: 12,
+                  display: 'block', margin: '0 auto 12px',
                 }}
               >
                 شاهد شجرة البطولة
               </button>
               <button
                 onClick={() => navigate('/player/dashboard')}
-                style={{ background: 'none', border: 'none', color: 'var(--ink-3)', fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+                style={{ background: 'none', border: 'none', color: 'var(--ink-3)', fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline', display: 'block', margin: '0 auto' }}
               >
                 عودة للرئيسية
               </button>
@@ -648,14 +649,14 @@ export default function TournamentPlayerWait() {
                 style={{
                   padding: '13px 28px', background: 'var(--ink)', color: 'var(--paper)',
                   border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                  marginBottom: 12,
+                  display: 'block', margin: '0 auto 12px',
                 }}
               >
                 شاهد شجرة البطولة
               </button>
               <button
                 onClick={() => navigate('/player/dashboard')}
-                style={{ background: 'none', border: 'none', color: 'var(--ink-3)', fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+                style={{ background: 'none', border: 'none', color: 'var(--ink-3)', fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline', display: 'block', margin: '0 auto' }}
               >
                 عودة للرئيسية
               </button>
@@ -685,18 +686,25 @@ export default function TournamentPlayerWait() {
                 style={{
                   padding: '13px 28px', background: 'var(--ink)', color: 'var(--paper)',
                   border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                  marginBottom: 12,
+                  display: 'block', margin: '0 auto 12px',
                 }}
               >
                 شاهد شجرة البطولة
               </button>
               <button
                 onClick={() => navigate('/player/dashboard')}
-                style={{ background: 'none', border: 'none', color: 'var(--ink-3)', fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+                style={{ background: 'none', border: 'none', color: 'var(--ink-3)', fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline', display: 'block', margin: '0 auto' }}
               >
                 عودة للرئيسية
               </button>
             </>
+          )}
+
+          {/* ── HONOURS — every end state passes through here ────────── */}
+          {isFinished && tournament.awards?.length > 0 && (
+            <div style={{ marginBottom: 28 }}>
+              <HonoursBoard awards={tournament.awards} myUid={uid} compact />
+            </div>
           )}
 
           {/* ── BRACKET — match card ─────────────────────────────────── */}

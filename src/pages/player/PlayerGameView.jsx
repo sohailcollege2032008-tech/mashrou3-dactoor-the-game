@@ -17,7 +17,7 @@ import { soundManager } from '../../utils/soundManager'
 import { useUnattendedGameRunner } from '../../hooks/useUnattendedGameRunner'
 
 // ── Full live leaderboard (bottom sheet, players see everyone's standings) ───
-function FullLeaderboard({ players, myId, onClose }) {
+function FullLeaderboard({ players, myId, onClose, cutSize = null }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(26,26,26,0.55)' }} onClick={onClose} />
@@ -43,8 +43,11 @@ function FullLeaderboard({ players, myId, onClose }) {
           {players.map((p, i) => {
             const isMe = p.user_id === myId
             const rankColor = i === 0 ? 'var(--gold)' : i === 1 ? 'var(--ink-3)' : i === 2 ? 'var(--burgundy)' : 'var(--ink-4)'
+            // The line every qualifier is actually playing against.
+            const cutHere = cutSize && i + 1 === cutSize && players.length > cutSize
             return (
-              <div key={p.user_id} style={{
+              <React.Fragment key={p.user_id}>
+              <div style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '10px 20px', borderBottom: '1px solid var(--rule)',
                 background: isMe ? 'var(--paper-2)' : 'var(--paper)',
@@ -72,10 +75,90 @@ function FullLeaderboard({ players, myId, onClose }) {
                 <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>{p.score}</span>
                 <span className="folio" style={{ fontSize: 9, color: 'var(--ink-4)', minWidth: 40, textAlign: 'left' }}>{p.correct_count}✓</span>
               </div>
+              {cutHere && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '4px 20px',
+                  background: 'color-mix(in srgb, var(--gold) 10%, var(--paper))',
+                  borderTop: '2px dashed var(--gold)', borderBottom: '2px dashed var(--gold)',
+                }}>
+                  <span className="folio" style={{ fontSize: 9, color: 'var(--gold)', letterSpacing: '0.18em' }}>
+                    CUT LINE
+                  </span>
+                  <span className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 700, color: 'var(--gold)' }}>
+                    خط التأهل — {cutSize} مقاعد
+                  </span>
+                </div>
+              )}
+              </React.Fragment>
             )
           })}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Cut-line status ──────────────────────────────────────────────────────────
+// The qualifier is the tensest part of the whole event and a player used to
+// play it blind: a live rank tells you where you are, not whether you are IN.
+// This is the number they actually care about — the seat, and the gap to it.
+// 6 نقاط, not 6 نقطة — Arabic counts 3-10 as a plural.
+function pts(n) {
+  if (n === 1) return 'نقطة'
+  if (n === 2) return 'نقطتين'
+  return n >= 3 && n <= 10 ? 'نقاط' : 'نقطة'
+}
+
+function CutStatus({ players, myId, cutSize }) {
+  if (!cutSize || !myId) return null
+  if (!players || players.length <= cutSize) return null
+
+  const myIdx = players.findIndex(p => p.user_id === myId)
+  if (myIdx < 0) return null
+
+  const myRank   = myIdx + 1
+  const myScore  = players[myIdx]?.score ?? 0
+  const inCut    = myRank <= cutSize
+  const lastIn   = players[cutSize - 1]
+  const firstOut = players[cutSize]
+  const margin   = inCut
+    ? myScore - (firstOut?.score ?? 0)          // how much cushion I am sitting on
+    : (lastIn?.score ?? 0) - myScore            // how far I am from the last seat
+
+  const onTheBubble = inCut && margin <= 0
+  const tone = !inCut ? 'var(--alert)' : onTheBubble ? 'var(--gold)' : 'var(--success)'
+  const label = !inCut ? 'خارج التأهل' : onTheBubble ? 'على خط التأهل' : 'داخل التأهل'
+  // Levelling with the last seat is not taking it — a tie goes to the fastest.
+  // So the number shown is the one that actually overtakes them.
+  const need = margin + 1
+  const detail = !inCut
+    ? (margin <= 0 ? 'فارق نقاط صفر — الأسرع هو اللي يتأهل' : `محتاج ${need} ${pts(need)} تخطف المقعد ${cutSize}`)
+    : onTheBubble
+      ? 'أي نقطة لأي حد بره تطلعك — اجمع'
+      : `بفارق ${margin} ${pts(margin)} عن أول واحد بره`
+
+  return (
+    <div dir="rtl" style={{
+      width: '100%', maxWidth: 640,
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '7px 12px', border: `1px solid ${tone}`, borderRight: `3px solid ${tone}`,
+      background: `color-mix(in srgb, ${tone} 7%, var(--paper))`,
+    }}>
+      <span className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 700, color: tone }}>
+        {label}
+      </span>
+      <span style={{
+        fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: tone,
+        borderRight: `1px solid ${tone}`, paddingRight: 10,
+      }}>
+        #{myRank}<span style={{ fontSize: 9, opacity: 0.7 }}>/{players.length}</span>
+      </span>
+      <span className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--ink-3)', flex: 1, minWidth: 140 }}>
+        {detail}
+      </span>
+      <span className="folio" style={{ fontSize: 9, color: 'var(--ink-4)' }}>
+        {cutSize} SEATS
+      </span>
     </div>
   )
 }
@@ -199,6 +282,7 @@ export default function PlayerGameView() {
   const [revealedResult, setRevealedResult] = useState(null)
   const [hostOnline, setHostOnline]         = useState(true)
   const [showFullBoard, setShowFullBoard]   = useState(false)
+  const [cutSize, setCutSize]               = useState(null)
 
   const [autoNavCountdown, setAutoNavCountdown] = useState(null)
 
@@ -376,6 +460,23 @@ export default function PlayerGameView() {
     })
     return () => unsub()
   }, [roomId, session])
+
+  // How many seats this qualifier is actually handing out. One read, once: the
+  // number is fixed at launch (actual_top_cut shrinks to the turnout, never grows).
+  useEffect(() => {
+    const tid = room?.tournament_id
+    if (!tid || cutSize !== null) return
+    let cancelled = false
+    getDoc(doc(db, 'tournaments', tid))
+      .then(snap => {
+        if (cancelled || !snap.exists()) return
+        const t = snap.data()
+        const seats = t.actual_top_cut || t.top_cut || null
+        if (seats) setCutSize(seats)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [room?.tournament_id, cutSize])
 
   useEffect(() => {
     if (!session) return
@@ -672,7 +773,7 @@ export default function PlayerGameView() {
 
       {/* ── Full leaderboard modal ───────────────────────────────────── */}
       {showFullBoard && (
-        <FullLeaderboard players={sortedPlayers} myId={myId} onClose={() => setShowFullBoard(false)} />
+        <FullLeaderboard players={sortedPlayers} myId={myId} cutSize={cutSize} onClose={() => setShowFullBoard(false)} />
       )}
 
       {/* ── Host offline banner ───────────────────────────────────────── */}
@@ -792,6 +893,8 @@ export default function PlayerGameView() {
 
             <MiniLeaderboard top5={liveTop5} myId={myId} myRank={liveMyRank ?? player?.rank} myScore={player?.score} myNickname={player?.nickname} />
 
+            <CutStatus players={sortedPlayers} myId={myId} cutSize={cutSize} />
+
             {/* Full leaderboard toggle */}
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <button
@@ -902,6 +1005,8 @@ export default function PlayerGameView() {
           <div style={{ width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 12 }}>
 
             <MiniLeaderboard top5={liveTop5} myId={myId} myRank={liveMyRank ?? player?.rank} myScore={player?.score} myNickname={player?.nickname} />
+
+            <CutStatus players={sortedPlayers} myId={myId} cutSize={cutSize} />
 
             {/* Full leaderboard toggle */}
             <div style={{ display: 'flex', justifyContent: 'center' }}>

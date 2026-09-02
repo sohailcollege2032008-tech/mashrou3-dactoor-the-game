@@ -131,6 +131,123 @@ check("q-for-round: error logged when picked != assigned",
       "; ".join(log_events or ["no log"]))
 main.logger.removeHandler(handler)
 
+# ── _compute_awards ───────────────────────────────────────────────────────────
+# The honours list must come only from fields the server writes. The fakes below
+# stand in for the two reads it makes: the qualifier results, and each match's
+# answers.
+FFA_DOCS = {
+    "A": {"nickname": "أحمد", "rank": 1, "score": 30},
+    "B": {"nickname": "بسمة", "rank": 2, "score": 24},
+    "C": {"nickname": "كريم", "rank": 7, "score": 9},
+    "D": {"nickname": "دينا", "rank": 8, "score": 8},
+}
+
+class AwFfaDoc:
+    def __init__(self, uid, data):
+        self.id = uid
+        self._d = data
+    def to_dict(self):
+        return self._d
+
+class AwFfaCol:
+    def get(self):
+        return [AwFfaDoc(u, d) for u, d in FFA_DOCS.items()]
+
+class AwTournDoc:
+    def collection(self, name):
+        assert name == "ffa_results", name
+        return AwFfaCol()
+
+class AwCol:
+    def document(self, _id):
+        return AwTournDoc()
+
+class AwFs:
+    def collection(self, _name):
+        return AwCol()
+
+# r1m1: seed 8 (D) knocks out seed 1 (A) — the upset.
+# r1m2: B beats C normally.  r2m1: D beats B in the final.
+AW_MATCHES = [
+    {"match_id": "r1m1", "round": 1, "status": "finished",
+     "player_a_uid": "A", "player_a_name": "أحمد", "player_b_uid": "D", "player_b_name": "دينا",
+     "winner_uid": "D", "loser_uid": "A"},
+    {"match_id": "r1m2", "round": 1, "status": "finished",
+     "player_a_uid": "B", "player_a_name": "بسمة", "player_b_uid": "C", "player_b_name": "كريم",
+     "winner_uid": "B", "loser_uid": "C"},
+    {"match_id": "r2m1", "round": 2, "status": "finished",
+     "player_a_uid": "D", "player_a_name": "دينا", "player_b_uid": "B", "player_b_name": "بسمة",
+     "winner_uid": "D", "loser_uid": "B"},
+]
+
+AW_ANSWERS = {
+    "r1m1": {
+        "0": {"correct_reveal": 1,
+              "A": {"is_correct": True,  "reaction_ms_server": 4000, "reaction_time_ms": 50},
+              "D": {"is_correct": True,  "reaction_ms_server": 900}},
+        "1": {"correct_reveal": 2,
+              "A": {"is_correct": False, "reaction_ms_server": 1200},
+              "D": {"is_correct": True,  "reaction_ms_server": 640}},
+    },
+    "r1m2": {
+        "0": {"correct_reveal": 0,
+              "B": {"is_correct": True, "reaction_ms_server": 1500},
+              "C": {"is_correct": True, "reaction_ms_server": 20}},   # below the floor: ignored
+    },
+    "r2m1": {
+        "0": {"correct_reveal": 3,
+              "D": {"is_correct": True, "reaction_ms_server": 1100},
+              "B": {"is_correct": True, "reaction_ms_server": 1300}},
+    },
+}
+
+class AwRef:
+    def __init__(self, path):
+        self.path = path
+    def get(self):
+        for mid, data in AW_ANSWERS.items():
+            if self.path.endswith(f"/{mid}/answers"):
+                return data
+        return None
+
+_real_reference = main.admin_db.reference
+main.admin_db.reference = lambda path: AwRef(path)
+try:
+    aw = main._compute_awards(AwFs(), "TID", AW_MATCHES, {"total_rounds": 2})
+    aw_walkover = main._compute_awards(
+        AwFs(), "TID",
+        [{**AW_MATCHES[0], "forced_by_host": True}], {"total_rounds": 2})
+finally:
+    main.admin_db.reference = _real_reference
+
+by_key = {a["key"]: a for a in aw}
+check("awards: champion is the winner of the final",
+      by_key.get("champion", {}).get("uid") == "D", f"got {by_key.get('champion')}")
+check("awards: runner-up is the other finalist",
+      by_key.get("runner_up", {}).get("uid") == "B", f"got {by_key.get('runner_up')}")
+check("awards: top qualifier is seed 1",
+      by_key.get("qualifier", {}).get("uid") == "A"
+      and by_key["qualifier"]["value"] == "30 نقطة", f"got {by_key.get('qualifier')}")
+check("awards: Arabic counts 3-10 as a plural",
+      main._ar_count(6, "إجابة", "إجابتين", "إجابات", "إجابة") == "إجابات"
+      and main._ar_count(1, "نقطة", "نقطتين", "نقاط", "نقطة") == "نقطة"
+      and main._ar_count(2, "نقطة", "نقطتين", "نقاط", "نقطة") == "نقطتين"
+      and main._ar_count(30, "نقطة", "نقطتين", "نقاط", "نقطة") == "نقطة",
+      "1/2/6/30")
+check("awards: fastest ignores a sub-floor time and uses the server measurement",
+      by_key.get("fastest", {}).get("uid") == "D"
+      and by_key["fastest"]["value"] == "0.64 ثانية", f"got {by_key.get('fastest')}")
+check("awards: sniper counts only correct answers",
+      by_key.get("sniper", {}).get("uid") == "D"
+      and by_key["sniper"]["value"] == "3 إجابات صحيحة", f"got {by_key.get('sniper')}")
+check("awards: upset is the lowest seed beating the highest",
+      by_key.get("upset", {}).get("uid") == "D"
+      and "المركز 1" in by_key["upset"]["value"], f"got {by_key.get('upset')}")
+
+check("awards: a walkover is not an upset",
+      not any(a["key"] == "upset" for a in aw_walkover),
+      f"got {[a['key'] for a in aw_walkover]}")
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 print("\n===== SUMMARY =====")
 failed = 0
