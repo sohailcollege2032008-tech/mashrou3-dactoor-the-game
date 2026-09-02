@@ -12,7 +12,7 @@ import {
   doc, onSnapshot, updateDoc, getDoc,
   collection, writeBatch
 } from 'firebase/firestore'
-import { ref as rtdbRef, onValue, update, runTransaction } from 'firebase/database'
+import { ref as rtdbRef, onValue, update, remove, runTransaction } from 'firebase/database'
 import { db, rtdb } from '../../lib/firebase'
 import {
   generateBracketMatches, getQuestionsForRound
@@ -77,6 +77,8 @@ export default function TournamentBracket() {
   const [countdownLabel, setCountdownLabel] = useState('')
   const [countdownMs, setCountdownMs] = useState(0)
   const [error,       setError]       = useState(null)
+  const [announceText, setAnnounceText] = useState('')
+  const [announcing,   setAnnouncing]   = useState(false)
   const [showQPanel,      setShowQPanel]      = useState(false)
   const [showEndConfirm,  setShowEndConfirm]  = useState(false)
   const [ending,          setEnding]          = useState(false)
@@ -190,9 +192,13 @@ export default function TournamentBracket() {
     if (match?.launch_after) return match.launch_after
     const start = tournament.phase_started_at || 0
     if (!start) return 0
-    const wait = (match?.round || 1) === 1
+    const rnd   = match?.round || 1
+    const total = tournament.total_rounds || 0
+    const wait  = rnd === 1
       ? (tournament.phase_transition_wait || 0)
-      : (tournament.round_break_time || 0)
+      : (total && rnd === total)
+        ? (tournament.final_break_time || tournament.round_break_time || 0)
+        : (tournament.round_break_time || 0)
     return start + wait
   }, [tournament])
 
@@ -201,9 +207,12 @@ export default function TournamentBracket() {
     if (!tournament || tournament.status !== 'bracket') return 0
     const start = tournament.phase_started_at || 0
     if (!start) return 0
-    const wait = currentRoundNo === 1
+    const total = tournament.total_rounds || 0
+    const wait  = currentRoundNo === 1
       ? (tournament.phase_transition_wait || 0)
-      : (tournament.round_break_time || 0)
+      : (total && currentRoundNo === total)
+        ? (tournament.final_break_time || tournament.round_break_time || 0)
+        : (tournament.round_break_time || 0)
     return Math.max(0, start + wait - nowTick)
   })()
 
@@ -550,6 +559,25 @@ export default function TournamentBracket() {
     }
   }, [tournament, matches, tournamentId, launchDueAt])
 
+  // One line from the host to everyone watching the live tree. Written to the
+  // spectator mirror (the only node players are subscribed to), where the rule
+  // lets the tournament's own host — and nobody else — write it.
+  const postAnnouncement = useCallback(async (text) => {
+    if (announcing) return
+    setAnnouncing(true)
+    const path = `bracket_live/${tournamentId}/meta/announcement`
+    try {
+      if (text) await update(rtdbRef(rtdb, path), { text: text.slice(0, 200), at: Date.now() })
+      else      await remove(rtdbRef(rtdb, path))
+      setAnnounceText('')
+    } catch (e) {
+      console.error(e)
+      setError(e.message || 'فشل إرسال الإعلان')
+    } finally {
+      setAnnouncing(false)
+    }
+  }, [announcing, tournamentId])
+
   const startRoundNow = useCallback(async () => {
     const now     = Date.now()
     const pending = matches.filter(m =>
@@ -695,6 +723,56 @@ export default function TournamentBracket() {
             </button>
           </div>
         )}
+
+        {/* Announcement — the host's only channel to everyone at once. Lands on
+            the live tree, which is where players sit during a break. */}
+        <div style={{
+          marginTop: 16, border: '1px solid var(--rule)', padding: '12px 14px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+            <span className="folio" style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--ink-4)' }}>
+              إعلان للاعبين
+            </span>
+            <button
+              onClick={() => postAnnouncement('')}
+              disabled={announcing}
+              style={{
+                background: 'none', border: 'none', cursor: announcing ? 'not-allowed' : 'pointer',
+                fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink-4)', letterSpacing: '0.06em',
+              }}
+            >
+              CLEAR
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={announceText}
+              onChange={e => setAnnounceText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && announceText.trim()) postAnnouncement(announceText.trim()) }}
+              maxLength={200}
+              placeholder="مثال: استراحة ٥ دقايق — استنونا"
+              className="ar"
+              style={{
+                flex: 1, fontFamily: 'var(--arabic)', fontSize: 13, padding: '8px 12px',
+                background: 'var(--paper-2)', border: '1px solid var(--rule)',
+                borderRadius: 0, color: 'var(--ink)', outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            <button
+              onClick={() => announceText.trim() && postAnnouncement(announceText.trim())}
+              disabled={announcing || !announceText.trim()}
+              style={{
+                padding: '8px 16px', border: '1px solid var(--ink)', borderRadius: 0,
+                background: announceText.trim() ? 'var(--ink)' : 'transparent',
+                color: announceText.trim() ? 'var(--paper)' : 'var(--ink-4)',
+                fontFamily: 'var(--sans)', fontSize: 13,
+                cursor: announcing || !announceText.trim() ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <span className="ar">إرسال</span>
+            </button>
+          </div>
+        </div>
 
         {/* Bracket tree */}
         <div style={{ marginTop: 24, marginBottom: 24 }}>

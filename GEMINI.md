@@ -328,6 +328,7 @@ Main branch (`main`) is stable — do NOT push breaking changes there.
 - `tournament_presence/{tournamentId}/{uid}`: read by any auth, write by owner uid only
 - `tournament_meta/{tournamentId}`: read any auth, **write denied** (dead path — nothing reads or writes it)
 - `bracket_live/{tournamentId}`: read any auth, **write denied** — CF-written spectator mirror for the live bracket page (`/tournament/:id/live`); carries no question text
+- `bracket_live/{tournamentId}/meta/announcement`: **write by that tournament's host only** (checked against the mirrored `meta.host_id`), `text` capped at 200 chars — the host's one-line channel to everyone watching
 
 ### Deploy commands
 ```bash

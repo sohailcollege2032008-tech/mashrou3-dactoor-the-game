@@ -130,7 +130,15 @@
     "bracket_live": {
       "$tournamentId": {
         ".read":  "auth != null",
-        ".write": "false"
+        ".write": "false",
+        "meta": {
+          "announcement": {
+            ".write": "auth != null && root.child('bracket_live').child($tournamentId).child('meta').child('host_id').val() == auth.uid",
+            "text": { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "at":   { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        }
       }
     },
     "tournament_meta": {

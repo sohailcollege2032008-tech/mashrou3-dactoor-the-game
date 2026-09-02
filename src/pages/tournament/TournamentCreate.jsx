@@ -15,6 +15,7 @@ const DEFAULTS = {
   duelQuestionDuration:  30,
   phaseTransitionWait:   60,
   roundBreakTime:        30,
+  finalBreakTime:        90,
 }
 
 function defaultScheduledDate() {
@@ -124,6 +125,7 @@ export default function TournamentCreate() {
         duel_question_duration: config.duelQuestionDuration * 1000,
         phase_transition_wait:  config.phaseTransitionWait  * 1000,
         round_break_time:       config.roundBreakTime       * 1000,
+        final_break_time:       config.finalBreakTime      * 1000,
         scheduled_start_at: (useScheduled && scheduledDate) ? new Date(scheduledDate) : null,
         ffa_room_id:    null,
         current_round:  null,
@@ -272,6 +274,7 @@ export default function TournamentCreate() {
                 { key: 'duelQuestionDuration', label: 'مدة السؤال — 1v1 (ثانية)' },
                 { key: 'phaseTransitionWait',  label: 'انتظار قبل الـ Bracket (ثانية)' },
                 { key: 'roundBreakTime',       label: 'استراحة بين الجولات (ثانية)' },
+                { key: 'finalBreakTime',       label: 'استراحة قبل النهائي (ثانية)' },
               ].map(({ key, label }, i) => (
                 <div key={key} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',

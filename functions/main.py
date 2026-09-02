@@ -70,6 +70,7 @@ def _mirror_meta(tournament_id: str, tourn: dict) -> None:
             "host_id":          tourn.get("host_id") or None,
             "phase_started_at": tourn.get("phase_started_at") or None,
             "round_break_time": tourn.get("round_break_time") or 0,
+            "final_break_time": tourn.get("final_break_time") or 0,
             "updated_at":       _now_ms(),
         })
     except Exception as e:                                    # noqa: BLE001
@@ -730,8 +731,16 @@ def _launch_due_at_ms(tourn: dict, match: dict) -> int:
     start = tourn.get("phase_started_at") or 0
     if not start:
         return 0
-    wait = (tourn.get("phase_transition_wait") or 0) if (match.get("round") or 1) == 1 \
-        else (tourn.get("round_break_time") or 0)
+    rnd   = match.get("round") or 1
+    total = tourn.get("total_rounds") or 0
+    if rnd == 1:
+        wait = tourn.get("phase_transition_wait") or 0
+    elif total and rnd == total:
+        # The final gets its own, longer break — the one moment in a tournament
+        # worth building up to. Falls back to the normal break when unset.
+        wait = tourn.get("final_break_time") or tourn.get("round_break_time") or 0
+    else:
+        wait = tourn.get("round_break_time") or 0
     return int(start) + int(wait)
 
 

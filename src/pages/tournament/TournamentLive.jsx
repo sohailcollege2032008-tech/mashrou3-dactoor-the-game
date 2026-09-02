@@ -142,6 +142,25 @@ function MatchCard({ m, totalRounds, uid }) {
   )
 }
 
+/** A line from the host, shown to everyone watching. Auto-hides after 15
+ *  minutes so a forgotten announcement does not become furniture. */
+function Announcement({ ann, now }) {
+  if (!ann?.text) return null
+  if (ann.at && now - ann.at > 15 * 60 * 1000) return null
+  return (
+    <div style={{
+      border: '1px solid var(--ink)', background: 'var(--ink)', padding: '12px 14px',
+    }}>
+      <p className="folio" style={{ fontSize: 9, letterSpacing: '0.2em', color: 'var(--paper-3)', margin: '0 0 4px' }}>
+        من المنظّم
+      </p>
+      <p className="ar" style={{ fontSize: 14, color: 'var(--paper)', margin: 0, lineHeight: 1.7 }}>
+        {ann.text}
+      </p>
+    </div>
+  )
+}
+
 /** Turns dead air into a stated beat: what the tournament is waiting for. */
 function PaceBar({ label, detail, countdownMs }) {
   const secs = countdownMs != null ? Math.max(0, Math.ceil(countdownMs / 1000)) : null
@@ -342,11 +361,11 @@ export default function TournamentLive() {
     return { label: `${roundName(round, totalRounds)}`, detail: 'الماتشات بتتجهز' }
   }, [meta, matches, totalRounds, now, clockOffset])
 
-  // Tick only while something is actually counting down.
+  // One second while something counts down, otherwise a slow tick that only
+  // exists so an announcement can expire without a reload.
   const isCountingDown = pace?.countdownMs != null
   useEffect(() => {
-    if (!isCountingDown) return
-    const id = setInterval(() => setNow(Date.now()), 1000)
+    const id = setInterval(() => setNow(Date.now()), isCountingDown ? 1000 : 30_000)
     return () => clearInterval(id)
   }, [isCountingDown])
 
@@ -487,6 +506,13 @@ export default function TournamentLive() {
               {meta.winner_name}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* A word from the host */}
+      {meta?.announcement?.text && (
+        <div style={{ padding: '16px 16px 0' }}>
+          <Announcement ann={meta.announcement} now={now} />
         </div>
       )}
 
