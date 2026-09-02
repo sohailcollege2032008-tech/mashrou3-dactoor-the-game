@@ -42,6 +42,7 @@ const TournamentJoin = lazy(() => import('./pages/tournament/TournamentJoin'))
 const TournamentBracket = lazy(() => import('./pages/tournament/TournamentBracket'))
 const TournamentPlayerWait = lazy(() => import('./pages/tournament/TournamentPlayerWait'))
 const TournamentDuelWrapper = lazy(() => import('./pages/tournament/TournamentDuelWrapper'))
+const TournamentLive = lazy(() => import('./pages/tournament/TournamentLive'))
 
 // ── Minimalist Brand-Aligned Route Fallback ────────────────────────────────
 function PageLoader() {
@@ -135,6 +136,7 @@ export default function App() {
             <Route path="/tournament/:tournamentId/bracket" element={<ProtectedRoute allowedRoles={['owner', 'host']}><TournamentBracket /></ProtectedRoute>} />
             <Route path="/tournament/:tournamentId/wait" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentPlayerWait /></ProtectedRoute>} />
             <Route path="/tournament/:tournamentId/duel/:matchId" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentDuelWrapper /></ProtectedRoute>} />
+            <Route path="/tournament/:tournamentId/live" element={<ProtectedRoute allowedRoles={['player', 'host', 'owner']}><TournamentLive /></ProtectedRoute>} />
           </Routes>
         </Suspense>
       </BrowserRouter>

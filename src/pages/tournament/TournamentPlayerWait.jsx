@@ -313,10 +313,10 @@ export default function TournamentPlayerWait() {
   const ffaTableDefaultOpen = justAfterFfa || isFinished
   const ffaTableOpen      = showFfaTable === null ? ffaTableDefaultOpen : showFfaTable
 
-  const openBracket = () => {
-    bracketWillOpenRef.current = true
-    setShowBracket(true)
-  }
+  // Every "watch the bracket" CTA goes to the live tree: it updates by itself,
+  // shows running scores, and costs no Firestore reads. The snapshot overlay
+  // below is kept only for the host's exportable image.
+  const openBracket = () => navigate(`/tournament/${tournamentId}/live`)
 
   if (!tournament) {
     return (

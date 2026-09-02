@@ -280,6 +280,13 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
 - `duels`, `duel_queue`: read/write any auth.
 - `tournament_registrations/{tid}`: read any auth; write only your own `{uid}` entry.
 - `tournament_meta`: read any auth, write denied (unused path).
+- `bracket_live/{tid}`: read any auth, **client writes denied**. Written only by the
+  Cloud Functions (`_mirror_meta` / `_mirror_match` / `_mirror_live` in `functions/main.py`)
+  and read by the public live-bracket page `/tournament/:id/live`. It mirrors names,
+  status, scores and the current question NUMBER — never question text — which is what
+  makes it safe to show an in-progress match to eliminated players, and what makes a
+  live bracket affordable: one RTDB subscription instead of one Firestore read per
+  match per viewer per refresh (63 reads for a 32-player bracket).
 - `tournament_duels/{tid}/{duelId}`: read any auth; write only when the node does not exist
   yet (host/CF launch), or the writer is in `players`, or the writer is `host_uid`. Answer
   writes also require `auth.uid == $userId` and that the writer is a player of that duel.

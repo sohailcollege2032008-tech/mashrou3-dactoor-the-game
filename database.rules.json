@@ -127,6 +127,12 @@
         }
       }
     },
+    "bracket_live": {
+      "$tournamentId": {
+        ".read":  "auth != null",
+        ".write": "false"
+      }
+    },
     "tournament_meta": {
       "$tournamentId": {
         ".read":  "auth != null",

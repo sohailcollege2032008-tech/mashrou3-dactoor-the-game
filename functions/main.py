@@ -33,6 +33,7 @@ initialize_app()
 
 REVEAL_DURATION_MS    = 4_000
 BASE_PATH             = "tournament_duels"
+LIVE_PATH             = "bracket_live"   # public spectator mirror (no question text)
 MIN_REACTION_MS       = 50        # below this = suspiciously fast / clock error
 MAX_REACTION_MS       = 65_000    # above this = question expired already
 
@@ -47,6 +48,66 @@ RECONCILE_GRACE_MS    = 10_000    # window past duration before reconciler force
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+# ── Spectator mirror ─────────────────────────────────────────────────────────
+# Everything a viewer needs to follow the bracket live, and nothing else. The
+# node carries names, scores, status and the current question NUMBER — never
+# question text or the correct answer, so it is safe to expose to any signed-in
+# viewer. One RTDB subscription replaces one Firestore read per match per
+# viewer per refresh, which is what made a live bracket unaffordable before.
+
+def _mirror_meta(tournament_id: str, tourn: dict) -> None:
+    try:
+        admin_db.reference(f"{LIVE_PATH}/{tournament_id}/meta").update({
+            "title":            tourn.get("title") or "",
+            "code":             tourn.get("code") or None,
+            "status":           tourn.get("status") or "",
+            "current_round":    tourn.get("current_round") or 1,
+            "total_rounds":     tourn.get("total_rounds") or 0,
+            "actual_top_cut":   tourn.get("actual_top_cut") or 0,
+            "winner_uid":       tourn.get("winner_uid") or None,
+            "winner_name":      tourn.get("winner_name") or None,
+            "host_id":          tourn.get("host_id") or None,
+            "phase_started_at": tourn.get("phase_started_at") or None,
+            "round_break_time": tourn.get("round_break_time") or 0,
+            "updated_at":       _now_ms(),
+        })
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-LIVE] meta mirror failed %s: %s", tournament_id, e)
+
+
+def _mirror_match(tournament_id: str, match_id: str, match: dict) -> None:
+    try:
+        admin_db.reference(f"{LIVE_PATH}/{tournament_id}/matches/{match_id}").update({
+            "match_id":      match_id,
+            "round":         match.get("round") or 1,
+            "match_number":  match.get("match_number") or 0,
+            "a_uid":         match.get("player_a_uid") or None,
+            "a_name":        match.get("player_a_name") or None,
+            "b_uid":         match.get("player_b_uid") or None,
+            "b_name":        match.get("player_b_name") or None,
+            "status":        match.get("status") or "pending",
+            "winner_uid":    match.get("winner_uid") or None,
+            "a_score":       match.get("player_a_score"),
+            "b_score":       match.get("player_b_score"),
+            "next_match_id": match.get("next_match_id") or None,
+            "launch_after":  match.get("launch_after") or None,
+            "tie_breaker":   match.get("tie_breaker") or None,
+            "updated_at":    _now_ms(),
+        })
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-LIVE] match mirror failed %s/%s: %s",
+                         tournament_id, match_id, e)
+
+
+def _mirror_live(tournament_id: str, match_id: str, patch: dict) -> None:
+    try:
+        admin_db.reference(f"{LIVE_PATH}/{tournament_id}/matches/{match_id}/live").update(
+            {**patch, "ts": _now_ms()})
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-LIVE] live mirror failed %s/%s: %s",
+                         tournament_id, match_id, e)
+
 
 def _to_list(value: object) -> list:
     """Coerce an RTDB integer-keyed dict (or list) to a Python list."""
@@ -241,6 +302,18 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
 
     if updates:
         duel_ref.update(updates)
+
+    # Spectator mirror: question number + running scores, no question text.
+    live_scores = {}
+    for p_uid in player_uids:
+        base = ((pre_duel.get("players") or {}).get(p_uid) or {}).get("score") or 0
+        live_scores[p_uid] = updates.get(f"players/{p_uid}/score", base)
+    _mirror_live(tournament_id, pre_duel.get("match_id") or duel_id, {
+        "qi":     current_qi,
+        "total":  len(questions),
+        "scores": live_scores,
+        "status": "revealing",
+    })
 
     logger.info("[CF] Reveal claimed — tournament=%s duel=%s qi=%d",
                 tournament_id, duel_id, current_qi)
@@ -990,10 +1063,14 @@ def on_tournament_written(event: firestore_fn.Event[firestore_fn.Change]) -> Non
     if after is None:
         return
     tourn = after.to_dict() or {}
+    tournament_id = event.params["tournamentId"]
+
+    # Mirror on every phase — the spectator page needs registration and FFA too.
+    _mirror_meta(tournament_id, tourn)
+
     if tourn.get("status") != "bracket":
         return
 
-    tournament_id = event.params["tournamentId"]
     try:
         _ensure_bracket(admin_fs.client(), tournament_id, tourn)
     except Exception as e:                                    # noqa: BLE001
@@ -1020,13 +1097,18 @@ def on_bracket_match_written(event: firestore_fn.Event[firestore_fn.Change]) -> 
     if after is None:
         return
     match = after.to_dict() or {}
+    tournament_id = event.params["tournamentId"]
+    match_id      = event.params["matchId"]
+
+    # Mirror first: this trigger fires on every match write (creation, slot
+    # seeding, result), so it is the one place that keeps the spectator tree
+    # complete. Everything below is launch gating and returns early a lot.
+    _mirror_match(tournament_id, match_id, match)
+
     if match.get("status") != "pending":
         return
     if not match.get("player_a_uid") or not match.get("player_b_uid"):
         return
-
-    tournament_id = event.params["tournamentId"]
-    match_id      = event.params["matchId"]
     fs = admin_fs.client()
     tourn_ref = fs.collection("tournaments").document(tournament_id)
     tourn = tourn_ref.get().to_dict() or {}
@@ -1079,6 +1161,9 @@ def on_tournament_duel_status(event: db_fn.Event[db_fn.Change]) -> None:
     tournament_id = event.params["tournamentId"]
     duel_id       = event.params["duelId"]
     duel_ref      = admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}")
+
+    if isinstance(after, str):
+        _mirror_live(tournament_id, duel_id, {"status": after})
 
     if after == "waiting":
         time.sleep(DUEL_AUTOSTART_MS / 1000.0)

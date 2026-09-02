@@ -205,10 +205,14 @@ export default function PlayerDashboard() {
     return () => unsub()
   }, [uid])
 
+  // An eliminated player (or anyone opening a finished tournament) has nothing
+  // to wait for — send them straight to the live tree instead of the wait room.
   const tournamentDest = activeTournament
     ? activeTournament.status === 'ffa' && activeTournament.ffa_room_id && !tournamentEliminated
       ? `/player/game/${activeTournament.ffa_room_id}`
-      : `/tournament/${activeTournament.id}/wait`
+      : (tournamentEliminated || activeTournament.status === 'finished')
+        ? `/tournament/${activeTournament.id}/live`
+        : `/tournament/${activeTournament.id}/wait`
     : null
 
   const rejoinPath = activeDuel
