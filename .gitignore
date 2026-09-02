@@ -35,3 +35,7 @@ functions/functions.yaml
 
 # Claude Code per-machine settings (can capture tokens in allow-rules)
 .claude/settings.local.json
+
+# Probe output (screenshots + throwaway browser profiles from the E2E probes)
+screenshots/
+scratch/

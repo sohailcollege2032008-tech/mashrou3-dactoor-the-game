@@ -26,6 +26,7 @@ import { Trophy, Download, Play, Loader2, ChevronRight, Settings, Flag, AlertTri
 import html2canvas from 'html2canvas'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
 import BracketBoard from '../../components/tournament/BracketBoard'
+import ShareWatchLink from '../../components/tournament/ShareWatchLink'
 import { loadTournamentDeck } from '../../utils/deckLoader'
 import useIsNarrow from '../../hooks/useIsNarrow'
 
@@ -744,6 +745,7 @@ export default function TournamentBracket() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <SoundToggle showPreviewBtn={true} />
+            <ShareWatchLink tournamentId={tournamentId} title={tournament.title} hint={false} />
             <button
               onClick={exportImage}
               disabled={exporting || matches.length === 0}

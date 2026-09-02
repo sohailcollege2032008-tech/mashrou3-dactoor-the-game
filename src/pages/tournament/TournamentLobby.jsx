@@ -15,6 +15,7 @@ import {
 import { Copy, Check, Settings } from 'lucide-react'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
 import { loadTournamentDeck } from '../../utils/deckLoader'
+import ShareWatchLink from '../../components/tournament/ShareWatchLink'
 import SoundToggle from '../../components/common/SoundToggle'
 
 const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -408,6 +409,17 @@ export default function TournamentLobby() {
               {tournament.code}
             </span>
             <p className="ar" style={{ fontSize: 12, color: 'var(--ink-4)', margin: '8px 0 0' }}>شاركه مع المشاركين</p>
+          </div>
+          {/* The code is for playing; this is for watching. Two different
+              audiences, and the second one had no link at all. */}
+          <div style={{
+            borderTop: '1px solid var(--rule)', padding: '10px 14px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+          }}>
+            <span className="ar" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+              للي عاوز يتابع بس من غير ما يلعب
+            </span>
+            <ShareWatchLink tournamentId={tournamentId} title={tournament.title} hint={false} />
           </div>
         </div>
 

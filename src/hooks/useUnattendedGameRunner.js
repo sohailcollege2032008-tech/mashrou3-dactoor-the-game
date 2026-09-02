@@ -155,7 +155,7 @@ export function useUnattendedGameRunner({ roomId, room, session }) {
 
     nextingRef.current = true
     try {
-      await performNextQuestion(roomId, currentRoom, currentRoom.host_id)
+      await performNextQuestion(roomId, currentRoom, currentRoom.host_id, uid)
     } catch (err) {
       console.error('[UnattendedRunner] next question failed:', err)
       await set(lockRef, null).catch(() => {})   // release so another tab can advance

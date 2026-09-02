@@ -193,11 +193,18 @@ export async function performReveal(roomId, room, players) {
  * @param {object} room     - current room snapshot value
  * @param {string} hostUid  - host's Firebase Auth UID (to clear active room entry)
  */
-export async function performNextQuestion(roomId, room, hostUid) {
+export async function performNextQuestion(roomId, room, hostUid, actorUid = hostUid) {
   const isFinished = room.current_question_index + 1 >= room.questions.questions.length
   if (isFinished) {
     await update(ref(rtdb, `rooms/${roomId}`), { status: 'finished' })
-    if (hostUid) {
+    // `host_rooms/{uid}` is writable by that host and nobody else. In
+    // unattended mode the last advance is performed by a player's tab, so this
+    // line was denied there — and the denial rejected the whole call, after the
+    // room had already flipped to 'finished'. The caller then logged an error
+    // and released its lock for a game that was over, and the host came back to
+    // a dashboard still pointing at it. Only the host attempts it now; for
+    // every other actor `on_ffa_room_finished` clears the pointer server-side.
+    if (hostUid && actorUid === hostUid) {
       await set(ref(rtdb, `host_rooms/${hostUid}/active`), null)
     }
     return 'finished'

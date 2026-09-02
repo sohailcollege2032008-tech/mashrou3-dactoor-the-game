@@ -19,6 +19,7 @@ import { useSoundStore } from '../stores/soundStore';
  *  playEliminated         → knocked out of the tournament
  *  playJoin               → successfully joined a tournament
  *  playTick               → countdown ticking
+ *  playOpponentLock       → the other player locked their answer (synth only)
  *  playButtonClick        → UI buttons
  */
 class SoundManager {
@@ -161,6 +162,20 @@ class SoundManager {
     if (!this._canPlay()) return;
     if (this._playFile('ui-click', 0.7)) return;
     this._synthButtonClick();
+  }
+
+  /**
+   * The opponent just locked their answer.
+   *
+   * Synth-only on purpose: this fires on every question of every duel, so it
+   * has to sit under the countdown tick without competing with it, and it must
+   * not be mistakable for your own click — hence two quiet blips that FALL
+   * (G4 → C4). A file here would be one more asset to load for a sound whose
+   * whole job is to be small.
+   */
+  playOpponentLock() {
+    if (!this._canPlay()) return;
+    this._synthOpponentLock();
   }
 
   // ── Original synthesized implementations (fallback) ──────────────────────────
@@ -315,6 +330,26 @@ class SoundManager {
     gain.connect(this.ctx.destination);
     osc.start(now);
     osc.stop(now + 0.02);
+  }
+
+  _synthOpponentLock() {
+    const vol = this._getVolume();
+    const now = this.ctx.currentTime;
+    const blip = (freq, start) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.11 * vol, start + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.07);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.08);
+    };
+    blip(392.0, now);            // G4
+    blip(261.63, now + 0.055);   // C4 — falling, so it reads as theirs, not yours
   }
 }
 

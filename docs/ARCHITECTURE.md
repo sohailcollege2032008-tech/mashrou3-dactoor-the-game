@@ -145,6 +145,14 @@ otherwise                              → player
 - **Host page** auto-reveals at `auto_timer`, advances 8s later.
 - **Player pages** (`useUnattendedGameRunner`) run the same transitions via atomic RTDB locks (`reveal_locks/{qi}`, `next_locks/{qi}`) so exactly one client acts when the host is away.
 - Tournament FFA rooms are created with these flags ON (fixed 2026-08).
+- **`host_rooms/{uid}/active` is not the runner's to clear.** That node is writable by
+  that host alone, so the player tab performing the final advance was denied — after the
+  room had already flipped to `finished`. `performNextQuestion(roomId, room, hostUid,
+  actorUid)` now attempts it only when the actor *is* the host; for every other actor
+  `on_ffa_room_finished` clears the pointer with admin rights (it triggers on
+  `rooms/{code}/status` for tournament and normal rooms alike). Before this, an unattended
+  game left the host's dashboard offering to rejoin a room that was over, and printed a
+  PERMISSION_DENIED in every player's console.
 
 ### Anti-cheat
 - `correct` never written to RTDB — only `correct_hash`; verified at reveal.
@@ -271,6 +279,17 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
 - **The honours board.** See step 7 above.
 - **The live bracket** at `/tournament/:id/live` — one RTDB subscription, no question text,
   open to any signed-in viewer including eliminated players.
+- **Handing that link out.** `ShareWatchLink` (`src/components/tournament/`) sits in the
+  host lobby (under the registration code — the code is for playing, the link is for
+  watching), in the host bracket header, and on the live page itself, since whoever is
+  already watching is the likeliest person to bring the next spectator. `navigator.share`
+  where it exists, clipboard otherwise, and the URL as selectable text if both are
+  refused. The hint says any signed-in user can watch, because a link that bounces the
+  recipient to a login screen looks broken.
+- **The opponent's lock, out loud.** `soundManager.playOpponentLock()` — two quiet falling
+  blips (G4 → C4), synth-only so it cannot be mistaken for your own click and does not
+  compete with the countdown tick. Fires once per question from the duel node, so it
+  covers tournament matches and regular duels alike.
 - **The bracket, on a phone.** `BracketBoard` (`src/components/tournament/`) is the
   on-screen bracket everywhere now — the live page, the player's wait screen, and the
   host's bracket page on a narrow viewport. A column tree is the right shape on a laptop

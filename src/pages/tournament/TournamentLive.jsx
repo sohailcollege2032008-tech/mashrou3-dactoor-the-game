@@ -23,6 +23,7 @@ import confetti from 'canvas-confetti'
 import HonoursBoard from '../../components/tournament/HonoursBoard'
 import BracketBoard from '../../components/tournament/BracketBoard'
 import RoundRecap from '../../components/tournament/RoundRecap'
+import ShareWatchLink from '../../components/tournament/ShareWatchLink'
 import LockLamp from '../../components/tournament/LockLamp'
 
 function roundName(round, totalRounds) {
@@ -381,6 +382,12 @@ export default function TournamentLive() {
             <ArrowRight size={18} />
           </button>
           <span className="folio" style={{ letterSpacing: '0.2em' }}>Live Bracket</span>
+          {/* Whoever is already watching is the likeliest person to bring the
+              next spectator — so the link lives on the page itself, not only
+              in the host's hands. */}
+          <div style={{ marginInlineStart: 'auto' }}>
+            <ShareWatchLink tournamentId={tournamentId} title={meta?.title} hint={false} label="شارك" />
+          </div>
           {liveCount > 0 && (
             <motion.span
               animate={{ opacity: [1, 0.4, 1] }}

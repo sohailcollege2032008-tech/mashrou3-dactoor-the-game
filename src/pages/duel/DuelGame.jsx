@@ -247,6 +247,20 @@ export default function DuelGame({
     }
   }, [duel?.status, duel?.current_question_index, duel?.answers, uid, isObserver])
 
+  // The opponent locked in. The lamp in their pill says so visually; this says
+  // it while you are still reading choice C. Once per question (the ref), and
+  // never while revealing — by then everyone has answered and the news is old.
+  const oppLockCueRef = useRef(-1)
+  useEffect(() => {
+    if (isObserver || duel?.status !== 'playing') return
+    const qi     = duel.current_question_index ?? 0
+    const oppUid = Object.keys(duel.players || {}).find(u => u !== uid)
+    if (!oppUid || !duel.answers?.[qi]?.[oppUid]) return
+    if (oppLockCueRef.current === qi) return
+    oppLockCueRef.current = qi
+    soundManager.playOpponentLock()
+  }, [duel?.status, duel?.current_question_index, duel?.answers, duel?.players, uid, isObserver])
+
   useEffect(() => {
     if (isObserver || duel?.status !== 'playing') return
     const sec = Math.ceil(timerPct * (activeDurationMs / 1000))

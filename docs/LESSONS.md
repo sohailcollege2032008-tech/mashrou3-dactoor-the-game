@@ -173,6 +173,42 @@ start, duel score). What is worth keeping from the process:
 
 ---
 
+## Addendum 2026-09-03 — three ways a green suite lies
+
+**1. A FATAL that is not a bug.** `suite-tournament-w6` died on
+`waiting for getByRole('button', {name: /Start Game/})` seconds after a push.
+The room was in `lobby` with 4 players and the button renders unconditionally
+in that state — so the cause was the deploy itself: the tab loaded the old
+`index.html`, then an SPA navigation asked for a lazy chunk whose hash no
+longer existed. **Never run the E2E suite against production while a deploy of
+that commit is in flight**, and when a suite fails on a control that should
+exist, open the page in that exact state before touching product code. Two
+minutes of probing beat an afternoon of chasing a phantom regression.
+
+**2. A suite that aborts leaves a live tournament behind.** `main().catch()`
+only logged. The TEST_ tournament stayed in `ffa` with a room in `lobby`, which
+also violates "one live tournament at a time" for anything that runs next.
+Cleanup belongs in a `finally`, not at the end of the happy path.
+
+**3. The real find came from the console, not the assertions.** 36 checks
+passed; the failure was a player tab logging PERMISSION_DENIED for
+`host_rooms/{host}/active`. That is the shape to watch for: **a rule only the
+host can satisfy, inside code a player is supposed to run.** The write sat at
+the end of `performNextQuestion`, so in unattended mode the room flipped to
+`finished`, the denial rejected the call, the runner released its lock and
+logged an error for a game that was over, and the host came back to a dashboard
+pointing at a dead room. Whoever cannot be denied should own the write — here
+the Cloud Function. Capture console output in every suite and fail on
+unexpected denials; without that line this would have shipped invisibly.
+
+**4. Seed before you flip.** A probe wrote `status: 'bracket'` and *then* the
+qualifier docs; `_ensure_bracket` woke on the flip, found no qualifiers and
+built nothing. It passed the first run purely because a cold start was slower
+than the writes. Scaffolding must follow the same order as the real path
+(results → flip), or the race decides whether the test is true.
+
+---
+
 ## TL;DR
 
 The tournament broke because the system was a house of cards and the tests

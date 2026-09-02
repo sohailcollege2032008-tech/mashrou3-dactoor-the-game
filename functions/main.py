@@ -612,7 +612,31 @@ def on_ffa_room_finished(event: db_fn.Event[db_fn.Change]) -> None:
 
     room_id = event.params["roomId"]
     room = admin_db.reference(f"rooms/{room_id}").get()
-    if not room or not room.get("tournament_id"):
+    if not room:
+        return
+
+    # The host's "you still have a room open" pointer, cleared for every
+    # finished room — tournament or not, and before the tournament check below.
+    #
+    # Clearing it is the host tab's job, but in unattended mode the final
+    # advance is performed by a player's tab, and `host_rooms/{uid}` is
+    # writable by that host alone. So the pointer outlived the game it
+    # described and the host came back to a dashboard offering to rejoin a room
+    # that was already over. The server is the one writer that cannot be
+    # denied, so it owns the cleanup.
+    host_uid = room.get("host_id")
+    if host_uid:
+        try:
+            ptr = admin_db.reference(f"host_rooms/{host_uid}/active")
+            cur = ptr.get()
+            if isinstance(cur, dict) and cur.get("code") == room_id:
+                ptr.delete()
+                logger.info("[CF-FFA] cleared host_rooms pointer for %s (room %s finished)",
+                            host_uid, room_id)
+        except Exception as e:                                # noqa: BLE001
+            logger.exception("[CF-FFA] host_rooms cleanup failed for %s: %s", host_uid, e)
+
+    if not room.get("tournament_id"):
         return
     tournament_id = room["tournament_id"]
 
