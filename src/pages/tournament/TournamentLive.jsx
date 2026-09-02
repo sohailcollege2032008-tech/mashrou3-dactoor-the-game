@@ -16,6 +16,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ref as rtdbRef, onValue } from 'firebase/database'
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
+import { useServerClock } from '../../hooks/useServerClock'
 import { Loader2, Trophy, ArrowRight, Radio } from 'lucide-react'
 import { motion } from 'framer-motion'
 import confetti from 'canvas-confetti'
@@ -141,6 +142,35 @@ function MatchCard({ m, totalRounds, uid }) {
   )
 }
 
+/** Turns dead air into a stated beat: what the tournament is waiting for. */
+function PaceBar({ label, detail, countdownMs }) {
+  const secs = countdownMs != null ? Math.max(0, Math.ceil(countdownMs / 1000)) : null
+  const mm   = secs != null ? String(Math.floor(secs / 60)).padStart(2, '0') : null
+  const ss   = secs != null ? String(secs % 60).padStart(2, '0') : null
+  return (
+    <div style={{
+      border: '1px solid var(--rule)', background: 'var(--paper-2)',
+      padding: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+    }}>
+      <div style={{ minWidth: 0 }}>
+        <p className="ar" style={{ fontSize: 14, color: 'var(--ink)', margin: 0, fontWeight: 600 }}>
+          {label}
+        </p>
+        {detail && (
+          <p className="ar" style={{ fontSize: 12, color: 'var(--ink-3)', margin: '3px 0 0' }}>
+            {detail}
+          </p>
+        )}
+      </div>
+      {secs != null && (
+        <span className="folio" style={{ fontSize: 26, color: 'var(--gold)', whiteSpace: 'nowrap' }} dir="ltr">
+          {mm}:{ss}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /** One competitor inside the live hero strip. */
 function HeroSide({ name, uidSide, score, leader, uid }) {
   const isLeader = leader === uidSide
@@ -232,7 +262,9 @@ export default function TournamentLive() {
 
   const [data, setData]       = useState(undefined)   // undefined = loading, null = missing
   const [focusRound, setFocus] = useState(null)
+  const [now, setNow]          = useState(() => Date.now())
   const confettiRef = useRef(false)
+  const clockOffset = useServerClock()
 
   useEffect(() => {
     if (!tournamentId) return
@@ -263,6 +295,60 @@ export default function TournamentLive() {
 
   const liveMatches = useMemo(() => matches.filter(m => m.status === 'active'), [matches])
   const liveCount   = liveMatches.length
+
+  // What is the tournament waiting for right now? Derived from the same
+  // launch_after the launcher itself uses, so the countdown a viewer sees is
+  // the real one and every device agrees on it.
+  const pace = useMemo(() => {
+    if (!meta || meta.status === 'finished') return null
+    if (meta.status === 'registration') {
+      return { label: 'التسجيل لسه مفتوح', detail: 'البطولة تبدأ بالتصفيات' }
+    }
+    if (meta.status === 'ffa') {
+      return { label: 'التصفيات جارية', detail: 'الشجرة تظهر أول ما يتحدد المتأهلون' }
+    }
+    const round   = meta.current_round || 1
+    const inRound = matches.filter(m => m.round === round)
+    if (inRound.length === 0) return null
+
+    const active = inRound.filter(m => m.status === 'active').length
+    const done   = inRound.filter(m => m.status === 'finished').length
+
+    const upcoming = inRound
+      .filter(m => m.status === 'pending' && m.a_uid && m.b_uid && m.launch_after)
+      .map(m => m.launch_after)
+    const nextAt = upcoming.length ? Math.min(...upcoming) : null
+    const serverNow = now + (clockOffset.current || 0)
+
+    if (nextAt && nextAt > serverNow) {
+      return {
+        label: `${roundName(round, totalRounds)} بيبدأ`,
+        detail: `${inRound.length} ماتش في الجولة`,
+        countdownMs: nextAt - serverNow,
+      }
+    }
+    if (active > 0) {
+      return {
+        label: `${active} ماتش شغال دلوقتي`,
+        detail: done > 0 ? `و${done} خلصوا من ${inRound.length}` : `${roundName(round, totalRounds)}`,
+      }
+    }
+    if (done === inRound.length) {
+      return {
+        label: `${roundName(round, totalRounds)} خلص`,
+        detail: round < totalRounds ? 'مستنيين الجولة الجاية تبدأ' : 'مستنيين إعلان النتيجة',
+      }
+    }
+    return { label: `${roundName(round, totalRounds)}`, detail: 'الماتشات بتتجهز' }
+  }, [meta, matches, totalRounds, now, clockOffset])
+
+  // Tick only while something is actually counting down.
+  const isCountingDown = pace?.countdownMs != null
+  useEffect(() => {
+    if (!isCountingDown) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [isCountingDown])
 
   // ── The viewer's own story: who knocked them out, and how far that player got.
   //    This is read entirely from the mirror — no extra subscription.
@@ -401,6 +487,13 @@ export default function TournamentLive() {
               {meta.winner_name}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* The current beat, named */}
+      {pace && (
+        <div style={{ padding: '16px 16px 0' }}>
+          <PaceBar label={pace.label} detail={pace.detail} countdownMs={pace.countdownMs} />
         </div>
       )}
 

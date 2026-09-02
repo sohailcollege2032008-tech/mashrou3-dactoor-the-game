@@ -522,6 +522,34 @@ export default function TournamentBracket() {
   }, [tournamentId, forcing])
 
   // Cut the break short and start the current round's matches right now.
+  // The break was a fixed number chosen at creation time. In a live room the
+  // host is the only one who can see that people are not ready yet, so give
+  // them the other direction too — and move BOTH clocks, or the host's
+  // countdown and the launcher would disagree about when the round starts.
+  const extendBreak = useCallback(async (deltaMs) => {
+    if (!tournament || tournament.status !== 'bracket') return
+    const round   = tournament.current_round || 1
+    const pending = matches.filter(m =>
+      m.round === round && m.status === 'pending' && m.player_a_uid && m.player_b_uid
+    )
+    try {
+      const batch = writeBatch(db)
+      pending.forEach(m => batch.update(
+        doc(db, 'tournaments', tournamentId, 'bracket_matches', m.match_id),
+        { launch_after: Math.max(launchDueAt(m), Date.now()) + deltaMs }
+      ))
+      if (tournament.phase_started_at) {
+        batch.update(doc(db, 'tournaments', tournamentId),
+          { phase_started_at: tournament.phase_started_at + deltaMs })
+      }
+      await batch.commit()
+      setShowCountdown(false)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || 'فشل تمديد الاستراحة')
+    }
+  }, [tournament, matches, tournamentId, launchDueAt])
+
   const startRoundNow = useCallback(async () => {
     const now     = Date.now()
     const pending = matches.filter(m =>
@@ -808,16 +836,40 @@ export default function TournamentBracket() {
                 <span className="ar folio" style={{ color: 'var(--gold)', fontSize: 9 }}>
                   تبدأ خلال {Math.ceil(phaseRemainingMs / 1000)}ث
                 </span>
-                <button
-                  onClick={startRoundNow}
-                  style={{
-                    padding: '6px 14px', border: '1px solid var(--gold)', borderRadius: 4,
-                    background: 'transparent', color: 'var(--gold)',
-                    fontFamily: 'var(--sans)', fontSize: 12, cursor: 'pointer',
-                  }}
-                >
-                  <span className="ar">ابدأ الجولة الآن</span>
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    onClick={() => extendBreak(30_000)}
+                    title="زوّد الاستراحة 30 ثانية"
+                    style={{
+                      padding: '6px 10px', border: '1px solid var(--rule)', borderRadius: 4,
+                      background: 'transparent', color: 'var(--ink-3)',
+                      fontFamily: 'var(--mono)', fontSize: 11, cursor: 'pointer',
+                    }}
+                  >
+                    +30ث
+                  </button>
+                  <button
+                    onClick={() => extendBreak(60_000)}
+                    title="زوّد الاستراحة دقيقة"
+                    style={{
+                      padding: '6px 10px', border: '1px solid var(--rule)', borderRadius: 4,
+                      background: 'transparent', color: 'var(--ink-3)',
+                      fontFamily: 'var(--mono)', fontSize: 11, cursor: 'pointer',
+                    }}
+                  >
+                    +1د
+                  </button>
+                  <button
+                    onClick={startRoundNow}
+                    style={{
+                      padding: '6px 14px', border: '1px solid var(--gold)', borderRadius: 4,
+                      background: 'transparent', color: 'var(--gold)',
+                      fontFamily: 'var(--sans)', fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    <span className="ar">ابدأ الجولة الآن</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1007,21 +1059,58 @@ export default function TournamentBracket() {
               })}
             </div>
 
-            {/* Player presence */}
+            {/* Who is actually here — by name. A count told the host that someone
+                was missing but not who, which is the only thing they can act on
+                (extend the break, or settle the match). Absent players first. */}
             {(() => {
-              const connected = Object.values(waitingPresence).filter(p => p.connected).length
-              const expected  = tournament.actual_top_cut || 0
-              if (!connected) return null
+              const roster = []
+              const seen   = new Set()
+              roundMatches.forEach(m => {
+                [[m.player_a_uid, m.player_a_name], [m.player_b_uid, m.player_b_name]]
+                  .forEach(([puid, pname]) => {
+                    if (!puid || seen.has(puid)) return
+                    seen.add(puid)
+                    roster.push({ uid: puid, name: pname || '—', here: !!waitingPresence[puid]?.connected })
+                  })
+              })
+              if (roster.length === 0) return null
+              roster.sort((a, b) => (a.here === b.here ? 0 : a.here ? 1 : -1))
+              const hereCount = roster.filter(p => p.here).length
+
               return (
                 <div style={{
                   borderTop: '1px solid var(--rule)', padding: '8px 16px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   background: 'var(--paper-2)',
                 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }} />
-                  <span className="ar folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>
-                    {connected} {expected ? `/ ${expected}` : ''} لاعب في غرفة الانتظار
-                  </span>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 8, marginBottom: roster.length ? 6 : 0,
+                  }}>
+                    <span className="ar folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>
+                      متصلين {hereCount} / {roster.length} في الجولة
+                    </span>
+                    {hereCount < roster.length && (
+                      <span className="ar folio" style={{ color: 'var(--alert)', fontSize: 9 }}>
+                        {roster.length - hereCount} غايب
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {roster.map(p => (
+                      <span key={p.uid} className="ar" style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        fontSize: 11, padding: '2px 7px',
+                        border: `1px solid ${p.here ? 'var(--rule)' : 'var(--alert)'}`,
+                        color: p.here ? 'var(--ink-2)' : 'var(--alert)',
+                      }}>
+                        <span style={{
+                          width: 5, height: 5, borderRadius: '50%',
+                          background: p.here ? 'var(--success)' : 'var(--alert)',
+                        }} />
+                        {p.name}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )
             })()}
