@@ -263,12 +263,19 @@ export default function PlayerGameView() {
           ;(async () => {
             try {
               const isTournament = !!data.tournament_id
-              const [deckSnap, hostSnap, tournSnap] = await Promise.all([
-                getDoc(doc(db, 'question_sets', qSetId)),
+              const [hostSnap, tournSnap] = await Promise.all([
                 hostUid ? getDoc(doc(db, 'profiles', hostUid)) : Promise.resolve(null),
                 isTournament ? getDoc(doc(db, 'tournaments', data.tournament_id)) : Promise.resolve(null),
               ])
-              const deckData       = deckSnap.data() || {}
+              // Everything the history entry needs is already on the room, which is
+              // why this no longer reads question_sets: a player must not be able to
+              // read the deck a match is being played from — that document still
+              // carries the plain `correct` for every question.
+              const deckData = {
+                title:      data.title || qSetId,
+                is_global:  data.deck_is_global || false,
+                questions:  { questions: data.questions?.questions || [] },
+              }
               const hostName       = hostSnap?.data()?.display_name || 'دكتور'
               const tournamentTitle = tournSnap?.data()?.title || ''
               const myScore        = data.players?.[uid]?.score ?? 0

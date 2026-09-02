@@ -85,7 +85,7 @@
     "tournament_duels": {
       "$tournamentId": {
         "$duelId": {
-          ".read":  "auth != null",
+          ".read":  "auth != null && (!data.exists() || data.child('players').child(auth.uid).exists() || data.child('host_uid').val() == auth.uid)",
           ".write": "!data.exists() || data.child('players').child(auth.uid).exists() || data.child('host_uid').val() == auth.uid",
           "answers": {
             "$qIdx": {

@@ -138,12 +138,6 @@ export default function TournamentCreate() {
     }
   }
 
-  const row = (label, children) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 0', borderBottom: '1px solid var(--rule)' }}>
-      <label className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink-2)', flex: 1 }}>{label}</label>
-      {children}
-    </div>
-  )
 
   return (
     <div className="paper-grain" style={{
@@ -214,10 +208,28 @@ export default function TournamentCreate() {
                 <option value="">— اختر مجموعة —</option>
                 {decks.map(d => (
                   <option key={d.id} value={d.id}>
-                    {d.title} ({d.question_count || '?'} سؤال)
+                    {d.title} ({d.question_count || '?'} سؤال){d.is_global ? ' — عامة' : ''}
                   </option>
                 ))}
               </select>
+            )}
+
+            {/* A published deck is readable by every signed-in player, answers
+                included — that is what "global" means for the duel browser. Fine
+                for practice, fatal for a competitive round. */}
+            {decks.find(d => d.id === deckId)?.is_global && (
+              <div style={{
+                marginTop: 10, border: '1px solid var(--alert)',
+                background: 'rgba(181,67,44,0.06)', padding: 10,
+              }}>
+                <p className="ar" style={{ fontSize: 13, color: 'var(--alert)', margin: 0, fontWeight: 600 }}>
+                  المجموعة دي منشورة عامة
+                </p>
+                <p className="ar" style={{ fontSize: 12, color: 'var(--ink-3)', margin: '4px 0 0', lineHeight: 1.7 }}>
+                  أي لاعب يقدر يفتحها من متصفح المجموعات ويشوف الإجابات الصح قبل البطولة.
+                  للمنافسة الجدّية استخدم مجموعة غير منشورة — تقدر تلغي النشر من لوحة التحكم.
+                </p>
+              </div>
             )}
           </div>
 

@@ -24,7 +24,16 @@ service cloud.firestore {
     }
 
     match /question_sets/{setId} {
-      allow read: if request.auth != null;
+      // A deck document still carries the plain `correct` of every question, so
+      // "any signed-in user" was a direct answer leak: a player could read the
+      // deck a tournament round was about to be played from. Readable now only
+      // by its host, the owner, and — for the duel/DeckBrowser flows — anyone
+      // when the deck is explicitly published as global.
+      allow read: if request.auth != null && (
+        resource.data.is_global == true ||
+        resource.data.host_id == request.auth.uid ||
+        request.auth.token.email == 'sohailcollege2032008@gmail.com'
+      );
       // Anyone can create a question set (hosts upload their own decks)
       allow create: if request.auth != null;
       // Only the deck creator or the platform owner can update or delete

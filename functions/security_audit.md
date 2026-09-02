@@ -111,8 +111,36 @@ pushed for any of this to take effect in production.
 | 6 | **FFA results counted twice.** The FFA room runs with `auto_mode` **and** `unattended_mode`; the host tab revealed without taking `reveal_locks/{qi}` while a player's tab took it, so `performReveal` ran twice per question. Measured in room `56HH5D`: `correct_count` 5 → **10**, `total_reaction_ms` 4519 → **9038**, `score` 15 → **24** (a different number every run, because `score` was read-then-written). This decided **who entered the bracket**. | Host takes the same `reveal_locks`/`next_locks` transaction as `useUnattendedGameRunner`; `score` moved to `increment()`; `performReveal` returns early when `revealed_answers/{qi}` already exists. Both lock holders release the lock if the run throws, so a dead tab no longer freezes the question. | `src/pages/host/HostGameRoom.jsx`, `src/utils/gameRunner.js`, `src/hooks/useUnattendedGameRunner.js` |
 | 7 | **A corrupt deck entry shifted every later question.** `_strip_correct` skipped non-dict entries, shortening the list while indices kept counting — answer hashes are bound to the final index, so every question after the gap became unscoreable, silently. | Length is preserved with an RTDB-safe placeholder (a `null` would be dropped and collapse the array into a sparse object, breaking `questions.length` on the client). Out-of-range round assignments and questions missing `correct` now log an error. | `functions/main.py:_strip_correct`, `_questions_for_round` |
 
+## Round 3 (2026-09-02, same day) — the question leak
+
+Closed once the live-bracket mirror removed the last legitimate reason for an
+outsider to read a duel node:
+
+| Hole | Fix |
+|---|---|
+| **Any signed-in account could read any duel node** (`.read: auth != null`) — the node carries the full question text of a match in progress, and every match in a round plays the same questions in the same order. | Read now requires being one of the two players or the host. A not-yet-launched duel still reads as `null` (the host bracket subscribes to it before launch and `launchMatch` `get()`s it — denying that would have frozen every launch). Non-participants watch `bracket_live` instead. |
+| **The answer hash was crackable in four tries.** The salt is `duel:{duelId}:{qi}:{index}` and a tournament duel's id is the match id (`r1m1`), so it was not a secret at all. | Same read restriction: an outsider can no longer fetch `correct_hash`, so there is nothing to brute-force. **A participant can still crack their own current question** — see below. |
+| **Every deck was readable by every signed-in player**, plain `correct` included, so a player could read the deck a tournament round was about to use. | `question_sets` read now requires the deck to be `is_global`, or the reader to be its host or the owner. 19 of 25 decks moved from readable to closed. `PlayerGameView` no longer reads the deck at all — its history entry now takes the title and question count off the room, which is where they already were. |
+| A host picking a **published** deck for a competitive tournament. | `TournamentCreate` marks global decks in the picker and shows a red warning under it explaining that every player can read those answers. |
+
+Verified: `scratch/tests/tmp-e-rules-probe.cjs` — `E-read-foreign-duel` 200 → 401 and
+`E2-crack-correct-hash` recovered-index → `null`. `scratch/tests/tmp-w8-duel-read.cjs`
+(5/5) is the regression guard for the read rule: participant reads, host reads,
+outsider denied, outsider denied on a child path, unlaunched duel reads null.
+
 ## What is NOT closed — read before the next event
 
+* **A participant can still recover the correct answer for their own current
+  question.** They may read their own duel node, and the hash salt is derived
+  from ids they know, so four SHA-256 calls give them the answer before they
+  answer. Closing this means the salt has to include a server-only secret, which
+  in turn means the client can no longer score a question by itself — the
+  timeout path (`DuelGame.triggerReveal`) currently does exactly that when a
+  player never answers. So it needs server-authoritative scoring for the timeout
+  case first. This is the single biggest remaining fairness hole.
+* **A published (global) deck still exposes its answers** to anyone who opens it
+  in the deck browser — that is what publishing means today, because the client
+  builds a duel from the plain deck. Server-side duel creation would fix it.
 * **A match player can still crown themselves in Firestore.** `bracket_matches` grants the
   two players an unrestricted `update`, so a `PATCH {status:'finished', winner_uid:self}`
   is accepted and `_finalize_match` trusts the stored `winner_uid`. Closing it means match
