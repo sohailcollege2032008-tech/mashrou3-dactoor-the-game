@@ -91,6 +91,31 @@ that date, not against the backlog.
 
 ---
 
+## Addendum 2026-09-02 — rules redeploy recheck (suite-tournament-w6)
+
+- After tightening `firestore.rules` + `database.rules.json` (self-crown removal,
+  host-settle RTDB writes, self-only registrations), ran a full live E2E on
+  production with the NEW rules: `node scratch/tests/suite-tournament-w6.mjs`.
+  Result: **37 pass / 0 fail** — host assignment panel, FFA, host force-finish,
+  live bracket duels, final + champion all green under the deployed rules.
+- **Verify the deploy is real, not assumed.** Live Firestore rules were fetched
+  via `getSecurityRules().getFirestoreRuleset()` (`scratch/tests/tmp-w6-live-rules.cjs`)
+  and diffed byte-identical against repo `firestore.rules`. The `getFirestoreRuleset()`
+  source is a protobuf object — read `source[0].content`, not `source.length`.
+- **Client-side advancement is denied by design** (`Could not advance winner
+  client-side`). A player may finalize their own match but cannot write the next
+  match's slot. The CF seeds it in a SEPARATE invocation (its own fast-warm
+  trigger) — so between "match finished" and "next-match seeded" expect a CF
+  cold-start gap of ~15–40s on production. E2E waits must budget for it.
+- **`Failed to write game notifications` is EXPECTED, not a regression** (seen
+  since `c4b82b6`): the host's own notification writes (any-auth write allowed),
+  but per-player notifications are deduped with a `getDoc` that is owner-only
+  (`read: uid == userId`), so those throw and skip silently.
+- WaitUtilities: `waitFor` returns the predicate's value — when asserting fields,
+  return the DOC (`? doc : null`), never a bare boolean, or the check sees a stale `true`.
+
+---
+
 ## TL;DR
 
 The tournament broke because the system was a house of cards and the tests
