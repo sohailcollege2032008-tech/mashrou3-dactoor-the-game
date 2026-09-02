@@ -3,7 +3,7 @@
     "rooms": {
       ".read": "auth != null && auth.token.email == 'sohailcollege2032008@gmail.com'",
       "$roomCode": {
-        ".read":  "auth != null",
+        ".read": "auth != null",
         ".write": "auth != null",
         "answers": {
           "$qIdx": {
@@ -14,13 +14,13 @@
         },
         "reveal_locks": {
           "$qIdx": {
-            ".read":  "auth != null",
+            ".read": "auth != null",
             ".write": "auth != null && !data.exists()"
           }
         },
         "next_locks": {
           "$qIdx": {
-            ".read":  "auth != null",
+            ".read": "auth != null",
             ".write": "auth != null && !data.exists()"
           }
         }
@@ -28,14 +28,14 @@
     },
     "host_rooms": {
       "$hostId": {
-        ".read":  "auth != null && auth.uid == $hostId",
+        ".read": "auth != null && auth.uid == $hostId",
         ".write": "auth != null && auth.uid == $hostId"
       }
     },
     "duels": {
       ".read": "auth != null && auth.token.email == 'sohailcollege2032008@gmail.com'",
       "$duelId": {
-        ".read":  "auth != null",
+        ".read": "auth != null",
         ".write": "auth != null",
         "answers": {
           "$qIdx": {
@@ -63,20 +63,20 @@
       }
     },
     "duel_queue": {
-      ".read":  "auth != null",
+      ".read": "auth != null",
       ".write": "auth != null"
     },
     "duel_presence": {
       "$duelId": {
         "$uid": {
-          ".read":  "auth != null",
+          ".read": "auth != null",
           ".write": "auth != null && auth.uid == $uid"
         }
       }
     },
     "tournament_registrations": {
       "$tournamentId": {
-        ".read":  "auth != null",
+        ".read": "auth != null",
         "$uid": {
           ".write": "auth != null && auth.uid == $uid"
         }
@@ -85,8 +85,8 @@
     "tournament_duels": {
       "$tournamentId": {
         "$duelId": {
-          ".read":  "auth != null && (!data.exists() || data.child('players').child(auth.uid).exists() || data.child('host_uid').val() == auth.uid)",
-          ".write": "!data.exists() || data.child('players').child(auth.uid).exists() || data.child('host_uid').val() == auth.uid",
+          ".read": "auth != null && (!data.exists() || data.child('players').child(auth.uid).exists() || data.child('host_uid').val() == auth.uid)",
+          ".write": "auth != null && (auth.token.email == 'sohailcollege2032008@gmail.com' || (!data.exists() && newData.child('host_uid').val() == auth.uid) || (data.exists() && data.child('host_uid').val() == auth.uid))",
           "answers": {
             "$qIdx": {
               "$userId": {
@@ -99,6 +99,18 @@
                 },
                 "uid": {
                   ".validate": "newData.isString() && newData.val() == (data.exists() ? data.val() : auth.uid)"
+                },
+                "is_correct": {
+                  ".validate": "false"
+                },
+                "points_earned": {
+                  ".validate": "false"
+                },
+                "at": {
+                  ".validate": "newData.val() == now"
+                },
+                "reaction_ms_server": {
+                  ".validate": "false"
                 }
               }
             }
@@ -111,10 +123,27 @@
             }
           },
           "forfeit_by": {
-            ".validate": "newData.isString() && (newData.val() == auth.uid || (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() && root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(newData.val()).exists()) || (root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid && root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(newData.val()).exists()))"
+            ".validate": "newData.isString() && (newData.val() == auth.uid || (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() && root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(newData.val()).exists()) || (root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid && root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(newData.val()).exists()))",
+            ".write": "auth != null && (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() || root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid || auth.token.email == 'sohailcollege2032008@gmail.com')"
           },
           "surrender_by": {
-            ".validate": "newData.isString() && newData.val() == auth.uid"
+            ".validate": "newData.isString() && newData.val() == auth.uid",
+            ".write": "auth != null && (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() || root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid || auth.token.email == 'sohailcollege2032008@gmail.com')"
+          },
+          "status": {
+            ".write": "auth != null && (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() || root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid || auth.token.email == 'sohailcollege2032008@gmail.com')",
+            ".validate": "newData.isString()"
+          },
+          "question_started_at": {
+            ".write": "auth != null && (root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid || auth.token.email == 'sohailcollege2032008@gmail.com' || (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() && root.child('tournament_duels').child($tournamentId).child($duelId).child('status').val() != 'playing'))",
+            ".validate": "newData.isNumber() && newData.val() <= now + 2000"
+          },
+          "reveal_started_at": {
+            ".write": "auth != null && (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() || root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid || auth.token.email == 'sohailcollege2032008@gmail.com')"
+          },
+          "current_question_index": {
+            ".write": "auth != null && (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() || root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid || auth.token.email == 'sohailcollege2032008@gmail.com')",
+            ".validate": "newData.isNumber()"
           }
         }
       }
@@ -122,7 +151,7 @@
     "tournament_presence": {
       "$tournamentId": {
         "$uid": {
-          ".read":  "auth != null",
+          ".read": "auth != null",
           ".write": "auth != null && auth.uid == $uid"
         }
       }
@@ -130,28 +159,34 @@
     "duel_keys": {
       "$tournamentId": {
         "$duelId": {
-          ".read":  "false",
+          ".read": "false",
           ".write": "auth != null && root.child('bracket_live').child($tournamentId).child('meta').child('host_id').val() == auth.uid"
         }
       }
     },
     "bracket_live": {
       "$tournamentId": {
-        ".read":  "auth != null",
+        ".read": "auth != null",
         ".write": "false",
         "meta": {
           "announcement": {
             ".write": "auth != null && root.child('bracket_live').child($tournamentId).child('meta').child('host_id').val() == auth.uid",
-            "text": { ".validate": "newData.isString() && newData.val().length <= 200" },
-            "at":   { ".validate": "newData.isNumber()" },
-            "$other": { ".validate": false }
+            "text": {
+              ".validate": "newData.isString() && newData.val().length <= 200"
+            },
+            "at": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
           }
         }
       }
     },
     "tournament_meta": {
       "$tournamentId": {
-        ".read":  "auth != null",
+        ".read": "auth != null",
         ".write": "false"
       }
     }

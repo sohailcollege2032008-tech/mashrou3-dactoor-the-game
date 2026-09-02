@@ -332,9 +332,23 @@ def _score_question(tournament_id: str, duel_ref, duel: dict, qi: int) -> bool:
                      qi, tournament_id, duel_id)
         return False
 
-    # Rank correct answers by reaction time; clamp forged ultra-fast times so
-    # they cannot steal the first-correct slot.
+    # Rank correct answers by reaction time.
+    #
+    # `at` is the server's own stamp: the client writes {".sv": "timestamp"} and
+    # the rule accepts nothing else, so the time between the question opening and
+    # the answer landing is measured here rather than reported by the tab that
+    # wants the bonus. The self-reported value stays as the fallback for a tab
+    # that predates `at`, and a forged ultra-fast time is clamped to the worst
+    # rank instead of being believed.
+    q_start = duel.get("question_started_at")
+
     def _safe_reaction(ans: dict) -> int:
+        at = ans.get("at")
+        if isinstance(at, (int, float)) and isinstance(q_start, (int, float)):
+            measured = int(at) - int(q_start)
+            if measured < 0:
+                return MAX_REACTION_MS      # the clock moved — do not reward it
+            return max(MIN_REACTION_MS, min(measured, MAX_REACTION_MS))
         ms = ans.get("reaction_time_ms")
         if not isinstance(ms, (int, float)) or ms < MIN_REACTION_MS:
             return MAX_REACTION_MS
@@ -359,8 +373,9 @@ def _score_question(tournament_id: str, duel_ref, duel: dict, qi: int) -> bool:
         is_ok = (ans.get("selected_choice") == correct_c)
         rank  = rank_map.get(p_uid, 99)
         pts   = (2 if rank == 0 else 1) if is_ok else 0
-        updates[f"answers/{qi}/{p_uid}/is_correct"]    = is_ok
-        updates[f"answers/{qi}/{p_uid}/points_earned"] = pts
+        updates[f"answers/{qi}/{p_uid}/is_correct"]         = is_ok
+        updates[f"answers/{qi}/{p_uid}/points_earned"]      = pts
+        updates[f"answers/{qi}/{p_uid}/reaction_ms_server"] = _safe_reaction(ans)
         if pts > 0:
             updates[f"players/{p_uid}/score"] = base + pts
             live_scores[p_uid] = base + pts
@@ -1250,7 +1265,10 @@ def _sum_reaction_ms(duel: dict, uid: str) -> int:
             continue
         a = per_q.get(uid)
         if isinstance(a, dict) and a.get("is_correct"):
-            total += a.get("reaction_time_ms") or 0
+            # The server's measurement when it is there; is_correct and
+            # reaction_ms_server are both write-denied to clients, so this sum
+            # cannot be shaped by the player it decides against.
+            total += a.get("reaction_ms_server") or a.get("reaction_time_ms") or 0
     return total
 
 

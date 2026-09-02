@@ -10,6 +10,7 @@ import {
   increment,
   set,
   onDisconnect,
+  serverTimestamp as rtdbServerTimestamp,
 } from 'firebase/database'
 import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
@@ -234,17 +235,29 @@ export default function DuelGame({
     }
   }, [duel?.status])
 
-  // Auto-start transition (transaction-guarded): the first tab to reach its 5s
-  // mark flips waiting → playing; everyone else sees the flipped status. This is
-  // the actual game-launch logic and must stay as-is.
+  // Auto-start transition: the first tab to reach its 5s mark flips
+  // waiting → playing; everyone else sees the flipped status.
+  //
+  // Claimed on `status` and then the clock, rather than in one transaction over
+  // the whole duel node. A participant can no longer write that node — the same
+  // grant reached `players/{me}/score` — so the two fields it actually needs are
+  // written as two children. `status` is still the atomic claim, so only one tab
+  // ever starts the match.
   useEffect(() => {
     if (!duel || duelPath === 'duels' || duel.status !== 'waiting') return
 
     const startGame = setTimeout(async () => {
       try {
-        await runTransaction(rtdbRef(rtdb, `${duelPath}/${duelId}`), current => {
-          if (!current || current.status !== 'waiting') return undefined
-          return { ...current, status: 'playing', question_started_at: Date.now() + serverOffsetRef.current }
+        // The clock goes first, while the duel is still 'waiting'. That is the
+        // only window the rules allow a player to write it — rewriting it once
+        // the question is running would restart the timer for both players and
+        // skew every measured reaction time — so a tab that wakes up late is
+        // refused here instead of resetting a question in progress.
+        await set(rtdbRef(rtdb, `${duelPath}/${duelId}/question_started_at`),
+          Date.now() + serverOffsetRef.current)
+        await runTransaction(rtdbRef(rtdb, `${duelPath}/${duelId}/status`), current => {
+          if (current !== 'waiting') return current
+          return 'playing'
         })
       } catch (e) { console.error('auto-start error:', e) }
     }, 5000)
@@ -372,6 +385,13 @@ export default function DuelGame({
   }, [duelId, duelPath, serverNow])
 
   const triggerNextOrFinish = useCallback(async () => {
+    // A tournament duel advances server-side only. on_tournament_reveal_started
+    // moves to the next question, appends a tiebreaker, or finishes — and the
+    // reconciler repeats it if that invocation is ever lost. This tab used to
+    // race the server for the same job through a transaction over the whole duel
+    // node, and that node is where the scores live: the write that advanced the
+    // question was also a write that could set your own score.
+    if (duelPath !== 'duels') return
     if (nextInProgressRef.current) return
     const currentDuel = duelRef.current
     if (!currentDuel || currentDuel.status !== 'revealing') return
@@ -500,7 +520,16 @@ export default function DuelGame({
     const qi = duel.current_question_index
     try {
       await update(rtdbRef(rtdb, `${duelPath}/${duelId}/answers/${qi}`), {
-        [uid]: { uid, selected_choice: choiceIndex, reaction_time_ms: reactionTimeMs }
+        // `at` is stamped by the server (the rule accepts nothing else), so the
+        // gap between the question opening and this answer landing is measured
+        // rather than reported. reaction_time_ms stays for the regular-duel
+        // scoring path and as the display value.
+        [uid]: {
+          uid,
+          selected_choice:  choiceIndex,
+          reaction_time_ms: reactionTimeMs,
+          at:               rtdbServerTimestamp(),
+        }
       })
     } catch (e) { console.error('submitAnswer error:', e) }
   }, [hasAnswered, duel, uid, duelId, duelPath, serverNow])
