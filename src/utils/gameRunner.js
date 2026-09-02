@@ -37,6 +37,13 @@ export async function performReveal(roomId, room, players) {
   const secretKey      = `${roomId}:${room.created_at}`
   const config         = room.config || { scoring_mode: 'classic' }
 
+  // ── Idempotency guard: skip if this question was already revealed ────────
+  const alreadyRevealed = await get(ref(rtdb, `rooms/${roomId}/revealed_answers/${qIdx}`))
+  if (alreadyRevealed.exists()) {
+    console.log(`[gameRunner] performReveal: Q${qIdx} already revealed — skipping`)
+    return { revealData: null, sortedPlayers: players }
+  }
+
   // ── Fetch all answers ────────────────────────────────────────────────────
   const answersSnap = await get(ref(rtdb, `rooms/${roomId}/answers/${qIdx}`))
   const allAnswers  = answersSnap.exists() ? Object.values(answersSnap.val()) : []
@@ -72,24 +79,17 @@ export async function performReveal(roomId, room, players) {
   const scoreUpdates  = {}
   const answerUpdates = {}
 
-  // ── Batch-read current scores ────────────────────────────────────────────
-  const toUpdate   = correct.filter((_, i) => getPoints(i) > 0)
-  const scoreSnaps = await Promise.all(
-    toUpdate.map(a => get(ref(rtdb, `rooms/${roomId}/players/${a.user_id}/score`)))
-  )
-
+  // ── Score updates via increment (atomic — safe under concurrent execution) ─
   const newScoreById = {}
   players.forEach(p => { newScoreById[p.user_id] = p.score })
 
-  toUpdate.forEach((a, idx) => {
-    const pts      = getPoints(correct.indexOf(a))
-    const newScore = (scoreSnaps[idx].val() || 0) + pts
-    scoreUpdates[`rooms/${roomId}/players/${a.user_id}/score`]                   = newScore
-    answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/points_earned`]  = pts
-    newScoreById[a.user_id] = newScore
-  })
-
   correct.forEach((a, i) => {
+    const pts = getPoints(i)
+    if (pts > 0) {
+      scoreUpdates[`rooms/${roomId}/players/${a.user_id}/score`] = increment(pts)
+      answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/points_earned`] = pts
+      newScoreById[a.user_id] = (newScoreById[a.user_id] || 0) + pts
+    }
     answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/rank`]             = i + 1
     answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/is_first_correct`] = i === 0
     answerUpdates[`rooms/${roomId}/answers/${qIdx}/${a.user_id}/is_correct`]       = true

@@ -11,7 +11,7 @@
  * player tab stays open, the game continues to completion automatically.
  */
 import { useEffect, useRef } from 'react'
-import { ref, runTransaction } from 'firebase/database'
+import { ref, runTransaction, set } from 'firebase/database'
 import { rtdb } from '../lib/firebase'
 import { performReveal, performNextQuestion } from '../utils/gameRunner'
 
@@ -126,6 +126,9 @@ export function useUnattendedGameRunner({ roomId, room, session }) {
       await performReveal(roomId, currentRoom, players)
     } catch (err) {
       console.error('[UnattendedRunner] reveal failed:', err)
+      // Release the claim — nothing was applied, and holding it would freeze
+      // this question for every other tab too.
+      await set(lockRef, null).catch(() => {})
     } finally {
       revealingRef.current = false
     }
@@ -155,6 +158,7 @@ export function useUnattendedGameRunner({ roomId, room, session }) {
       await performNextQuestion(roomId, currentRoom, currentRoom.host_id)
     } catch (err) {
       console.error('[UnattendedRunner] next question failed:', err)
+      await set(lockRef, null).catch(() => {})   // release so another tab can advance
     } finally {
       nextingRef.current = false
     }

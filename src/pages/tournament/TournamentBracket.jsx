@@ -414,6 +414,7 @@ export default function TournamentBracket() {
         round:                match.round,
         question_duration_ms: tournament.duel_question_duration || 30000,
         creator_uid:          match.player_a_uid,
+        host_uid:             tournament.host_id ?? null,   // RTDB rejects undefined; the rules need this to let the host write
         deck_id:              tournament.deck_id,
         deck_title:           tournament.deck_title,
         questions:            safeQuestions,

@@ -84,11 +84,11 @@
       "$tournamentId": {
         "$duelId": {
           ".read":  "auth != null",
-          ".write": "auth != null",
+          ".write": "!data.exists() || data.child('players').child(auth.uid).exists() || data.child('host_uid').val() == auth.uid",
           "answers": {
             "$qIdx": {
               "$userId": {
-                ".write": "auth != null",
+                ".write": "auth != null && auth.uid == $userId && root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists()",
                 "selected_choice": {
                   ".validate": "!data.exists() ? (newData.isNumber() && auth.uid == $userId) : newData.val() == data.val()"
                 },
@@ -109,7 +109,7 @@
             }
           },
           "forfeit_by": {
-            ".validate": "newData.isString() && newData.val() == auth.uid"
+            ".validate": "newData.isString() && (newData.val() == auth.uid || (root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(auth.uid).exists() && root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(newData.val()).exists()) || (root.child('tournament_duels').child($tournamentId).child($duelId).child('host_uid').val() == auth.uid && root.child('tournament_duels').child($tournamentId).child($duelId).child('players').child(newData.val()).exists()))"
           },
           "surrender_by": {
             ".validate": "newData.isString() && newData.val() == auth.uid"

@@ -55,12 +55,12 @@ service cloud.firestore {
       // Anyone (host) can create a new tournament
       allow create: if request.auth != null;
       // Only the tournament host or platform owner can update/delete the tournament doc.
-      // The champion may mark the tournament finished (winner_uid == own uid) so the
-      // tournament completes even when the host is not watching the bracket page.
+      // (The winner_uid == request.auth.uid clause was a self-crown vector — a player could
+      // write {winner_uid: <self>, host_id: <self>} in one write and become the host. The
+      // champion is written server-side by the Cloud Function in _progress_round.)
       allow update, delete: if request.auth != null && (
         resource.data.host_id == request.auth.uid ||
-        request.auth.token.email == 'sohailcollege2032008@gmail.com' ||
-        (request.resource.data.winner_uid != null && request.resource.data.winner_uid == request.auth.uid)
+        request.auth.token.email == 'sohailcollege2032008@gmail.com'
       );
 
       // Registrations subcollection — player writes their own entry; host reads all.

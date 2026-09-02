@@ -269,13 +269,25 @@ All Gen 2, europe-west1, python311. Firestore access via `firebase_admin.firesto
 - `tournaments/{id}/registrations`: write self only.
 - `tournaments/{id}/ffa_results`: read any auth; write host or owner.
 - `tournaments/{id}/bracket_matches`: create/delete host/owner; update host/owner **or the two match participants** (players write their own match results; the champion finalizes the tournament).
+  > The participant `update` is unrestricted by field, so a match player can write
+  > `{status:'finished', winner_uid:self}` and `_finalize_match` will trust it. Known gap —
+  > see `functions/security_audit.md` (Round 2, "What is NOT closed").
+- `tournaments/{id}`: update/delete host or owner only. There is **no** "the declared winner
+  may finish the tournament" clause — it was a self-crowning vector and was removed.
 
 ### RTDB (`database.rules.json`)
 - `rooms/{code}`: read/write any auth (per-user answer write-once, host-only scoring fields).
-- `duels`, `duel_queue`, `tournament_duels`, `tournament_registrations`, `tournament_meta`: read/write any auth.
+- `duels`, `duel_queue`, `tournament_registrations`, `tournament_meta`: read/write any auth.
+- `tournament_duels/{tid}/{duelId}`: read any auth; write only when the node does not exist
+  yet (host/CF launch), or the writer is in `players`, or the writer is `host_uid`. Answer
+  writes also require `auth.uid == $userId` and that the writer is a player of that duel.
+  `forfeit_by` accepts self, the other player of the duel, or the host; `surrender_by` is
+  self-only.
 - `duel_presence`, `tournament_presence`: write self only.
 - `host_rooms/{hostId}`: owner only.
-- `correct` field: **blocked** (read: false, write: false) — only `correct_hash` may exist.
+- The `correct` field is **not** written to RTDB by the server (`_strip_correct` removes it and
+  writes `correct_hash` instead). There is no rule blocking it — an earlier version of this
+  document claimed there was. Anything that writes questions to RTDB must strip it itself.
 
 Rules are deployed from the repo (`firebase deploy --only firestore:rules`, `--only database`). Any new path needs a rule before the code lands (a missing rule fails silently as `PERMISSION_DENIED`).
 

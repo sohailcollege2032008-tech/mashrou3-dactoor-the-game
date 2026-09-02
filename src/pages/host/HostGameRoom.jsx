@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react'
 import MathText from '../../components/common/MathText'
 import { getDir } from '../../utils/rtlUtils'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ref, onValue, update, get, set, onDisconnect } from 'firebase/database'
+import { ref, onValue, update, get, set, onDisconnect, runTransaction } from 'firebase/database'
 import { doc, getDoc, setDoc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { performReveal, performNextQuestion, sortPlayers } from '../../utils/gameRunner'
@@ -648,20 +648,74 @@ export default function HostGameRoom() {
   }
 
   const revealAnswer = async () => {
+    if (!room) return
+    const qIdx = room.current_question_index
+    if (qIdx === undefined) return
+
+    // Acquire the same lock that useUnattendedGameRunner uses.
+    // If another tab (player or host) already claimed this question's reveal,
+    // skip — the UI will update from the room subscription anyway.
+    const lockRef = ref(rtdb, `rooms/${roomId}/reveal_locks/${qIdx}`)
+    let claimed = false
+    try {
+      const result = await runTransaction(lockRef, current => {
+        if (current !== null) return undefined   // abort — already claimed
+        return session.uid
+      })
+      claimed = result.committed
+    } catch (e) {
+      console.warn('[HostGameRoom] reveal lock tx failed:', e)
+      return
+    }
+    if (!claimed) {
+      console.log('[HostGameRoom] reveal lock already taken — skipping performReveal')
+      return
+    }
+
     setIsRevealing(true)
     try {
       const { revealData } = await performReveal(roomId, room, players)
       setRevealResult(revealData)
-    } catch (err) { alert('Reveal failed: ' + err.message) }
+    } catch (err) {
+      // Hand the lock back: performReveal writes scores and revealed_answers in
+      // one multi-path update, so a failure left nothing applied and another tab
+      // must be able to claim this question instead of the game freezing.
+      await set(lockRef, null).catch(() => {})
+      alert('Reveal failed: ' + err.message)
+    }
     finally { setIsRevealing(false) }
   }
 
   const nextQuestion = async () => {
     if (!room?.questions?.questions) return
+    const qIdx = room.current_question_index
+    if (qIdx === undefined) return
+
+    // Acquire the same lock that useUnattendedGameRunner uses.
+    const lockRef = ref(rtdb, `rooms/${roomId}/next_locks/${qIdx}`)
+    let claimed = false
+    try {
+      const result = await runTransaction(lockRef, current => {
+        if (current !== null) return undefined
+        return session.uid
+      })
+      claimed = result.committed
+    } catch (e) {
+      console.warn('[HostGameRoom] next lock tx failed:', e)
+      return
+    }
+    if (!claimed) {
+      console.log('[HostGameRoom] next lock already taken — skipping')
+      return
+    }
+
     try {
       await performNextQuestion(roomId, room, session.uid)
       setRevealResult(null)
-    } catch (err) { alert('Error: ' + err.message) }
+    } catch (err) {
+      await set(lockRef, null).catch(() => {})   // release so another tab can advance
+      alert('Error: ' + err.message)
+    }
   }
 
   const startCountdown = async () => {

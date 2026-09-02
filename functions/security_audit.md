@@ -90,3 +90,57 @@ A player watching the Network tab can see the correct answer before choosing.
 Store the real index only in Firestore (server-side). CF reveals the index after the reveal
 phase and writes `reveal_index` to the duel node. Requires a significant refactor of
 `DuelLobby.jsx`, `DuelGame.jsx`, and the CF scoring logic.
+
+---
+---
+
+# Round 2 — Tournament hardening (2026-09-02)
+
+**Implemented and gate-verified. NOT deployed** — rules and functions still have to be
+pushed for any of this to take effect in production.
+
+## What is closed
+
+| # | Hole | Fix | Location |
+|---|---|---|---|
+| 1 | **Self-crowning host.** `allow update, delete` on a tournament accepted any write whose *result* had `winner_uid == auth.uid`. `request.resource.data` is post-write state and there was no `affectedKeys()` guard, so one write of `{winner_uid: self, host_id: self}` made the caller the host — then FFA results, bracket matches and deletion all followed. Confirmed exploitable (HTTP 200) against production. | Clause removed. The champion is written server-side in `_progress_round`; the client write was already wrapped in `try/catch`. | `firestore.rules:55-64` (`tournaments/{tournamentId}`) |
+| 2 | **`tournament_duels` open to every account.** `.write: auth != null` with no participant check. A stranger could pump an opponent's score in a loop, fabricate an answer under a player's uid, flip the match to `finished`, rewrite `questions`, or delete the node. | Write now requires: node does not exist yet (host/CF launch), or the writer is in `players`, or the writer is `host_uid`. Answer writes additionally require `auth.uid == $userId` **and** that the writer is a player of that duel. | `database.rules.json:83-118` |
+| 3 | **Surrender flipped the result.** `surrender_by` appeared nowhere in `functions/main.py`; a 0–0 surrender fell through to "better FFA rank wins", so the player who quit could advance and eliminate their opponent. | `_resolve_winner` resolves `surrender_by`/`forfeit_by` first, before any score or FFA-rank comparison, and ignores (with an error log) a uid that is not one of the two players. | `functions/main.py:_resolve_winner` |
+| 4 | **Two permanent freezes.** (a) A duel force-started with nobody watching stayed `playing` forever — `reveal_started_at` is only ever written by a player's tab. (b) A tournament whose host tab died between `batch.commit()` of `ffa_results` and the `updateDoc({status})` sat in `ffa` forever: the CF returned early when results existed and the reconciler only queried `status == 'bracket'`. | `_advance_reveal` extracted and shared by the reveal trigger and the reconciler (same transaction, so no double advance). Reconciler now recovers `playing` and `revealing` duels past their deadline, and sweeps `ffa` tournaments that already have results. `on_ffa_room_finished` flips the phase without re-running the tie-break shuffle. | `functions/main.py` — `_advance_reveal`, `tournament_reconciler`, `on_ffa_room_finished` |
+| 5 | **Host locked out of the forfeit paths** (found in review, pre-existing). `.validate` on `forfeit_by` required `newData.val() == auth.uid`, so the host's force-finish and the disconnect-forfeit written by the surviving player both failed with a silent `PERMISSION_DENIED`. Force-finish was worse than a no-op: the Firestore batch commits first, so the bracket advanced while the two players kept playing a decided match. | `forfeit_by` accepts: self, a player of the same duel naming the other player, or `host_uid` naming either player. `surrender_by` stays self-only — surrendering is a personal act. | `database.rules.json:111-113` |
+| 6 | **FFA results counted twice.** The FFA room runs with `auto_mode` **and** `unattended_mode`; the host tab revealed without taking `reveal_locks/{qi}` while a player's tab took it, so `performReveal` ran twice per question. Measured in room `56HH5D`: `correct_count` 5 → **10**, `total_reaction_ms` 4519 → **9038**, `score` 15 → **24** (a different number every run, because `score` was read-then-written). This decided **who entered the bracket**. | Host takes the same `reveal_locks`/`next_locks` transaction as `useUnattendedGameRunner`; `score` moved to `increment()`; `performReveal` returns early when `revealed_answers/{qi}` already exists. Both lock holders release the lock if the run throws, so a dead tab no longer freezes the question. | `src/pages/host/HostGameRoom.jsx`, `src/utils/gameRunner.js`, `src/hooks/useUnattendedGameRunner.js` |
+| 7 | **A corrupt deck entry shifted every later question.** `_strip_correct` skipped non-dict entries, shortening the list while indices kept counting — answer hashes are bound to the final index, so every question after the gap became unscoreable, silently. | Length is preserved with an RTDB-safe placeholder (a `null` would be dropped and collapse the array into a sparse object, breaking `questions.length` on the client). Out-of-range round assignments and questions missing `correct` now log an error. | `functions/main.py:_strip_correct`, `_questions_for_round` |
+
+## What is NOT closed — read before the next event
+
+* **A match player can still crown themselves in Firestore.** `bracket_matches` grants the
+  two players an unrestricted `update`, so a `PATCH {status:'finished', winner_uid:self}`
+  is accepted and `_finalize_match` trusts the stored `winner_uid`. Closing it means match
+  results become CF-only, which changes who advances the bracket — it needs a full bracket
+  re-test and is therefore deliberately left for the next round.
+* **A player inside a match is still trusted.** `.validate` caps `score` at `+2` per write
+  but not the number of writes, and RTDB cannot revoke an ancestor's `.write` grant, so a
+  participant can pump their own score or write fields under the opponent's answer node.
+  The rules changes above stop *outsiders*, not participants.
+* **The FFA phase still depends on the host's tab** (launch, scheduled start, finalisation).
+  Only the recovery paths are server-side.
+
+## Evidence
+
+* `functions/test_main_pure.py` — 14/14 pass: surrender / forfeit / 0–0 FFA-rank fallback,
+  hash-index preservation including an appended tiebreaker, out-of-range round assignment.
+* `scratch/tests/tmp-w5-ffa-double.mjs` — host tab + two player tabs against the local dev
+  server. **Before the fix: FAIL** — `reveal_locks` is `null` for every question and
+  `next_locks` is `[null, p02, p02]`, i.e. the host revealed and advanced outside the lock
+  (the same `[null, "p05"]` shape recorded in the live run). **After: PASS** — every
+  question's lock holds exactly one uid and all counters are single-counted.
+  The numeric ×2 is not reproduced by the harness (it needs both tabs to fire in the same
+  instant); the live room measurement above is the reproduction, and what the test proves
+  is that the double-execution window is now closed.
+* `firestore.rules` + `database.rules.json` compile; `npm run build` and eslint clean.
+
+## Deploy order (matters)
+
+Push the client first, then the rules. The new RTDB rule lets the host write to a duel only
+when `host_uid` is present, and that field is written by the new client and CF code — rules
+first would lock the host out of every duel launched by an old tab.

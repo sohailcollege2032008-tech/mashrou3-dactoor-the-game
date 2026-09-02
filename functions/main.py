@@ -41,6 +41,9 @@ DUEL_AUTOSTART_MS     = 25_000    # duel stuck in 'waiting' this long → force 
 MAX_TRIGGER_SLEEP_S   = 480       # hard cap on in-function waiting
 QUESTIONS_PER_MATCH   = 5
 LAUNCH_GRACE_MS       = 3_000     # let the host tab win the launch race when open
+RECONCILE_GRACE_MS    = 10_000    # window past duration before reconciler force-advances
+                                  # (mobile browsers throttle background timers, so give the
+                                  #  owning tab a wide margin before the server steps in)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -245,40 +248,14 @@ def on_tournament_answer_written(event: db_fn.Event[db_fn.Change]) -> None:
 
 # ── Function 2 ─────────────────────────────────────────────────────────────────
 
-@db_fn.on_value_written(
-    reference=f"{BASE_PATH}/{{tournamentId}}/{{duelId}}/reveal_started_at",
-    region="europe-west1",
-    memory=options.MemoryOption.MB_256,
-    timeout_sec=60,
-)
-def on_tournament_reveal_started(event: db_fn.Event[db_fn.Change]) -> None:
+def _advance_reveal(duel_ref) -> bool:
     """
-    Fires when reveal_started_at is written on a tournament duel.
-    Waits until the reveal phase ends, then advances to the next question
-    (or finishes, with optional tiebreaker extension).
+    Atomically advance a revealed duel to the next question (or finish).
+
+    Shared by on_tournament_reveal_started (the normal path) and the reconciler
+    (the stale-reveal backstop).  Aborts when the duel is no longer in
+    'revealing' so concurrent writers can never double-advance.
     """
-    after_val  = event.data.after
-    before_val = event.data.before
-
-    # Only act on null → value  (skip deletions and value → value updates)
-    if after_val is None:
-        return
-    if before_val is not None:
-        return
-
-    tournament_id = event.params["tournamentId"]
-    duel_id       = event.params["duelId"]
-
-    # Sleep for the remainder of the reveal phase
-    reveal_ts  = after_val if isinstance(after_val, (int, float)) else _now_ms()
-    elapsed_ms = _now_ms() - int(reveal_ts)
-    sleep_ms   = max(0, REVEAL_DURATION_MS - elapsed_ms)
-    if sleep_ms > 0:
-        time.sleep(sleep_ms / 1000.0)
-
-    # ── Atomically advance to next question (or finish) ───────────────────────
-    duel_ref = admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}")
-
     def advance_fn(current):
         if current is None or current.get("status") != "revealing":
             raise _Abort()  # already advanced
@@ -321,8 +298,44 @@ def on_tournament_reveal_started(event: db_fn.Event[db_fn.Change]) -> None:
             "reveal_started_at":      None,
         }
 
-    _try_transaction(duel_ref, advance_fn)
-    logger.info("[CF] Advanced duel — tournament=%s duel=%s", tournament_id, duel_id)
+    return _try_transaction(duel_ref, advance_fn)
+
+
+@db_fn.on_value_written(
+    reference=f"{BASE_PATH}/{{tournamentId}}/{{duelId}}/reveal_started_at",
+    region="europe-west1",
+    memory=options.MemoryOption.MB_256,
+    timeout_sec=60,
+)
+def on_tournament_reveal_started(event: db_fn.Event[db_fn.Change]) -> None:
+    """
+    Fires when reveal_started_at is written on a tournament duel.
+    Waits until the reveal phase ends, then advances to the next question
+    (or finishes, with optional tiebreaker extension).
+    """
+    after_val  = event.data.after
+    before_val = event.data.before
+
+    # Only act on null → value  (skip deletions and value → value updates)
+    if after_val is None:
+        return
+    if before_val is not None:
+        return
+
+    tournament_id = event.params["tournamentId"]
+    duel_id       = event.params["duelId"]
+
+    # Sleep for the remainder of the reveal phase
+    reveal_ts  = after_val if isinstance(after_val, (int, float)) else _now_ms()
+    elapsed_ms = _now_ms() - int(reveal_ts)
+    sleep_ms   = max(0, REVEAL_DURATION_MS - elapsed_ms)
+    if sleep_ms > 0:
+        time.sleep(sleep_ms / 1000.0)
+
+    # ── Atomically advance to next question (or finish) ───────────────────────
+    duel_ref = admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}")
+    if _advance_reveal(duel_ref):
+        logger.info("[CF] Advanced duel — tournament=%s duel=%s", tournament_id, duel_id)
 
 # ── Function 3 ─────────────────────────────────────────────────────────────────
 
@@ -362,9 +375,17 @@ def on_ffa_room_finished(event: db_fn.Event[db_fn.Change]) -> None:
     if tourn.get("status") == "bracket" or tourn.get("status") == "finished":
         return
 
-    # Skip if the host client already wrote results (avoid conflicting shuffles)
+    # If the host client already wrote results but the tournament never flipped
+    # to 'bracket' (its tab died between batch.commit() and updateDoc), just flip
+    # the phase — never re-run the tie-break shuffle or rewrite the results.
     if len(tourn_ref.collection("ffa_results").limit(1).get()) > 0:
-        logger.info("[CF-FFA] ffa_results already present — skipping %s", tournament_id)
+        if (tourn.get("status") or "") != "bracket":
+            tourn_ref.update({"status": "bracket", "current_round": 1,
+                              "phase_started_at": int(time.time() * 1000)})
+            logger.info("[CF-FFA] ffa_results present — flipped %s to bracket", tournament_id)
+        else:
+            logger.info("[CF-FFA] ffa_results already present + status bracket — skipping %s",
+                        tournament_id)
         return
 
     actual_top_cut = tourn.get("actual_top_cut") or 8
@@ -435,8 +456,18 @@ def _strip_correct(questions: list, duel_id: str) -> list:
     out = []
     for qi, q in enumerate(questions):
         if not isinstance(q, dict):
+            # Preserve length: answer hashes are bound to the question's FINAL index,
+            # so dropping an element shifted every later question onto a wrong index
+            # and made them permanently unscoreable.
+            logger.error("[CF-BR] question %d is not a dict — placeholder kept (duel/match %s)",
+                         qi, duel_id)
+            # A null/scalar entry would be dropped by RTDB and collapse the array into a
+            # sparse object, so keep the slot filled with a harmless unscoreable question.
+            out.append({"question": "", "choices": [], "invalid": True})
             continue
         if q.get("correct") is None:
+            logger.error("[CF-BR] question %d missing `correct` — will be unscored (duel/match %s)",
+                         qi, duel_id)
             out.append(q)
             continue
         safe = {k: v for k, v in q.items() if k != "correct"}
@@ -528,6 +559,12 @@ def _questions_for_round(rnd: int, tourn: dict, deck_qs: list, count: int) -> li
     if assigned:
         picked = [deck_qs[i] for i in assigned
                   if isinstance(i, int) and 0 <= i < len(deck_qs)]
+        if len(picked) != len(assigned):
+            logger.error(
+                "[CF-BR] round %d assigned %d indices, only %d resolvable in deck "
+                "(deck len=%d, tournament=%s, deck_id=%s) — matches will run short",
+                rnd, len(assigned), len(picked), len(deck_qs),
+                tourn.get("title") or "?", tourn.get("deck_id") or "?")
         if picked:
             return picked
 
@@ -700,6 +737,7 @@ def _launch_match(fs, tournament_id: str, tourn: dict, match: dict) -> bool:
         "round": match.get("round") or 1,
         "question_duration_ms": tourn.get("duel_question_duration") or 30_000,
         "creator_uid": uid_a,
+        "host_uid": tourn.get("host_id"),
         "deck_id": deck_id,
         "deck_title": tourn.get("deck_title") or "",
         "questions": safe_questions,
@@ -769,10 +807,16 @@ def _resolve_winner(fs, tournament_id: str, duel: dict, match: dict):
     score_a = (players.get(uid_a) or {}).get("score") or 0
     score_b = (players.get(uid_b) or {}).get("score") or 0
 
-    if duel.get("forfeit_by"):
-        loser = duel["forfeit_by"]
-        winner = uid_b if loser == uid_a else uid_a
-        return winner, loser, None
+    # A surrender is a loss for the surrendering player — never a draw and never a
+    # fall-through to score/FFA-rank ordering. The bracket has no draw outcome, so it
+    # is treated exactly like a forfeit. A uid that is not one of the two players is
+    # ignored rather than silently crowning player A.
+    quitter = duel.get("surrender_by") or duel.get("forfeit_by")
+    if quitter in (uid_a, uid_b):
+        winner = uid_b if quitter == uid_a else uid_a
+        return winner, quitter, None
+    if quitter:
+        logger.error("[CF-BR] quitter %s is not a player of this match — ignored", quitter)
 
     if score_a != score_b:
         winner = uid_a if score_a > score_b else uid_b
@@ -1085,6 +1129,28 @@ def tournament_reconciler(event: scheduler_fn.ScheduledEvent) -> None:
         logger.exception("[CF-REC] query failed: %s", e)
         return
 
+    # ── FFA recovery sweep ────────────────────────────────────────────────────
+    # The host client writes ffa_results in one batch and flips status in a
+    # separate updateDoc; if its tab dies in between, the tournament sits in
+    # 'ffa' with results present forever. Flip it to 'bracket' — the existing
+    # bracket trigger/reconciler path takes over from there.
+    try:
+        stalled_ffa = fs.collection("tournaments").where("status", "==", "ffa").get()
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-REC] ffa query failed: %s", e)
+        stalled_ffa = []
+
+    for doc in stalled_ffa:
+        tournament_id = doc.id
+        try:
+            tourn_ref = fs.collection("tournaments").document(tournament_id)
+            if len(tourn_ref.collection("ffa_results").limit(1).get()) > 0:
+                tourn_ref.update({"status": "bracket", "current_round": 1,
+                                  "phase_started_at": _now_ms()})
+                logger.info("[CF-REC] ffa_results present — flipped %s to bracket", tournament_id)
+        except Exception as e:                                # noqa: BLE001
+            logger.exception("[CF-REC] ffa recovery failed %s: %s", tournament_id, e)
+
     for doc in live:
         tournament_id = doc.id
         tourn = doc.to_dict() or {}
@@ -1136,6 +1202,28 @@ def tournament_reconciler(event: scheduler_fn.ScheduledEvent) -> None:
                             {"status": "playing", "question_started_at": now})
                         logger.info("[CF-REC] restarted idle duel %s/%s",
                                     tournament_id, duel_id)
+                elif status == "playing":
+                    # Force-started (or abandoned) duel where nobody ever wrote
+                    # reveal_started_at — the question timer has long expired and
+                    # the match would stay LIVE forever. Re-enter the reveal phase
+                    # so on_tournament_reveal_started completes it.
+                    q_dur   = duel.get("question_duration_ms") or 30_000
+                    q_start = duel.get("question_started_at") or 0
+                    if q_start and now - q_start > q_dur + RECONCILE_GRACE_MS:
+                        admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}").update(
+                            {"status": "revealing", "reveal_started_at": now})
+                        logger.info("[CF-REC] recovered frozen playing duel %s/%s",
+                                    tournament_id, duel_id)
+                elif status == "revealing":
+                    # The reveal phase was entered but advance never happened
+                    # (client tab closed after writing reveal_started_at). Run the
+                    # same idempotent advance the reveal trigger uses.
+                    r_ts = duel.get("reveal_started_at") or 0
+                    if r_ts and now - r_ts > REVEAL_DURATION_MS + RECONCILE_GRACE_MS:
+                        if _advance_reveal(
+                                admin_db.reference(f"{BASE_PATH}/{tournament_id}/{duel_id}")):
+                            logger.info("[CF-REC] advanced stale reveal %s/%s",
+                                        tournament_id, duel_id)
 
             _progress_round(fs, tournament_id, tourn_ref.get().to_dict() or {},
                             tourn.get("current_round") or 1)
