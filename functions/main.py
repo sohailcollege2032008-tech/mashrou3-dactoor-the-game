@@ -100,6 +100,9 @@ def _mirror_match(tournament_id: str, match_id: str, match: dict) -> None:
             "next_match_id": match.get("next_match_id") or None,
             "launch_after":  match.get("launch_after") or None,
             "tie_breaker":   match.get("tie_breaker") or None,
+            # BracketBoard already draws a ⚡ for a host-settled match; without
+            # this the badge could only ever appear on the host's own page.
+            "forced_by_host": bool(match.get("forced_by_host")),
             "updated_at":    _now_ms(),
         })
     except Exception as e:                                    # noqa: BLE001
@@ -1142,6 +1145,19 @@ def _ensure_bracket(fs, tournament_id: str, tourn: dict) -> bool:
         batch.update(tourn_ref, patch)
 
     batch.commit()
+    # The qualifier seat of everyone in the bracket, for the spectator page.
+    # A match document carries no seed — seeds live in ffa_results, which a
+    # spectator page deliberately does not read (one subscription, no question
+    # text, no per-player docs). uid → rank for at most `size` players is a few
+    # hundred bytes, written once, and it is what lets the live tree print a
+    # seat and recognise an upset the moment it happens.
+    try:
+        admin_db.reference(f"{LIVE_PATH}/{tournament_id}/meta/seats").set(
+            {r["uid"]: r.get("rank") for r in advanced if r.get("uid") and r.get("rank")}
+        )
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-BR] seats mirror failed for %s: %s", tournament_id, e)
+
     logger.info("[CF-BR] generated %d matches for %s (top_cut=%d)",
                 len(matches), tournament_id, size)
     return True

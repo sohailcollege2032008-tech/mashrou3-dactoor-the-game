@@ -824,12 +824,17 @@ export default function HostGameRoom() {
       const sortedLeaderboard = sortPlayers([...players]).map((p, i) => ({ rank: i + 1, user_id: p.user_id, nickname: p.nickname, score: p.score }))
       const winner = sortedLeaderboard[0] || null
       await setDoc(hostNotifRef, { type: 'game_finished', room_id: roomId, room_title: room.title || roomId, total_players: players.length, winner_nickname: winner?.nickname || null, results_url: `/host/game/${roomId}`, created_at: serverTimestamp(), read: false })
-      await Promise.all(sortedLeaderboard.map(async (entry, idx) => {
-        const playerNotifRef = doc(db, 'notifications', entry.user_id, 'items', roomId)
-        const playerExisting = await getDoc(playerNotifRef)
-        if (playerExisting.exists()) return
-        return setDoc(playerNotifRef, { type: 'game_finished', room_id: roomId, room_title: room.title || roomId, my_rank: idx + 1, my_score: entry.score, total_players: players.length, full_leaderboard: sortedLeaderboard, created_at: serverTimestamp(), read: false })
-      }))
+      // No existence check on a player's own notification: the rule lets anyone
+      // WRITE a notification but only its owner READ it, so this getDoc was
+      // denied for every player — and one rejection inside Promise.all threw
+      // away the whole loop, so players silently got no end-of-game
+      // notification at all. Re-writing the same derived row is harmless, and
+      // `notificationsWrittenRef` already stops a tab repeating itself.
+      // Settled, not all: one player's failure must not cost the others theirs.
+      await Promise.allSettled(sortedLeaderboard.map((entry, idx) => setDoc(
+        doc(db, 'notifications', entry.user_id, 'items', roomId),
+        { type: 'game_finished', room_id: roomId, room_title: room.title || roomId, my_rank: idx + 1, my_score: entry.score, total_players: players.length, full_leaderboard: sortedLeaderboard, created_at: serverTimestamp(), read: false },
+      )))
     } catch (err) { console.error('[Notifications] Failed to write game notifications:', err) }
   }
 

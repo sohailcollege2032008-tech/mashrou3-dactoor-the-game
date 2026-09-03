@@ -20,6 +20,7 @@ import { useSoundStore } from '../stores/soundStore';
  *  playJoin               → successfully joined a tournament
  *  playTick               → countdown ticking
  *  playOpponentLock       → the other player locked their answer (synth only)
+ *  playGasp               → an upset on the live bracket
  *  playButtonClick        → UI buttons
  */
 class SoundManager {
@@ -176,6 +177,17 @@ class SoundManager {
   playOpponentLock() {
     if (!this._canPlay()) return;
     this._synthOpponentLock();
+  }
+
+  /**
+   * A seed just went out to someone below them. Rare by definition — which is
+   * why it gets a sound at all: on the spectator page every match ending would
+   * be noise, but an upset is the moment the room reacts to.
+   */
+  playGasp() {
+    if (!this._canPlay()) return;
+    if (this._playFile('gasp', 0.85)) return;
+    this._synthWrong();
   }
 
   // ── Original synthesized implementations (fallback) ──────────────────────────

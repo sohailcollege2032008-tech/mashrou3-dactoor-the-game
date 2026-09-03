@@ -286,6 +286,15 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
   where it exists, clipboard otherwise, and the URL as selectable text if both are
   refused. The hint says any signed-in user can watch, because a link that bounces the
   recipient to a login screen looks broken.
+- **An upset, named as one.** The spectator mirror carries `meta.seats` (uid →
+  qualifier seat, written once by `_ensure_bracket`) and `forced_by_host` per
+  match, so the live tree can mark a lower seat knocking out a higher one with
+  a «مفاجأة» chip and play `soundManager.playGasp()` — but only for a result
+  that lands while you are watching, and never for a walkover, where nobody
+  played. Arriving late shows the marks in silence: the seen-set is seeded from
+  the first snapshot that actually arrived, not from the render before it.
+  A match document has no seed of its own — seeds live in `ffa_results`, which
+  the spectator page deliberately never reads.
 - **The opponent's lock, out loud.** `soundManager.playOpponentLock()` — two quiet falling
   blips (G4 → C4), synth-only so it cannot be mistaken for your own click and does not
   compete with the countdown tick. Fires once per question from the duel node, so it

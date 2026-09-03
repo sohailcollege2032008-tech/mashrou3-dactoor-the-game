@@ -24,6 +24,8 @@ import HonoursBoard from '../../components/tournament/HonoursBoard'
 import BracketBoard from '../../components/tournament/BracketBoard'
 import RoundRecap from '../../components/tournament/RoundRecap'
 import ShareWatchLink from '../../components/tournament/ShareWatchLink'
+import SoundToggle from '../../components/common/SoundToggle'
+import { soundManager } from '../../utils/soundManager'
 import LockLamp from '../../components/tournament/LockLamp'
 
 function roundName(round, totalRounds) {
@@ -329,10 +331,38 @@ export default function TournamentLive() {
   useEffect(() => {
     if (meta?.status !== 'finished' || !meta?.winner_uid) return
     if (confettiRef.current) return
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
     confettiRef.current = true
+    soundManager.playChampion()
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
     confetti({ particleCount: 160, spread: 110, origin: { y: 0.4 } })
   }, [meta?.status, meta?.winner_uid])
+
+  // A gasp when a seat falls to a lower one — and only for a result that lands
+  // while you are watching. The first render seeds the set of already-finished
+  // matches silently, otherwise opening the page on a played-out bracket would
+  // fire one gasp per historic upset. Muting is the sound toggle in the header.
+  const gaspedRef = useRef(null)
+  useEffect(() => {
+    const seats = meta?.seats
+    const finished = matches.filter(m => m.status === 'finished' && m.winner_uid)
+    if (gaspedRef.current === null) {
+      // Seed from the first snapshot that actually arrived. Seeding from the
+      // render before it (matches: []) marks nothing as seen, so every result
+      // already in the bracket then arrives as news and the page gasps its way
+      // through the history of the tournament.
+      if (!data) return
+      gaspedRef.current = new Set(finished.map(m => m.match_id))
+      return
+    }
+    for (const m of finished) {
+      if (gaspedRef.current.has(m.match_id)) continue
+      gaspedRef.current.add(m.match_id)
+      if (!seats || m.forced_by_host) continue
+      const loser = m.winner_uid === m.a_uid ? m.b_uid : m.a_uid
+      const sw = seats[m.winner_uid], sl = seats[loser]
+      if (sw && sl && sw > sl) soundManager.playGasp()
+    }
+  }, [matches, meta?.seats, data])
 
   // ── States ────────────────────────────────────────────────────────────────
   if (data === undefined) {
@@ -385,7 +415,10 @@ export default function TournamentLive() {
           {/* Whoever is already watching is the likeliest person to bring the
               next spectator — so the link lives on the page itself, not only
               in the host's hands. */}
-          <div style={{ marginInlineStart: 'auto' }}>
+          <div style={{ marginInlineStart: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* The page makes noise now (a gasp when a seat falls, the champion
+                fanfare), so it needs the mute that every other page has. */}
+            <SoundToggle showPreviewBtn={false} />
             <ShareWatchLink tournamentId={tournamentId} title={meta?.title} hint={false} label="شارك" />
           </div>
           {liveCount > 0 && (
@@ -534,6 +567,7 @@ export default function TournamentLive() {
         ) : (
           <BracketBoard
             matches={matches}
+            seats={meta?.seats || null}
             totalRounds={totalRounds}
             myUid={uid}
             currentRound={meta?.current_round || null}

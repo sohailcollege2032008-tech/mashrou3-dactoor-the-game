@@ -1,29 +1,4 @@
-/**
- * BracketBoard.jsx — the bracket as something you can read on a phone.
- *
- * A single-elimination tree is a wide shape by nature: 32 players is five
- * columns and sixteen first-round matches. On a laptop that shape IS the
- * information. On a phone it became a sideways scroller with the final off the
- * edge of the screen — you had to drag to find out who is playing for the title.
- *
- * So narrow screens get two ways in, neither of which scrolls sideways:
- *
- *   · ROUND — one round at a time, full-width rows, picked from a rail that
- *     shows each round's progress and where the live matches are. Vertical
- *     scrolling is what a phone is for.
- *   · PATH  — one player's route through the tree, one row per round. This is
- *     the view that does not grow with the bracket: 32 players is still five
- *     rows, and it is what a player or a fan actually wants to know. Tap any
- *     name in ROUND mode to follow them.
- *
- * Wide screens keep the column tree, which is the right shape there.
- *
- * It takes both match shapes, because the two callers have different ones: the
- * spectator mirror writes `a_uid/a_name/a_score`, Firestore writes
- * `player_a_uid/...`. And it takes a `tone`, because the live page is paper
- * while the player's wait screen shows the bracket inside a dark panel.
- */
-import React, { useMemo, useState } from 'react'
+import React, { createContext, useContext, useMemo, useState } from 'react'
 import { Radio, Trophy, X, ChevronLeft } from 'lucide-react'
 import { motion } from 'framer-motion'
 import LockLamp from './LockLamp'
@@ -93,8 +68,17 @@ function normalize(m) {
 const STATUS_LABEL = { active: 'مباشر', finished: 'خلص', pending: 'مستنية' }
 
 /** One competitor line inside a match row. */
+/**
+ * Qualifier seats, by uid. Threaded by context rather than through four
+ * component signatures — the tree is deep and every level would have to carry
+ * a prop it does not use itself.
+ */
+const SeatsContext = createContext(null)
+
 function PlayerLine({ m, side, myUid, T, onFollow }) {
+  const seats  = useContext(SeatsContext)
   const uid    = side === 'a' ? m.aUid : m.bUid
+  const oppUid = side === 'a' ? m.bUid : m.aUid
   const name   = side === 'a' ? m.aName : m.bName
   const score  = side === 'a' ? m.aScore : m.bScore
   const isLive = m.status === 'active'
@@ -110,6 +94,13 @@ function PlayerLine({ m, side, myUid, T, onFollow }) {
     : null
 
   const follow = onFollow && uid ? () => onFollow(uid) : undefined
+
+  // An upset: a lower seat knocking out a higher one. Marked instead of
+  // printing every player's seat on every line — 32 seat numbers is decoration,
+  // one «مفاجأة» is the story. A walkover is not one; nobody played.
+  const mySeat  = seats && uid ? seats[uid] : null
+  const oppSeat = seats && oppUid ? seats[oppUid] : null
+  const upset   = isWin && !m.walkover && !!mySeat && !!oppSeat && mySeat > oppSeat
 
   return (
     <div
@@ -135,6 +126,18 @@ function PlayerLine({ m, side, myUid, T, onFollow }) {
           <span className="folio" style={{
             fontSize: 9, color: T.gold, border: `1px solid ${T.gold}`, padding: '1px 4px',
           }}>أنت</span>
+        )}
+        {upset && (
+          <span
+            className="folio"
+            title={`المقعد ${mySeat} أطاح بالمقعد ${oppSeat}`}
+            style={{
+              fontSize: 9, color: T.alert, border: `1px solid ${T.alert}`,
+              padding: '1px 4px', flexShrink: 0,
+            }}
+          >
+            مفاجأة
+          </span>
         )}
       </span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
@@ -426,7 +429,20 @@ function ColumnTree({ shown, totalRounds, myUid, T, onFollow }) {
   )
 }
 
-export default function BracketBoard({
+/**
+ * @param {Object<string,number>|null} seats  uid → qualifier seat, when the
+ *   caller has them (the spectator mirror does). Optional: without seats the
+ *   tree is exactly what it was, minus the upset marks.
+ */
+export default function BracketBoard({ seats = null, ...props }) {
+  return (
+    <SeatsContext.Provider value={seats}>
+      <BracketBoardBody {...props} />
+    </SeatsContext.Provider>
+  )
+}
+
+function BracketBoardBody({
   matches,
   totalRounds: totalRoundsProp,
   myUid = null,

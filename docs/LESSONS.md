@@ -209,6 +209,31 @@ than the writes. Scaffolding must follow the same order as the real path
 
 ---
 
+## Addendum 2026-09-03 (later) — two probe traps and a real bug they found
+
+**A spy that changes the page under test is not a spy.** To prove a sound
+fires, the probe replaced `window.Audio` with a recording wrapper. The live
+page then rendered nothing at all — `soundManager` probes codec support through
+that constructor at import time — and the failure looked exactly like a broken
+feature for two runs. Spy on the narrowest thing that answers the question:
+`HTMLMediaElement.prototype.play`, which records what the app *tried* to play
+and leaves construction alone.
+
+**Assert on the view that shows the thing.** The narrow bracket shows one round
+and follows the live one, so once the Cloud Function advanced to the final, the
+round-1 marks under test were simply not on screen — correct behaviour, useless
+for asserting. The probe now asserts on the wide tree (all rounds) and *then*
+proves the phone by picking round 1 from the rail.
+
+**The bug both traps were hiding.** A dedupe set seeded on first render is
+seeded from `matches: []`, because the subscription has not answered yet — so
+the first real snapshot arrives as news and the page gasped its way through the
+entire history of the tournament for anyone opening it late. Seed from the
+first payload that actually arrived (`if (!data) return`). Any "have I already
+reacted to this?" set built in a component has this shape.
+
+---
+
 ## TL;DR
 
 The tournament broke because the system was a house of cards and the tests
