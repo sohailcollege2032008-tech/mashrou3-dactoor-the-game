@@ -260,6 +260,34 @@ Two rules that follow:
 
 ---
 
+## Addendum 2026-09-03 (last) — an assertion that was a coin flip
+
+The final regression run came back 38/39 on `final result recorded (p1 wins)`:
+
+```js
+check(fm.r2m1?.winner_uid === P(1).uid && fm.r2m1?.player_a_score > fm.r2m1?.player_b_score, ...)
+```
+
+Nothing had regressed. The suite brute-forces the players' answers, so a level
+final is an ordinary outcome, and the server settles it by speed and then
+qualifier rank — p1 was seed 1, so p1 was crowned correctly with no score
+margin. The assertion demanded the margin, so it had been **passing by luck**;
+it happened to draw a decisive final on the two earlier runs the same day.
+
+Which half failed was deducible without re-running: the tournament's
+`winner_uid` is derived by the Cloud Function from the final match, and
+`champion = p1` passed — so `r2m1.winner_uid` was p1, leaving only the score
+comparison. Worth doing that reasoning before touching anything.
+
+Two rules:
+- **Assert the rule, not one of its outcomes.** "p1 wins, by a margin or by a
+  recorded tiebreak" is the rule. "p1 wins by a margin" is one path through it.
+- **Every check passes a detail string.** This one passed none, so a real
+  failure printed no numbers and looked like a regression. `check(cond, label,
+  detail)` — the detail is what turns a red line into a diagnosis.
+
+---
+
 ## TL;DR
 
 The tournament broke because the system was a house of cards and the tests
