@@ -426,20 +426,21 @@ export default function PlayerGameView() {
               }
 
               if (hostUid) {
-                const hostNotifRef = doc(db, 'notifications', hostUid, 'items', roomId)
-                getDoc(hostNotifRef).then(snap => {
-                  if (!snap.exists()) {
-                    return setDoc(hostNotifRef, {
-                      type:            'game_finished',
-                      room_id:         roomId,
-                      room_title:      data.title || roomId,
-                      total_players:   sortedLeaderboard.length,
-                      winner_nickname: sortedLeaderboard[0]?.nickname || null,
-                      results_url:     `/host/game/${roomId}`,
-                      created_at:      serverTimestamp(),
-                      read:            false,
-                    })
-                  }
+                // No existence check on the host's notification: a notification
+                // is writable by anyone and readable only by its owner, so this
+                // read was denied for every player — and the write it guarded
+                // never ran, which is why an unattended game left the host with
+                // no "your game finished" notification at all. Writing the same
+                // derived row twice is harmless; being told nothing is not.
+                setDoc(doc(db, 'notifications', hostUid, 'items', roomId), {
+                  type:            'game_finished',
+                  room_id:         roomId,
+                  room_title:      data.title || roomId,
+                  total_players:   sortedLeaderboard.length,
+                  winner_nickname: sortedLeaderboard[0]?.nickname || null,
+                  results_url:     `/host/game/${roomId}`,
+                  created_at:      serverTimestamp(),
+                  read:            false,
                 }).catch(() => {})
               }
             } catch (e) {
