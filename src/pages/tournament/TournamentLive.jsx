@@ -47,6 +47,106 @@ function roundName(round, totalRounds) {
  * change (`bracket_live/{id}/ffa`) — names, scores, which question we are on,
  * and nothing else. No question text reaches this page, by design.
  */
+/**
+ * The tournament before it starts.
+ *
+ * The watch link is most likely to be sent BEFORE the event — "تابع من هنا"
+ * goes out with the registration announcement, not during the final. And that
+ * was the phase this page had nothing for: a title and one grey line. So the
+ * registration phase now shows what a person actually wants to know — when it
+ * starts, how many are in, how many seats there are, and that they can still
+ * be one of them.
+ *
+ * The roster comes straight from `tournament_registrations/{id}` (readable by
+ * any signed-in user, self-write only) and only while this phase is on screen.
+ */
+function RegistrationPanel({ meta, names, count, msToStart, onJoin }) {
+  const seats = meta?.actual_top_cut || meta?.top_cut || 0
+  const mm = msToStart != null ? Math.max(0, Math.floor(msToStart / 60000)) : null
+  const ss = msToStart != null ? Math.max(0, Math.floor((msToStart % 60000) / 1000)) : null
+
+  return (
+    <div style={{ border: '1px solid var(--rule)', borderTop: '2px solid var(--ink)' }}>
+      <div style={{
+        padding: '9px 14px', borderBottom: '1px solid var(--rule)', background: 'var(--paper-2)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+      }}>
+        <span className="folio" style={{ fontSize: 9, letterSpacing: '0.2em', color: 'var(--ink-4)' }}>
+          REGISTRATION
+        </span>
+        <span className="ar" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+          {msToStart != null && msToStart > 0 ? (
+            <>
+              تبدأ خلال{' '}
+              <span className="folio" dir="ltr" style={{ color: 'var(--gold)', fontSize: 13 }}>
+                {mm}:{String(ss).padStart(2, '0')}
+              </span>
+            </>
+          ) : 'مفتوح دلوقتي'}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--rule)' }}>
+        <div style={{ flex: 1, padding: '14px 10px', textAlign: 'center' }}>
+          <p className="folio" style={{ fontSize: 26, margin: 0, lineHeight: 1, color: 'var(--ink)' }}>{count}</p>
+          <p className="ar" style={{ fontSize: 10.5, margin: '4px 0 0', color: 'var(--ink-4)' }}>مسجّل</p>
+        </div>
+        {seats > 0 && (
+          <div style={{
+            flex: 1, padding: '14px 10px', textAlign: 'center',
+            borderInlineStart: '1px solid var(--rule)',
+          }}>
+            <p className="folio" style={{ fontSize: 26, margin: 0, lineHeight: 1, color: 'var(--gold)' }}>{seats}</p>
+            <p className="ar" style={{ fontSize: 10.5, margin: '4px 0 0', color: 'var(--ink-4)' }}>
+              مقعد للأدوار الإقصائية
+            </p>
+          </div>
+        )}
+      </div>
+
+      {names.length > 0 && (
+        <div style={{
+          padding: '10px 14px', borderBottom: '1px solid var(--rule)',
+          display: 'flex', flexWrap: 'wrap', gap: 6,
+        }}>
+          {names.slice(0, 14).map((n, i) => (
+            <span key={i} className="ar" style={{
+              fontSize: 11, padding: '2px 7px', border: '1px solid var(--rule)', color: 'var(--ink-2)',
+            }}>
+              {n}
+            </span>
+          ))}
+          {count > 14 && (
+            <span className="ar" style={{ fontSize: 11, padding: '2px 7px', color: 'var(--ink-4)' }}>
+              و{count - 14} غيرهم
+            </span>
+          )}
+        </div>
+      )}
+
+      {meta?.code && (
+        <div style={{
+          padding: '10px 14px', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+        }}>
+          <span className="ar" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+            لسه في وقت — الكود{' '}
+            <span className="folio" dir="ltr" style={{ fontSize: 14, letterSpacing: '0.12em', color: 'var(--ink)' }}>
+              {meta.code}
+            </span>
+          </span>
+          <button onClick={onJoin} style={{
+            padding: '8px 16px', border: 'none', background: 'var(--ink)', color: 'var(--paper)',
+            cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 600,
+          }}>
+            <span className="ar">ادخل البطولة</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FfaStandings({ ffa, cut }) {
   if (!ffa || !Array.isArray(ffa.top) || ffa.top.length === 0) return null
   const live = ffa.status === 'playing' || ffa.status === 'revealing'
@@ -312,6 +412,21 @@ export default function TournamentLive() {
 
   const meta        = data?.meta || null
   const totalRounds = meta?.total_rounds || 0
+  const inRegistration = meta?.status === 'registration'
+
+  // Only while registration is the phase on screen: the roster is read straight
+  // from RTDB (any signed-in user may read it; only its owner may write their
+  // own entry), and the subscription is dropped the moment the qualifier starts.
+  const [regs, setRegs] = useState([])
+  useEffect(() => {
+    if (!tournamentId || !inRegistration) return
+    const r = rtdbRef(rtdb, `tournament_registrations/${tournamentId}`)
+    const unsub = onValue(r, snap => {
+      const v = snap.val() || {}
+      setRegs(Object.values(v).map(e => e?.nickname || e?.display_name || '—'))
+    })
+    return () => unsub()
+  }, [tournamentId, inRegistration])
 
   const matches = useMemo(() => {
     const raw = data?.matches
@@ -646,6 +761,19 @@ export default function TournamentLive() {
       {/* The bracket. A column tree on a laptop, and on a phone one round at a
           time plus a follow-a-player path — never a sideways scroller. */}
       <div style={{ flex: 1, padding: 16 }}>
+        {/* Before anything starts — the phase the watch link is shared in. */}
+        {inRegistration && (
+          <div style={{ marginBottom: 16 }}>
+            <RegistrationPanel
+              meta={meta}
+              names={regs}
+              count={regs.length}
+              msToStart={meta?.scheduled_start_at ? meta.scheduled_start_at - now : null}
+              onJoin={() => navigate(`/tournament/join?code=${meta?.code || ''}`)}
+            />
+          </div>
+        )}
+
         {/* The qualifier, while it is happening. Once the bracket exists this
             is history and the tree takes over. */}
         {showFfa && (
@@ -659,9 +787,9 @@ export default function TournamentLive() {
              screen this shrinks to the one thing they do not cover. */
           <div style={{
             border: '1px dashed var(--rule)',
-            padding: showFfa ? '10px 14px' : 24, textAlign: 'center',
+            padding: (showFfa || inRegistration) ? '10px 14px' : 24, textAlign: 'center',
           }}>
-            {!showFfa && (
+            {!showFfa && !inRegistration && (
               <p className="ar" style={{ fontSize: 14, color: 'var(--ink)', margin: '0 0 6px' }}>
                 {meta?.status === 'ffa'
                   ? 'التصفيات جارية — الشجرة تظهر أول ما يتحدد المتأهلون'
@@ -671,7 +799,7 @@ export default function TournamentLive() {
               </p>
             )}
             <p className="ar" style={{ fontSize: 12, color: 'var(--ink-3)', margin: 0 }}>
-              {showFfa
+              {showFfa || inRegistration
                 ? 'الشجرة تظهر أول ما يتحدد المتأهلون · الصفحة بتتحدث لوحدها'
                 : 'الصفحة دي بتتحدث لوحدها — مش محتاج تعمل refresh'}
             </p>

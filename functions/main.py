@@ -69,6 +69,11 @@ def _mirror_meta(tournament_id: str, tourn: dict) -> None:
             "current_round":    tourn.get("current_round") or 1,
             "total_rounds":     tourn.get("total_rounds") or 0,
             "actual_top_cut":   tourn.get("actual_top_cut") or 0,
+            # The cap and the start time, for the spectator page during
+            # registration — the phase the watch link is most likely to be
+            # shared in, and the phase that page had nothing to show for.
+            "top_cut":            tourn.get("top_cut") or 0,
+            "scheduled_start_at": tourn.get("scheduled_start_at") or None,
             "winner_uid":       tourn.get("winner_uid") or None,
             "winner_name":      tourn.get("winner_name") or None,
             "awards":           tourn.get("awards") or None,

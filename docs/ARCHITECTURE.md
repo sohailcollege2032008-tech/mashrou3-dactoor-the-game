@@ -279,6 +279,14 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
 - **The honours board.** See step 7 above.
 - **The live bracket** at `/tournament/:id/live` — one RTDB subscription, no question text,
   open to any signed-in viewer including eliminated players.
+- **Before it starts, too.** The watch link gets shared with the registration
+  announcement, not during the final — and that phase was a title and one grey
+  line. `RegistrationPanel` now shows the countdown to `scheduled_start_at`, how
+  many have registered (live, straight from `tournament_registrations/{id}`,
+  subscribed only while that phase is on screen), how many seats the bracket
+  has, who is in, and the code with a way in — `/tournament/join?code=XXXXXX`,
+  which the join page prefills so nobody retypes six characters they can see.
+  `meta` carries `top_cut` and `scheduled_start_at` for it.
 - **The qualifier is watchable too.** `on_ffa_room_finished` — which triggers on
   every `rooms/{code}/status` write, not only the last one — mirrors the FFA
   standings to `bracket_live/{id}/ffa` on each flip (twice a question): rank,

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   collection, query, where, getDocs,
   doc, setDoc, serverTimestamp
@@ -15,7 +15,13 @@ export default function TournamentJoin() {
   const { session, profile } = useAuth()
   const inputRef = useRef(null)
 
-  const [code,           setCode]           = useState('')
+  // A code can arrive in the link: the live page's "ادخل البطولة" button
+  // carries it, so someone who was sent the watch link during registration
+  // does not have to retype six characters they can already see.
+  const [searchParams] = useSearchParams()
+  const [code,           setCode]           = useState(
+    () => (searchParams.get('code') || '').trim().toUpperCase().slice(0, 6)
+  )
   const [loading,        setLoading]        = useState(false)
   const [success,        setSuccess]        = useState(false)
   const [tournamentId,   setTournamentId]   = useState(null)
