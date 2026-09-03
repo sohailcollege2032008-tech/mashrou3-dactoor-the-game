@@ -831,158 +831,12 @@ export default function TournamentBracket() {
           </div>
         </div>
 
-        {/* Bracket tree */}
-        <div style={{ marginTop: 24, marginBottom: 24 }}>
-          {generating ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', gap: 16 }}>
-              <Loader2 size={32} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
-              <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink-3)' }}>جاري توليد الـ Bracket…</p>
-            </div>
-          ) : matches.length > 0 ? (
-            <>
-              {/* On a phone the column tree is a sideways scroller, so the host
-                  reads the same round-by-round board the players get. The tree
-                  itself stays mounted either way — it is the element the image
-                  export renders, so it is parked off-screen rather than
-                  unmounted (display:none would give html2canvas nothing). */}
-              {narrow && (
-                <div style={{
-                  marginBottom: 20, padding: 12,
-                  background: '#14120E', border: '1px solid #3A362C',
-                }}>
-                  <BracketBoard
-                    matches={matches}
-                    totalRounds={totalRounds}
-                    currentRound={tournament.current_round || null}
-                    tone="dark"
-                  />
-                </div>
-              )}
-              {/* A 32-player tree is ~2000px tall, and an absolutely positioned
-                  element still extends the document's scrollable area — which
-                  gave the phone a page that scrolled far past its own content.
-                  A zero-height clipping parent takes it out of the scroll while
-                  leaving the tree its natural size for the export to render. */}
-              <div style={narrow
-                ? { position: 'relative', height: 0, overflow: 'hidden' }
-                : undefined}
-                aria-hidden={narrow ? 'true' : undefined}
-              >
-                <div style={narrow
-                  ? { position: 'absolute', top: 0, left: 0, width: 'max-content', pointerEvents: 'none' }
-                  : { overflowX: 'auto' }}
-                >
-                  <BracketTree
-                    matches={matches}
-                    totalRounds={totalRounds}
-                    bracketRef={bracketRef}
-                    tournamentTitle={tournament.title}
-                  />
-                </div>
-              </div>
-            </>
-          ) : (
-            <p className="ar" style={{ textAlign: 'center', padding: '48px 0', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--ink-3)', fontSize: 15 }}>
-              جاري تحميل نتائج FFA لتوليد الـ Bracket…
-            </p>
-          )}
-        </div>
-
-        {/* Round question assignment */}
-        {tournament.status === 'bracket' && totalRounds > 0 && (
-          <button
-            onClick={() => setShowQPanel(true)}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 16px', border: '1px solid var(--rule)',
-              background: 'var(--paper-2)', cursor: 'pointer',
-              borderRadius: 4, marginBottom: 12, transition: 'all 150ms',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Settings size={14} style={{ color: 'var(--ink-3)' }} />
-              <span className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink)' }}>تخصيص أسئلة الجولات</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {Object.values(tournament.round_questions || {}).some(a => a.length > 0) ? (
-                <span className="ar folio" style={{ color: 'var(--navy)', border: '1px solid var(--navy)', padding: '1px 8px', fontSize: 9 }}>
-                  {Object.values(tournament.round_questions).flat().length} مخصص
-                </span>
-              ) : (
-                <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>AUTO</span>
-              )}
-              <ChevronRight size={14} style={{ color: 'var(--ink-4)' }} />
-            </div>
-          </button>
-        )}
-
-        {/* End tournament */}
-        {tournament.status !== 'finished' && (
-          <div style={{ marginBottom: 20 }}>
-            {!showEndConfirm ? (
-              <button
-                onClick={() => setShowEndConfirm(true)}
-                style={{
-                  width: '100%', padding: '12px 0',
-                  border: '1px solid var(--alert)', borderRadius: 4,
-                  background: 'color-mix(in srgb, var(--alert) 5%, var(--paper))',
-                  cursor: 'pointer', color: 'var(--alert)',
-                  fontFamily: 'var(--sans)', fontSize: 14,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  transition: 'all 150ms',
-                }}
-              >
-                <Flag size={14} />
-                <span className="ar">إنهاء البطولة يدوياً</span>
-              </button>
-            ) : (
-              <div style={{
-                border: '1px solid var(--alert)', borderRadius: 4, padding: '16px',
-                background: 'color-mix(in srgb, var(--alert) 5%, var(--paper))',
-                display: 'flex', flexDirection: 'column', gap: 14,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <AlertTriangle size={14} style={{ color: 'var(--alert)', flexShrink: 0, marginTop: 2 }} />
-                  <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, margin: 0 }}>
-                    هتنهي البطولة الآن وتحولها لـ "منتهية". اللاعبون لن يتمكنوا من الاستمرار. هل أنت متأكد؟
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => { setShowEndConfirm(false); setError(null) }}
-                    disabled={ending}
-                    style={{
-                      flex: 1, padding: '10px 0', border: '1px solid var(--rule)', borderRadius: 4,
-                      background: 'var(--paper-2)', color: 'var(--ink-3)',
-                      fontFamily: 'var(--sans)', fontSize: 13, cursor: 'pointer',
-                      opacity: ending ? 0.4 : 1,
-                    }}
-                  >
-                    <span className="ar">تراجع</span>
-                  </button>
-                  <button
-                    onClick={endTournament}
-                    disabled={ending}
-                    style={{
-                      flex: 1, padding: '10px 0',
-                      border: '1px solid var(--alert)', borderRadius: 4,
-                      background: 'color-mix(in srgb, var(--alert) 10%, var(--paper))',
-                      color: 'var(--alert)', fontFamily: 'var(--sans)', fontSize: 13,
-                      cursor: ending ? 'not-allowed' : 'pointer',
-                      opacity: ending ? 0.6 : 1,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    }}
-                  >
-                    {ending ? <Loader2 size={13} className="animate-spin" /> : <Flag size={13} />}
-                    <span className="ar">نعم، أنهِ البطولة</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Round controls */}
+        {/* Round controls — first, because this is what the host touches every
+            round: the live match list, ⚡ حسم, who is actually connected, and the
+            button that starts the next round. It used to sit at the very bottom,
+            under the tree, the question assignment panel and the destructive
+            "end tournament" button — so running an event from a phone meant
+            scrolling past a red button to reach the controls, every single round. */}
         {tournament.status === 'bracket' && matches.length > 0 && (
           <div style={{ border: '1px solid var(--rule)', borderRadius: 4, overflow: 'hidden' }}>
             {/* Round header */}
@@ -1332,6 +1186,158 @@ export default function TournamentBracket() {
             })()}
           </div>
         )}
+
+        {/* Bracket tree */}
+        <div style={{ marginTop: 24, marginBottom: 24 }}>
+          {generating ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', gap: 16 }}>
+              <Loader2 size={32} className="animate-spin" style={{ color: 'var(--ink-3)' }} />
+              <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink-3)' }}>جاري توليد الـ Bracket…</p>
+            </div>
+          ) : matches.length > 0 ? (
+            <>
+              {/* On a phone the column tree is a sideways scroller, so the host
+                  reads the same round-by-round board the players get. The tree
+                  itself stays mounted either way — it is the element the image
+                  export renders, so it is parked off-screen rather than
+                  unmounted (display:none would give html2canvas nothing). */}
+              {narrow && (
+                <div style={{
+                  marginBottom: 20, padding: 12,
+                  background: '#14120E', border: '1px solid #3A362C',
+                }}>
+                  <BracketBoard
+                    matches={matches}
+                    totalRounds={totalRounds}
+                    currentRound={tournament.current_round || null}
+                    tone="dark"
+                  />
+                </div>
+              )}
+              {/* A 32-player tree is ~2000px tall, and an absolutely positioned
+                  element still extends the document's scrollable area — which
+                  gave the phone a page that scrolled far past its own content.
+                  A zero-height clipping parent takes it out of the scroll while
+                  leaving the tree its natural size for the export to render. */}
+              <div style={narrow
+                ? { position: 'relative', height: 0, overflow: 'hidden' }
+                : undefined}
+                aria-hidden={narrow ? 'true' : undefined}
+              >
+                <div style={narrow
+                  ? { position: 'absolute', top: 0, left: 0, width: 'max-content', pointerEvents: 'none' }
+                  : { overflowX: 'auto' }}
+                >
+                  <BracketTree
+                    matches={matches}
+                    totalRounds={totalRounds}
+                    bracketRef={bracketRef}
+                    tournamentTitle={tournament.title}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="ar" style={{ textAlign: 'center', padding: '48px 0', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--ink-3)', fontSize: 15 }}>
+              جاري تحميل نتائج FFA لتوليد الـ Bracket…
+            </p>
+          )}
+        </div>
+
+        {/* Round question assignment */}
+        {tournament.status === 'bracket' && totalRounds > 0 && (
+          <button
+            onClick={() => setShowQPanel(true)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 16px', border: '1px solid var(--rule)',
+              background: 'var(--paper-2)', cursor: 'pointer',
+              borderRadius: 4, marginBottom: 12, transition: 'all 150ms',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Settings size={14} style={{ color: 'var(--ink-3)' }} />
+              <span className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 14, color: 'var(--ink)' }}>تخصيص أسئلة الجولات</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {Object.values(tournament.round_questions || {}).some(a => a.length > 0) ? (
+                <span className="ar folio" style={{ color: 'var(--navy)', border: '1px solid var(--navy)', padding: '1px 8px', fontSize: 9 }}>
+                  {Object.values(tournament.round_questions).flat().length} مخصص
+                </span>
+              ) : (
+                <span className="folio" style={{ color: 'var(--ink-4)', fontSize: 9 }}>AUTO</span>
+              )}
+              <ChevronRight size={14} style={{ color: 'var(--ink-4)' }} />
+            </div>
+          </button>
+        )}
+
+        {/* End tournament */}
+        {tournament.status !== 'finished' && (
+          <div style={{ marginBottom: 20 }}>
+            {!showEndConfirm ? (
+              <button
+                onClick={() => setShowEndConfirm(true)}
+                style={{
+                  width: '100%', padding: '12px 0',
+                  border: '1px solid var(--alert)', borderRadius: 4,
+                  background: 'color-mix(in srgb, var(--alert) 5%, var(--paper))',
+                  cursor: 'pointer', color: 'var(--alert)',
+                  fontFamily: 'var(--sans)', fontSize: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  transition: 'all 150ms',
+                }}
+              >
+                <Flag size={14} />
+                <span className="ar">إنهاء البطولة يدوياً</span>
+              </button>
+            ) : (
+              <div style={{
+                border: '1px solid var(--alert)', borderRadius: 4, padding: '16px',
+                background: 'color-mix(in srgb, var(--alert) 5%, var(--paper))',
+                display: 'flex', flexDirection: 'column', gap: 14,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <AlertTriangle size={14} style={{ color: 'var(--alert)', flexShrink: 0, marginTop: 2 }} />
+                  <p className="ar" style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, margin: 0 }}>
+                    هتنهي البطولة الآن وتحولها لـ "منتهية". اللاعبون لن يتمكنوا من الاستمرار. هل أنت متأكد؟
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => { setShowEndConfirm(false); setError(null) }}
+                    disabled={ending}
+                    style={{
+                      flex: 1, padding: '10px 0', border: '1px solid var(--rule)', borderRadius: 4,
+                      background: 'var(--paper-2)', color: 'var(--ink-3)',
+                      fontFamily: 'var(--sans)', fontSize: 13, cursor: 'pointer',
+                      opacity: ending ? 0.4 : 1,
+                    }}
+                  >
+                    <span className="ar">تراجع</span>
+                  </button>
+                  <button
+                    onClick={endTournament}
+                    disabled={ending}
+                    style={{
+                      flex: 1, padding: '10px 0',
+                      border: '1px solid var(--alert)', borderRadius: 4,
+                      background: 'color-mix(in srgb, var(--alert) 10%, var(--paper))',
+                      color: 'var(--alert)', fontFamily: 'var(--sans)', fontSize: 13,
+                      cursor: ending ? 'not-allowed' : 'pointer',
+                      opacity: ending ? 0.6 : 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}
+                  >
+                    {ending ? <Loader2 size={13} className="animate-spin" /> : <Flag size={13} />}
+                    <span className="ar">نعم، أنهِ البطولة</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   )

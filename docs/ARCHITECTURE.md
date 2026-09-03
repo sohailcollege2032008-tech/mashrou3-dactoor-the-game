@@ -286,6 +286,11 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
   where it exists, clipboard otherwise, and the URL as selectable text if both are
   refused. The hint says any signed-in user can watch, because a link that bounces the
   recipient to a login screen looks broken.
+- **The host page reads in event order.** Round controls first (the live match
+  list, ⚡ حسم, the who-is-here roster, "start the round now"), then the tree,
+  then question assignment, and the destructive "end tournament" last. It used
+  to be the reverse: running an event from a phone meant scrolling past a red
+  button to reach the controls, every single round.
 - **The tab calls you back.** `useTitleAlert` flashes the browser tab title
   («⚡ ماتشك شغال!» in a duel, «⚡ التصفيات بدأت!» in the qualifier) while the
   tab is hidden, and restores it exactly on return. A match starts on the
