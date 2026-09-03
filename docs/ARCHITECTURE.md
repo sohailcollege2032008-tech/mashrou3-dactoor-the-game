@@ -305,7 +305,9 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
   played. Arriving late shows the marks in silence: the seen-set is seeded from
   the first snapshot that actually arrived, not from the render before it.
   A match document has no seed of its own — seeds live in `ffa_results`, which
-  the spectator page deliberately never reads.
+  the spectator page deliberately never reads. The player's wait screen and the
+  host's page pass the same map from the qualifier results they already hold, so
+  an upset reads the same way on all three screens that draw this tree.
 - **The opponent's lock, out loud.** `soundManager.playOpponentLock()` — two quiet falling
   blips (G4 → C4), synth-only so it cannot be mistaken for your own click and does not
   compete with the countdown tick. Fires once per question from the duel node, so it

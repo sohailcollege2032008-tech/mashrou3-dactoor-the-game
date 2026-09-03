@@ -199,11 +199,17 @@ export default function TournamentPlayerWait() {
   // The break is the long part; the VS countdown that follows it is five
   // seconds. Both now say the same thing, from the same builder — and from data
   // this screen already subscribes to, so the dossier costs no extra reads.
-  const myStory = (() => {
-    if (!myMatch || myMatch.status === 'finished') return null
+  // uid → qualifier seat, from the results this screen already holds. It feeds
+  // both the dossier below and the tree's upset marks, which have to agree.
+  const seatsByUid = (() => {
     const ranks = {}
     ffaResults.forEach(r => { if (r.uid && r.rank) ranks[r.uid] = r.rank })
-    return buildMatchStory(myMatch, allMatches, ranks, tournament?.total_rounds || 0)
+    return ranks
+  })()
+
+  const myStory = (() => {
+    if (!myMatch || myMatch.status === 'finished') return null
+    return buildMatchStory(myMatch, allMatches, seatsByUid, tournament?.total_rounds || 0)
   })()
 
   const myFinishedLast = uid
@@ -1104,6 +1110,7 @@ export default function TournamentPlayerWait() {
                   {allMatches.length > 0 ? (
                     <BracketBoard
                       matches={allMatches}
+                      seats={seatsByUid}
                       totalRounds={tournament.total_rounds || Math.log2(tournament.actual_top_cut || 8)}
                       myUid={uid}
                       currentRound={tournament.current_round || null}

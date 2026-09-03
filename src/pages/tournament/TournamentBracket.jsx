@@ -217,6 +217,13 @@ export default function TournamentBracket() {
   }, [tournament])
 
   const currentRoundNo = tournament?.current_round || 1
+  // The same seats the live tree uses, so an upset reads the same way on the
+  // host's phone as it does for everyone watching.
+  const seatsByUid = React.useMemo(() => {
+    const ranks = {}
+    ffaResults.forEach(r => { if (r.uid && r.rank) ranks[r.uid] = r.rank })
+    return ranks
+  }, [ffaResults])
   const phaseRemainingMs = (() => {
     if (!tournament || tournament.status !== 'bracket') return 0
     const start = tournament.phase_started_at || 0
@@ -1208,6 +1215,7 @@ export default function TournamentBracket() {
                 }}>
                   <BracketBoard
                     matches={matches}
+                    seats={seatsByUid}
                     totalRounds={totalRounds}
                     currentRound={tournament.current_round || null}
                     tone="dark"
