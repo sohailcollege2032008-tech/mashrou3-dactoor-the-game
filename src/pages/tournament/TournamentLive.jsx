@@ -38,6 +38,102 @@ function roundName(round, totalRounds) {
   return `الجولة ${round}`
 }
 
+/**
+ * The qualifier as a spectator sees it.
+ *
+ * The FFA is the part of the event everybody is in, and it was the part nobody
+ * could watch: the page said "the tree appears once the qualifiers are known"
+ * for the whole of it. The Cloud Function mirrors the standings on every status
+ * change (`bracket_live/{id}/ffa`) — names, scores, which question we are on,
+ * and nothing else. No question text reaches this page, by design.
+ */
+function FfaStandings({ ffa, cut }) {
+  if (!ffa || !Array.isArray(ffa.top) || ffa.top.length === 0) return null
+  const live = ffa.status === 'playing' || ffa.status === 'revealing'
+
+  return (
+    <div style={{ border: '1px solid var(--rule)', borderTop: '2px solid var(--ink)' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 8, padding: '9px 14px', borderBottom: '1px solid var(--rule)',
+        background: 'var(--paper-2)',
+      }}>
+        <span className="folio" style={{ fontSize: 9, letterSpacing: '0.2em', color: 'var(--ink-4)' }}>
+          QUALIFIER
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          {live && (
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)',
+              animation: 'mr-live-dot 1.6s ease-in-out infinite',
+            }} />
+          )}
+          <span className="ar" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+            {ffa.total ? `سؤال ${Math.min((ffa.qi || 0) + 1, ffa.total)} من ${ffa.total}` : 'التصفيات'}
+          </span>
+        </span>
+      </div>
+
+      <div>
+        {ffa.top.map((p, i) => {
+          const inCut  = cut ? i < cut : false
+          const lastIn = cut ? i === cut - 1 : false
+          return (
+            <React.Fragment key={p.uid || i}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
+                borderBottom: lastIn ? 'none' : '1px solid var(--rule)',
+                background: inCut ? 'rgba(176,137,68,0.06)' : 'transparent',
+              }}>
+                <span className="folio" style={{
+                  fontSize: 11, color: inCut ? 'var(--gold)' : 'var(--ink-4)',
+                  minWidth: 16, textAlign: 'center',
+                }}>
+                  {i + 1}
+                </span>
+                <span className="ar" style={{
+                  flex: 1, fontSize: 13, color: 'var(--ink)',
+                  fontWeight: inCut ? 600 : 400,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {p.name}
+                </span>
+                {p.correct ? (
+                  <span className="folio" style={{ fontSize: 9.5, color: 'var(--ink-4)' }}>
+                    {p.correct} ✓
+                  </span>
+                ) : null}
+                <span className="folio" style={{ fontSize: 13, color: 'var(--ink)', minWidth: 22, textAlign: 'left' }}>
+                  {p.score}
+                </span>
+              </div>
+              {lastIn && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '4px 14px 6px',
+                  borderTop: '1px dashed var(--gold)', borderBottom: '1px solid var(--rule)',
+                }}>
+                  <span className="ar folio" style={{ fontSize: 8.5, color: 'var(--gold)', letterSpacing: '0.12em' }}>
+                    آخر مقعد للتأهل
+                  </span>
+                </div>
+              )}
+            </React.Fragment>
+          )
+        })}
+      </div>
+
+      <div style={{ padding: '7px 14px', borderTop: '1px solid var(--rule)' }}>
+        <span className="ar" style={{ fontSize: 10.5, color: 'var(--ink-4)' }}>
+          {ffa.players} لاعب في التصفيات
+          {ffa.players > ffa.top.length ? ` · أعلى ${ffa.top.length} معروضين` : ''}
+          {cut ? ` · ${cut} مقعد للأدوار الإقصائية` : ''}
+        </span>
+      </div>
+      <style>{`@keyframes mr-live-dot { 0%,100%{opacity:1} 50%{opacity:0.25} }`}</style>
+    </div>
+  )
+}
+
 const PHASE_LABEL = {
   registration: 'التسجيل مفتوح',
   ffa:          'التصفيات جارية',
@@ -226,6 +322,7 @@ export default function TournamentLive() {
   }, [data])
 
   const liveMatches = useMemo(() => matches.filter(m => m.status === 'active'), [matches])
+  const showFfa = meta?.status === 'ffa' && !!data?.ffa?.top?.length
   const liveCount   = liveMatches.length
 
   // The break belongs to the round that just ended: show its report while
@@ -549,19 +646,34 @@ export default function TournamentLive() {
       {/* The bracket. A column tree on a laptop, and on a phone one round at a
           time plus a follow-a-player path — never a sideways scroller. */}
       <div style={{ flex: 1, padding: 16 }}>
+        {/* The qualifier, while it is happening. Once the bracket exists this
+            is history and the tree takes over. */}
+        {showFfa && (
+          <div style={{ marginBottom: 16 }}>
+            <FfaStandings ffa={data.ffa} cut={meta?.actual_top_cut || 0} />
+          </div>
+        )}
         {matches.length === 0 ? (
+          /* The standings above already say the qualifier is running, and the
+             pace card at the top says it a third time — so while they are on
+             screen this shrinks to the one thing they do not cover. */
           <div style={{
-            border: '1px dashed var(--rule)', padding: 24, textAlign: 'center',
+            border: '1px dashed var(--rule)',
+            padding: showFfa ? '10px 14px' : 24, textAlign: 'center',
           }}>
-            <p className="ar" style={{ fontSize: 14, color: 'var(--ink)', margin: '0 0 6px' }}>
-              {meta?.status === 'ffa'
-                ? 'التصفيات جارية — الشجرة تظهر أول ما تتحدد المتأهلين'
-                : meta?.status === 'registration'
-                  ? 'التسجيل لسه مفتوح — استنى بدء التصفيات'
-                  : 'الشجرة لسه ماتعملتش'}
-            </p>
+            {!showFfa && (
+              <p className="ar" style={{ fontSize: 14, color: 'var(--ink)', margin: '0 0 6px' }}>
+                {meta?.status === 'ffa'
+                  ? 'التصفيات جارية — الشجرة تظهر أول ما يتحدد المتأهلون'
+                  : meta?.status === 'registration'
+                    ? 'التسجيل لسه مفتوح — استنى بدء التصفيات'
+                    : 'الشجرة لسه ماتعملتش'}
+              </p>
+            )}
             <p className="ar" style={{ fontSize: 12, color: 'var(--ink-3)', margin: 0 }}>
-              الصفحة دي بتتحدث لوحدها — مش محتاج تعمل refresh
+              {showFfa
+                ? 'الشجرة تظهر أول ما يتحدد المتأهلون · الصفحة بتتحدث لوحدها'
+                : 'الصفحة دي بتتحدث لوحدها — مش محتاج تعمل refresh'}
             </p>
           </div>
         ) : (

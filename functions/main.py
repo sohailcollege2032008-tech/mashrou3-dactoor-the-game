@@ -110,6 +110,41 @@ def _mirror_match(tournament_id: str, match_id: str, match: dict) -> None:
                          tournament_id, match_id, e)
 
 
+def _mirror_ffa(tournament_id: str, room: dict) -> None:
+    """
+    The qualifier, for everyone who is not playing it.
+
+    The FFA was invisible on the spectator page — the tensest part of the event,
+    with every player in it, and the page said "the tree appears once the
+    qualifiers are known". This mirrors the standings only: rank, name, score,
+    correct count, which question we are on, and where the cut falls.
+
+    Never the questions. The room node itself carries the question text, which
+    is exactly why a spectator page must not be pointed at it.
+    """
+    players = [p for p in (room.get("players") or {}).values() if p]
+    players.sort(key=lambda p: (-(p.get("score") or 0),
+                                -(p.get("correct_count") or 0),
+                                (p.get("total_reaction_ms") or 0)))
+    total_qs = len((((room.get("questions") or {}).get("questions")) or []))
+    try:
+        admin_db.reference(f"{LIVE_PATH}/{tournament_id}/ffa").update({
+            "qi":      room.get("current_question_index") or 0,
+            "total":   total_qs,
+            "status":  room.get("status") or "lobby",
+            "players": len(players),
+            "top": [{
+                "uid":     p.get("user_id") or p.get("uid"),
+                "name":    p.get("nickname") or "—",
+                "score":   p.get("score") or 0,
+                "correct": p.get("correct_count") or 0,
+            } for p in players[:12]],
+            "updated_at": _now_ms(),
+        })
+    except Exception as e:                                    # noqa: BLE001
+        logger.exception("[CF-LIVE] ffa mirror failed %s: %s", tournament_id, e)
+
+
 def _mirror_live(tournament_id: str, match_id: str, patch: dict) -> None:
     try:
         admin_db.reference(f"{LIVE_PATH}/{tournament_id}/matches/{match_id}/live").update(
@@ -610,12 +645,22 @@ def on_ffa_room_finished(event: db_fn.Event[db_fn.Change]) -> None:
     before = event.data.before
     if after is None or before is None or before == after:
         return
-    if after != "finished":
-        return
 
     room_id = event.params["roomId"]
     room = admin_db.reference(f"rooms/{room_id}").get()
     if not room:
+        return
+
+    # Standings for the spectator page, on every status change — twice a
+    # question (playing → revealing → playing), which is the rhythm the scores
+    # actually move at. Cheap: twelve rows and four numbers, and no question
+    # text. This runs before the finished-only work below, because the whole
+    # point is the qualifier while it is still being played.
+    tid = room.get("tournament_id")
+    if tid:
+        _mirror_ffa(tid, room)
+
+    if after != "finished":
         return
 
     # The host's "you still have a room open" pointer, cleared for every

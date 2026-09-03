@@ -279,6 +279,14 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
 - **The honours board.** See step 7 above.
 - **The live bracket** at `/tournament/:id/live` — one RTDB subscription, no question text,
   open to any signed-in viewer including eliminated players.
+- **The qualifier is watchable too.** `on_ffa_room_finished` — which triggers on
+  every `rooms/{code}/status` write, not only the last one — mirrors the FFA
+  standings to `bracket_live/{id}/ffa` on each flip (twice a question): rank,
+  name, score, correct count, which question the room is on, how many are
+  playing. `TournamentLive` draws them with the cut line while
+  `meta.status === 'ffa'`. Deliberately NOT read from `rooms/{code}`: that node
+  carries the question text, which is why a spectator page must never point at
+  it. The mirror carries none.
 - **Handing that link out.** `ShareWatchLink` (`src/components/tournament/`) sits in the
   host lobby (under the registration code — the code is for playing, the link is for
   watching), in the host bracket header, and on the live page itself, since whoever is
