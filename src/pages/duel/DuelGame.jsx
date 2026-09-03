@@ -16,6 +16,7 @@ import { rtdb } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { findCorrectForDuel } from '../../utils/crypto'
 import { soundManager } from '../../utils/soundManager'
+import useTitleAlert from '../../hooks/useTitleAlert'
 import SoundToggle from '../../components/common/SoundToggle'
 import LockLamp from '../../components/tournament/LockLamp'
 import { WifiOff, LogOut, Flag } from 'lucide-react'
@@ -246,6 +247,14 @@ export default function DuelGame({
       }
     }
   }, [duel?.status, duel?.current_question_index, duel?.answers, uid, isObserver])
+
+  // A backgrounded tab is where the match-start sound is most likely to be
+  // blocked, and the question is already counting down by then. The tab strip
+  // needs no permission and no gesture.
+  useTitleAlert(
+    !isObserver && (duel?.status === 'playing' || duel?.status === 'revealing'),
+    '⚡ ماتشك شغال!',
+  )
 
   // The opponent locked in. The lamp in their pill says so visually; this says
   // it while you are still reading choice C. Once per question (the ref), and

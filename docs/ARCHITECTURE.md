@@ -286,6 +286,12 @@ Once the bracket exists the cap is locked (`editableTopCut={false}` in `Tourname
   where it exists, clipboard otherwise, and the URL as selectable text if both are
   refused. The hint says any signed-in user can watch, because a link that bounces the
   recipient to a login screen looks broken.
+- **The tab calls you back.** `useTitleAlert` flashes the browser tab title
+  («⚡ ماتشك شغال!» in a duel, «⚡ التصفيات بدأت!» in the qualifier) while the
+  tab is hidden, and restores it exactly on return. A match starts on the
+  server's clock, and a backgrounded tab is where the match-start sound is most
+  likely to be blocked — the tab strip needs no permission and no gesture.
+  Nothing fires while the tab is visible.
 - **An upset, named as one.** The spectator mirror carries `meta.seats` (uid →
   qualifier seat, written once by `_ensure_bracket`) and `forced_by_host` per
   match, so the live tree can mark a lower seat knocking out a higher one with

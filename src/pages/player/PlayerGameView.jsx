@@ -16,6 +16,7 @@ import { getDir } from '../../utils/rtlUtils'
 import { sortPlayers } from '../../utils/gameRunner'
 import { soundManager } from '../../utils/soundManager'
 import { useUnattendedGameRunner } from '../../hooks/useUnattendedGameRunner'
+import useTitleAlert from '../../hooks/useTitleAlert'
 
 // ── Full live leaderboard (bottom sheet, players see everyone's standings) ───
 function FullLeaderboard({ players, myId, onClose, cutSize = null }) {
@@ -504,6 +505,13 @@ export default function PlayerGameView() {
   }, [roomId, session])
 
   useUnattendedGameRunner({ roomId, room, session })
+
+  // Same problem as a knockout match: the host starts the qualifier on their
+  // clock, and a player waiting on another tab has no idea it began.
+  useTitleAlert(
+    room?.status === 'playing' || room?.status === 'revealing',
+    '⚡ التصفيات بدأت!',
+  )
 
   // ── Sound: reveal result (correct/wrong) + FFA finished (phase transition) ──
   useEffect(() => {
