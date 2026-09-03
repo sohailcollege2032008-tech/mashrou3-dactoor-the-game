@@ -20,6 +20,7 @@ import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { soundManager } from '../../utils/soundManager'
 import DuelGame from '../duel/DuelGame'
+import { buildMatchStory } from '../../utils/matchStory'
 import { Loader2, Trophy, XCircle, Timer, ArrowRight } from 'lucide-react'
 
 // ── Host split-screen spectator view ─────────────────────────────────────────
@@ -338,39 +339,13 @@ export default function TournamentDuelWrapper() {
       ])
       if (cancelled) return
 
-      const prev = allMatches
-        ? allMatches.docs.map(d => d.data())
-            .filter(m => m.status === 'finished' && (m.round || 1) === (match.round || 1) - 1)
-        : []
-
-      const pathFor = (playerUid, ffaSnap) => {
-        const won = prev.find(m => m.winner_uid === playerUid)
-        if (won) {
-          const isA   = won.player_a_uid === playerUid
-          const oppNm = (isA ? won.player_b_name : won.player_a_name) || 'خصمه'
-          if (won.forced_by_host) return `تأهل بالغياب أمام ${oppNm}`
-          const mine  = (isA ? won.player_a_score : won.player_b_score) ?? 0
-          const other = (isA ? won.player_b_score : won.player_a_score) ?? 0
-          const how = won.tie_broken_by === 'speed' ? ' بالسرعة'
-            : won.tie_broken_by === 'ffa_rank' ? ' بترتيب التصفيات' : ''
-          return `فاز على ${oppNm} ${mine}–${other}${how}`
-        }
-        const rank = ffaSnap?.exists() ? ffaSnap.data().rank : null
-        return rank ? `تأهل من التصفيات في المركز ${rank}` : null
-      }
-
-      const seedOf = snap => (snap?.exists() ? snap.data().rank : null) || null
-      const nextLabel = getRoundLabel((match.round || 1) + 1, tournament.total_rounds)
-
-      setVsIntro({
-        stake: !match.next_match_id
-          ? 'الفايز بطل البطولة'
-          : `الفايز يروح ${nextLabel}`,
-        sides: {
-          [uidA]: { seed: seedOf(ffaA), path: pathFor(uidA, ffaA) },
-          [uidB]: { seed: seedOf(ffaB), path: pathFor(uidB, ffaB) },
-        },
-      })
+      // One source for this story: the wait screen shows the same facts during
+      // the break, and they must not be phrased two different ways.
+      const ranks = {}
+      if (ffaA?.exists()) ranks[uidA] = ffaA.data().rank
+      if (ffaB?.exists()) ranks[uidB] = ffaB.data().rank
+      const known = allMatches ? allMatches.docs.map(d => d.data()) : []
+      setVsIntro(buildMatchStory(match, known, ranks, tournament.total_rounds))
     }
 
     run().catch(() => {})

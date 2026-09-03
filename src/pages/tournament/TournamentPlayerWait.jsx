@@ -10,6 +10,7 @@ import BracketBoard from '../../components/tournament/BracketBoard'
 import RoundRecap from '../../components/tournament/RoundRecap'
 import HonoursBoard from '../../components/tournament/HonoursBoard'
 import { soundManager } from '../../utils/soundManager'
+import { buildMatchStory } from '../../utils/matchStory'
 import SoundToggle from '../../components/common/SoundToggle'
 import { Loader2, Trophy, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -195,6 +196,16 @@ export default function TournamentPlayerWait() {
         (m.player_a_uid === uid || m.player_b_uid === uid)
       ) || null)
     : null
+  // The break is the long part; the VS countdown that follows it is five
+  // seconds. Both now say the same thing, from the same builder — and from data
+  // this screen already subscribes to, so the dossier costs no extra reads.
+  const myStory = (() => {
+    if (!myMatch || myMatch.status === 'finished') return null
+    const ranks = {}
+    ffaResults.forEach(r => { if (r.uid && r.rank) ranks[r.uid] = r.rank })
+    return buildMatchStory(myMatch, allMatches, ranks, tournament?.total_rounds || 0)
+  })()
+
   const myFinishedLast = uid
     ? allMatches
         .filter(m =>
@@ -744,6 +755,54 @@ export default function TournamentPlayerWait() {
                         {myMatch.player_b_name}
                       </span>
                     </div>
+                    {myStory && (
+                      <div style={{ borderTop: '1px solid var(--rule)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {[myMatch.player_a_uid, myMatch.player_b_uid].map((sideUid, i) => {
+                          const side = myStory.sides?.[sideUid]
+                          if (!side) return null
+                          const name = i === 0 ? myMatch.player_a_name : myMatch.player_b_name
+                          const isMe = sideUid === uid
+                          return (
+                            <div key={sideUid} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <span className="ar" style={{
+                                  fontFamily: 'var(--sans)', fontSize: 12.5, fontWeight: 700,
+                                  color: isMe ? 'var(--burgundy)' : 'var(--ink)',
+                                }}>
+                                  {name}{isMe ? ' (أنت)' : ''}
+                                </span>
+                                {side.seed && (
+                                  <span className="folio" style={{
+                                    fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--ink-4)',
+                                    border: '1px solid var(--rule)', padding: '1px 5px',
+                                  }}>
+                                    المقعد {side.seed}
+                                  </span>
+                                )}
+                              </div>
+                              {side.path && (
+                                <span className="ar" style={{ fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+                                  {side.path}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })}
+                        {myStory.stake && (
+                          <div style={{
+                            marginTop: 2, padding: '6px 10px', textAlign: 'center',
+                            borderTop: '1px solid var(--rule)',
+                            background: 'color-mix(in srgb, var(--gold) 6%, transparent)',
+                          }}>
+                            <span className="ar" style={{
+                              fontFamily: 'var(--serif)', fontSize: 12.5, fontWeight: 500, color: 'var(--gold)',
+                            }}>
+                              {myStory.stake}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {myMatch.status === 'pending' && (
                       <div style={{
                         borderTop: '1px solid var(--rule)', padding: '12px 16px',
