@@ -234,6 +234,32 @@ reacted to this?" set built in a component has this shape.
 
 ---
 
+## Addendum 2026-09-03 (evening) — the deploy is part of the live event
+
+The phantom regression at the top of today's addendum had a second lesson in
+it. The suite failed because a route chunk 404'd mid-deploy: the tab was
+holding the previous build's manifest and asked for a hash that no longer
+existed. That is not a test artifact — it is what happens to **every open tab**
+when a deploy lands, including the host's control panel in the middle of a
+round.
+
+`lazyRoute` in `src/App.jsx` now wraps every route import: on a failed import
+it reloads once (which fetches the new manifest), marks that it did so in
+`sessionStorage`, and clears the mark as soon as any chunk loads normally — so
+a chunk that is genuinely gone falls through to the error boundary instead of
+looping, and a later deploy still gets its own retry.
+
+Two rules that follow:
+- **Never deploy while an event is live** if it can wait. Self-healing costs
+  the user a reload; it does not make a mid-round deploy safe.
+- **A reliability fix needs a test that can fail.** `tmp-w32-chunk-heal`
+  intercepts the chunk and 404s the *first* request only — which is what a
+  deploy actually looks like. 404ing every request instead proved the opposite
+  branch (permanently missing → no loop), which is worth asserting too, but is
+  not the healing path.
+
+---
+
 ## TL;DR
 
 The tournament broke because the system was a house of cards and the tests

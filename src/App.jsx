@@ -6,43 +6,83 @@ import SoundPreviewModal from './components/common/SoundPreviewModal'
 import { useAuthStore } from './stores/authStore'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
+/**
+ * A route chunk that 404s is almost never a missing file — it is a deploy that
+ * happened while this tab was open. The tab is holding the old build's manifest
+ * and asks for `TournamentLive-<oldhash>.js`, which no longer exists, so the
+ * navigation dies on an import error and the user sees the error boundary.
+ *
+ * This cost an hour of chasing a phantom regression: a test suite failed
+ * looking for a button on a page whose chunk had just been replaced under it.
+ * During a live tournament it would cost the host their control panel.
+ *
+ * So: reload once, which fetches the new manifest, and remember that we did —
+ * a chunk that is genuinely gone must not put the tab in a reload loop. The
+ * marker is cleared by the next chunk that loads normally, so a later deploy
+ * gets its own retry.
+ */
+const CHUNK_RELOAD_KEY = 'mr-chunk-reload'
+
+function lazyRoute(factory) {
+  return lazy(() => factory().then(
+    mod => {
+      try { sessionStorage.removeItem(CHUNK_RELOAD_KEY) } catch { /* private mode */ }
+      return mod
+    },
+    err => {
+      let alreadyTried = true
+      try {
+        alreadyTried = sessionStorage.getItem(CHUNK_RELOAD_KEY) === '1'
+        if (!alreadyTried) sessionStorage.setItem(CHUNK_RELOAD_KEY, '1')
+      } catch { /* storage blocked — fall through to the error boundary */ }
+      if (!alreadyTried) {
+        window.location.reload()
+        // Never resolves: the reload is on its way and rendering the error
+        // boundary for a tenth of a second would only flash.
+        return new Promise(() => {})
+      }
+      throw err
+    },
+  ))
+}
+
 // ── Lazy-loaded Route Components ───────────────────────────────────────────
-const Landing = lazy(() => import('./pages/Landing'))
-const AuthCallback = lazy(() => import('./pages/AuthCallback'))
-const NotAuthorized = lazy(() => import('./pages/NotAuthorized'))
-const SoundTest = lazy(() => import('./pages/owner/SoundTest'))
-const TestMathRendering = lazy(() => import('./pages/TestMathRendering'))
+const Landing = lazyRoute(() => import('./pages/Landing'))
+const AuthCallback = lazyRoute(() => import('./pages/AuthCallback'))
+const NotAuthorized = lazyRoute(() => import('./pages/NotAuthorized'))
+const SoundTest = lazyRoute(() => import('./pages/owner/SoundTest'))
+const TestMathRendering = lazyRoute(() => import('./pages/TestMathRendering'))
 
 // Owner Routes
-const OwnerDashboard = lazy(() => import('./pages/owner/OwnerDashboard'))
-const OwnerLogs = lazy(() => import('./pages/owner/OwnerLogs'))
+const OwnerDashboard = lazyRoute(() => import('./pages/owner/OwnerDashboard'))
+const OwnerLogs = lazyRoute(() => import('./pages/owner/OwnerLogs'))
 
 // Host Routes
-const HostDashboard = lazy(() => import('./pages/host/HostDashboard'))
-const HostGameRoom = lazy(() => import('./pages/host/HostGameRoom'))
+const HostDashboard = lazyRoute(() => import('./pages/host/HostDashboard'))
+const HostGameRoom = lazyRoute(() => import('./pages/host/HostGameRoom'))
 
 // Player Routes
-const JoinGame = lazy(() => import('./pages/player/JoinGame'))
-const PlayerDashboard = lazy(() => import('./pages/player/PlayerDashboard'))
-const PlayerProfile = lazy(() => import('./pages/player/PlayerProfile'))
-const WaitingRoom = lazy(() => import('./pages/player/WaitingRoom'))
-const PlayerGameView = lazy(() => import('./pages/player/PlayerGameView'))
-const DeckBrowser = lazy(() => import('./pages/player/DeckBrowser'))
-const PublicProfile = lazy(() => import('./pages/player/PublicProfile'))
+const JoinGame = lazyRoute(() => import('./pages/player/JoinGame'))
+const PlayerDashboard = lazyRoute(() => import('./pages/player/PlayerDashboard'))
+const PlayerProfile = lazyRoute(() => import('./pages/player/PlayerProfile'))
+const WaitingRoom = lazyRoute(() => import('./pages/player/WaitingRoom'))
+const PlayerGameView = lazyRoute(() => import('./pages/player/PlayerGameView'))
+const DeckBrowser = lazyRoute(() => import('./pages/player/DeckBrowser'))
+const PublicProfile = lazyRoute(() => import('./pages/player/PublicProfile'))
 
 // Duel Routes
-const DuelLobby = lazy(() => import('./pages/duel/DuelLobby'))
-const DuelGame = lazy(() => import('./pages/duel/DuelGame'))
-const DuelResults = lazy(() => import('./pages/duel/DuelResults'))
+const DuelLobby = lazyRoute(() => import('./pages/duel/DuelLobby'))
+const DuelGame = lazyRoute(() => import('./pages/duel/DuelGame'))
+const DuelResults = lazyRoute(() => import('./pages/duel/DuelResults'))
 
 // Tournament Routes
-const TournamentCreate = lazy(() => import('./pages/tournament/TournamentCreate'))
-const TournamentLobby = lazy(() => import('./pages/tournament/TournamentLobby'))
-const TournamentJoin = lazy(() => import('./pages/tournament/TournamentJoin'))
-const TournamentBracket = lazy(() => import('./pages/tournament/TournamentBracket'))
-const TournamentPlayerWait = lazy(() => import('./pages/tournament/TournamentPlayerWait'))
-const TournamentDuelWrapper = lazy(() => import('./pages/tournament/TournamentDuelWrapper'))
-const TournamentLive = lazy(() => import('./pages/tournament/TournamentLive'))
+const TournamentCreate = lazyRoute(() => import('./pages/tournament/TournamentCreate'))
+const TournamentLobby = lazyRoute(() => import('./pages/tournament/TournamentLobby'))
+const TournamentJoin = lazyRoute(() => import('./pages/tournament/TournamentJoin'))
+const TournamentBracket = lazyRoute(() => import('./pages/tournament/TournamentBracket'))
+const TournamentPlayerWait = lazyRoute(() => import('./pages/tournament/TournamentPlayerWait'))
+const TournamentDuelWrapper = lazyRoute(() => import('./pages/tournament/TournamentDuelWrapper'))
+const TournamentLive = lazyRoute(() => import('./pages/tournament/TournamentLive'))
 
 // ── Minimalist Brand-Aligned Route Fallback ────────────────────────────────
 function PageLoader() {
