@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
+import { takeReturnTo } from '../utils/returnTo'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
@@ -9,7 +10,9 @@ export default function AuthCallback() {
   useEffect(() => {
     if (loading) return
     if (session && profile) {
-      if (profile.role === 'owner') navigate('/owner/dashboard', { replace: true })
+      const back = takeReturnTo()
+      if (back) navigate(back, { replace: true })
+      else if (profile.role === 'owner') navigate('/owner/dashboard', { replace: true })
       else if (profile.role === 'host') navigate('/host/dashboard', { replace: true })
       else navigate('/player/join', { replace: true })
     } else {

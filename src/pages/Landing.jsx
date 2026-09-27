@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
+import { takeReturnTo } from '../utils/returnTo'
 
 /* ── Brand Components ─────────────────────────────────────────────────────── */
 
@@ -107,10 +108,11 @@ export default function Landing() {
 
   React.useEffect(() => {
     if (initialized && session && profile) {
-      const target =
+      if (window.location.pathname !== '/') return
+      const target = takeReturnTo() || (
         profile.role === 'owner' ? '/owner/dashboard' :
-        profile.role === 'host'  ? '/host/dashboard'  : '/player/dashboard'
-      if (window.location.pathname === '/') navigate(target, { replace: true })
+        profile.role === 'host'  ? '/host/dashboard'  : '/player/dashboard')
+      navigate(target, { replace: true })
     }
   }, [initialized, session, profile, navigate])
 
