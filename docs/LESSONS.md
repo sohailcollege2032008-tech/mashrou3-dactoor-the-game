@@ -294,3 +294,33 @@ The tournament broke because the system was a house of cards and the tests
 were designed not to notice. The fix is not one more test — it is a discipline:
 **test the failure, fix the known risk, read adversarially, prove the test can
 fail, and let the deadline set the priority.**
+
+---
+
+## Addendum 2026-09-27 — the suite that nobody is teleported through
+
+`suite-tournament-w6` was 39/39 on production and still missed three screens
+that were wrong for real players, because it hands every tab a URL at every
+phase. `scratch/tests/suite-ux-flow.mjs` gives a player tab a URL exactly once
+(the join page) and then asserts that every hop — wait → qualifier → wait →
+duel → result → wait → final → champion — happens by itself, on a phone
+viewport, with the host tab **closed** after the qualifier (`NOSHOW=1` adds a
+round-1 no-show, `REFRESH=1` a mid-duel reload). What it found was all in the
+screens the teleporting suite never looked at:
+
+- the qualifier's non-advancers got the qualifiers' countdown ("استعدوا —
+  مباريات الإقصاء على وشك البدء!") and confetti, and only learnt they were out
+  when the tournament ended;
+- a semi-final loser read "خرجت من النهائي" — the screen used the
+  tournament's current round, not the round the player lost in;
+- a double-click on the host's Start re-ran `startGame`, re-shuffling (and,
+  once the hashed set had synced back, un-keying) a qualifier already running.
+
+Both text checks failed on production before the fix and pass after it — the
+suite can fail (R4).
+
+**A crash is not a regression until the disk says so.** Midway, renderers
+started dying ("Target crashed") on the new build, and an A/B against the old
+build crashed too — then production did. `df -h /` said 100%: the VPS disk
+was full and Chromium could not write its profile. Check `df` before blaming
+a bundle, and re-run the A/B after freeing space (it came back 0 crashes).
