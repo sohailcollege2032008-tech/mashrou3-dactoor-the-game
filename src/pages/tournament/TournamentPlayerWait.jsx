@@ -183,6 +183,7 @@ export default function TournamentPlayerWait() {
 
   const myCurrentRound = tournament?.current_round || 1
   const myName = ffaResults.find(r => r.uid === uid)?.nickname || null
+  const myFfaRank = ffaResults.find(r => r.uid === uid)?.rank || null
   const lastRecap = (() => {
     const recaps = tournament?.round_recaps
     if (!recaps || typeof recaps !== 'object') return null
@@ -227,6 +228,9 @@ export default function TournamentPlayerWait() {
     : undefined
 
   const bracketEliminated = myResult === 'eliminated'
+  // The round I was knocked out in — not the tournament's current round, which
+  // has already moved on by the time a semi-final loser reads this screen.
+  const lostInRound = myFinishedLast?.round || myCurrentRound
   const isEliminated = ffaEliminated || bracketEliminated
   const isFinished   = tournament?.status === 'finished'
   const amChampion   = isFinished && tournament?.winner_uid === uid
@@ -516,13 +520,13 @@ export default function TournamentPlayerWait() {
           {/* ── CHAMPION ──────────────────────────────────────────────── */}
           {isFinished && amChampion && (
             <>
-              <h1 style={{
+              <h1 dir="ltr" style={{ textAlign: 'center',
                 fontFamily: 'var(--serif)', fontWeight: 400,
                 fontSize: 'clamp(44px, 10vw, 72px)', lineHeight: 1.0,
                 letterSpacing: '-0.025em', margin: '0 0 24px', color: 'var(--ink)',
               }}>
                 Champion.<br />
-                <em style={{ fontWeight: 300, color: 'var(--gold)' }}>أنت البطل!</em>
+                <em dir="rtl" style={{ fontWeight: 300, color: 'var(--gold)' }}>أنت البطل!</em>
               </h1>
               <div style={{
                 border: '1px solid var(--gold)', background: 'rgba(176,137,68,0.06)',
@@ -643,7 +647,7 @@ export default function TournamentPlayerWait() {
           {/* ── ELIMINATED (FFA or bracket, not runner-up/semi) ──────── */}
           {isFinished && !amChampion && !isRunnerUp && !isSemiFinalist && (
             <>
-              <h1 style={{
+              <h1 dir="ltr" style={{ textAlign: 'center',
                 fontFamily: 'var(--serif)', fontWeight: 400,
                 fontSize: 'clamp(34px, 8vw, 56px)', lineHeight: 1.0,
                 letterSpacing: '-0.025em', margin: '0 0 16px', color: 'var(--ink)',
@@ -692,19 +696,65 @@ export default function TournamentPlayerWait() {
           {/* ── ELIMINATED mid-bracket (still running) ────────────────── */}
           {!isFinished && bracketEliminated && (
             <>
-              <h1 style={{
+              <h1 dir="ltr" style={{ textAlign: 'center',
                 fontFamily: 'var(--serif)', fontWeight: 400,
                 fontSize: 'clamp(34px, 8vw, 56px)', lineHeight: 1.0,
                 letterSpacing: '-0.025em', margin: '0 0 24px', color: 'var(--ink)',
               }}>
                 Eliminated.<br />
-                <em style={{ fontWeight: 300, color: 'var(--burgundy)' }}>الجولة {myCurrentRound}</em>
+                <em dir="rtl" style={{ fontWeight: 300, color: 'var(--burgundy)' }}>الجولة {lostInRound}</em>
               </h1>
               <div style={{
                 border: '1px solid var(--rule)', padding: '16px 20px', marginBottom: 32,
               }}>
                 <p className="ar" style={{ fontSize: 14, color: 'var(--ink)', margin: 0 }}>
-                  خرجت من {getRoundLabel(myCurrentRound, tournament?.total_rounds)}
+                  خرجت من {getRoundLabel(lostInRound, tournament?.total_rounds)}
+                </p>
+              </div>
+              <button
+                onClick={openBracket}
+                style={{
+                  padding: '13px 28px', background: 'var(--ink)', color: 'var(--paper)',
+                  border: '1px solid var(--ink)', fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  display: 'block', margin: '0 auto 12px',
+                }}
+              >
+                شاهد شجرة البطولة
+              </button>
+              <button
+                onClick={() => navigate('/player/dashboard')}
+                style={{ background: 'none', border: 'none', color: 'var(--ink-3)', fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline', display: 'block', margin: '0 auto' }}
+              >
+                عودة للرئيسية
+              </button>
+            </>
+          )}
+
+          {/* ── DID NOT QUALIFY (bracket still running) ───────────────── */}
+          {/* Without this the qualifier's non-advancers got the same screen as
+              the qualifiers — a countdown telling them to get ready for a
+              bracket they are not in — and only learnt the truth at the end. */}
+          {!isFinished && ffaEliminated && (
+            <>
+              <h1 dir="ltr" style={{ textAlign: 'center',
+                fontFamily: 'var(--serif)', fontWeight: 400,
+                fontSize: 'clamp(34px, 8vw, 56px)', lineHeight: 1.0,
+                letterSpacing: '-0.025em', margin: '0 0 24px', color: 'var(--ink)',
+              }}>
+                Did not<br />
+                <em style={{ fontWeight: 300, color: 'var(--alert)' }}>advance.</em>
+              </h1>
+              <div style={{
+                border: '1px solid var(--alert)', background: 'rgba(180,48,57,0.06)',
+                padding: '16px 20px', marginBottom: 32,
+              }}>
+                <p className="ar" style={{ fontSize: 14, color: 'var(--alert)', fontWeight: 600, margin: '0 0 4px' }}>
+                  لم تكن ضمن المتأهلين
+                </p>
+                <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: 0 }}>
+                  {myFfaRank
+                    ? `خلّصت التصفيات في المركز ${myFfaRank} من ${ffaResults.length} — تقدر تتابع باقي البطولة لايف`
+                    : 'شكراً على مشاركتك — تقدر تتابع باقي البطولة لايف'}
                 </p>
               </div>
               <button
@@ -738,7 +788,7 @@ export default function TournamentPlayerWait() {
             <>
               {myMatch ? (
                 <>
-                  <h1 style={{
+                  <h1 dir="ltr" style={{ textAlign: 'center',
                     fontFamily: 'var(--serif)', fontWeight: 400,
                     fontSize: 'clamp(30px, 7vw, 48px)', lineHeight: 1.0,
                     letterSpacing: '-0.025em', margin: '0 0 28px', color: 'var(--ink)',
@@ -833,7 +883,7 @@ export default function TournamentPlayerWait() {
                 </>
               ) : (
                 <>
-                  <h1 style={{
+                  <h1 dir="ltr" style={{ textAlign: 'center',
                     fontFamily: 'var(--serif)', fontWeight: 400,
                     fontSize: 'clamp(30px, 7vw, 48px)', lineHeight: 1.0,
                     letterSpacing: '-0.025em', margin: '0 0 28px', color: 'var(--ink)',
@@ -902,7 +952,7 @@ export default function TournamentPlayerWait() {
                 `}</style>
               </div>
 
-              <h1 style={{
+              <h1 dir="ltr" style={{ textAlign: 'center',
                 fontFamily: 'var(--serif)', fontWeight: 400,
                 fontSize: 'clamp(30px, 7vw, 48px)', lineHeight: 1.0,
                 letterSpacing: '-0.025em', margin: '0 0 20px', color: 'var(--ink)',
@@ -942,7 +992,9 @@ export default function TournamentPlayerWait() {
                     {formatCountdown(remainingMs)}
                   </p>
                   <p className="ar" style={{ fontSize: 13, color: 'var(--ink-3)', margin: 0 }}>
-                    {isRoundOne ? 'استعدوا — مباريات الإقصاء على وشك البدء! ⚡' : 'استعد للمباراة القادمة!'}
+                    {isEliminated
+                      ? 'تابع المتأهلين — الماتشات هتبدأ لايف على الشجرة'
+                      : isRoundOne ? 'استعدوا — مباريات الإقصاء على وشك البدء! ⚡' : 'استعد للمباراة القادمة!'}
                   </p>
                 </div>
               )}
