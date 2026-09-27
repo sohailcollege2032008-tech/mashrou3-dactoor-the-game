@@ -603,7 +603,14 @@ export default function HostGameRoom() {
     finally { setProcessingRequests(prev => { const n = new Set(prev); n.delete(reqKey); return n }) }
   }
 
+  // One start per room. A second click (double-click, or a slow network making
+  // the first look ignored) re-shuffled the questions under players who were
+  // already on Q1 — and once the hashed questions had synced back, `q.correct`
+  // was gone, so the second pass hashed `undefined` and no answer could score.
+  const startingRef = useRef(false)
   const startGame = async () => {
+    if (startingRef.current || room?.status !== 'lobby') return
+    startingRef.current = true
     try {
       const secretKey = `${roomId}:${room.created_at}`
       let questions = { ...room.questions }
@@ -634,7 +641,10 @@ export default function HostGameRoom() {
         config: gameConfig, questions: finalQuestions,
         countdown_started_at: null, countdown_duration: null,
       })
-    } catch (err) { alert('Failed to start: ' + err.message) }
+    } catch (err) {
+      startingRef.current = false
+      alert('Failed to start: ' + err.message)
+    }
   }
 
   const endCompetition = async () => {
@@ -1072,6 +1082,35 @@ export default function HostGameRoom() {
 
             {/* Right column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+              {/* A tournament qualifier: the players were already pulled into
+                  this room and are staring at "waiting for the host". The only
+                  Start button used to sit under the whole config panel, below
+                  the fold on a laptop — put the one action that matters first. */}
+              {room.tournament_id && (
+                <div dir="rtl" style={{
+                  border: '1px solid var(--gold)', borderTop: '3px solid var(--gold)',
+                  background: 'rgba(176,137,68,0.06)', padding: '12px 14px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+                }}>
+                  <p className="ar" style={{ fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>
+                    {totalPlayers > 0
+                      ? `${totalPlayers} لاعب جوه الروم ومستنيين — ابدأ التصفيات`
+                      : 'مستني اللاعبين يدخلوا الروم…'}
+                  </p>
+                  <button onClick={startGame} disabled={totalPlayers === 0} style={{
+                    padding: '10px 22px',
+                    background: totalPlayers === 0 ? 'var(--rule)' : 'var(--ink)',
+                    color: totalPlayers === 0 ? 'var(--ink-4)' : 'var(--paper)',
+                    border: 'none', cursor: totalPlayers === 0 ? 'not-allowed' : 'pointer',
+                    fontFamily: 'var(--arabic)', fontWeight: 700, fontSize: 15,
+                    display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <Play size={15} fill="currentColor" />
+                    ابدأ التصفيات
+                  </button>
+                </div>
+              )}
 
               {/* Players ready */}
               {card(
