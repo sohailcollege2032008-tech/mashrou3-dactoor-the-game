@@ -90,6 +90,13 @@ export default function TournamentCreate() {
   }, [session?.uid])
 
   const updateConfig = (key, val) => setConfig(prev => ({ ...prev, [key]: val }))
+  // The inputs' min/max are only hints: a cleared field is Number('') === 0,
+  // which used to be saved as a 0-second question. Clamp what actually ships.
+  const secondsMs = (key) => {
+    const v = Number(config[key])
+    const safe = Number.isFinite(v) && v > 0 ? v : DEFAULTS[key]
+    return Math.min(300, Math.max(5, Math.round(safe))) * 1000
+  }
 
   const handleCreate = async () => {
     if (!title.trim() || !deckId) return setError('يرجى إدخال العنوان وتحديد المجموعة')
@@ -121,11 +128,11 @@ export default function TournamentCreate() {
         is_auto_top_cut:        false,   // legacy field — the cap is always explicit now
         actual_top_cut:         null,
         total_rounds:           null,
-        ffa_question_duration:  config.ffaQuestionDuration  * 1000,
-        duel_question_duration: config.duelQuestionDuration * 1000,
-        phase_transition_wait:  config.phaseTransitionWait  * 1000,
-        round_break_time:       config.roundBreakTime       * 1000,
-        final_break_time:       config.finalBreakTime      * 1000,
+        ffa_question_duration:  secondsMs('ffaQuestionDuration'),
+        duel_question_duration: secondsMs('duelQuestionDuration'),
+        phase_transition_wait:  secondsMs('phaseTransitionWait'),
+        round_break_time:       secondsMs('roundBreakTime'),
+        final_break_time:       secondsMs('finalBreakTime'),
         scheduled_start_at: (useScheduled && scheduledDate) ? new Date(scheduledDate) : null,
         ffa_room_id:    null,
         current_round:  null,
