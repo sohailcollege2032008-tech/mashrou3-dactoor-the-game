@@ -86,8 +86,10 @@ export default function RoundRecap({ recap, totalRounds = 0, myName = null, tone
           <p className="ar" style={{ fontSize: 12.5, color: T.ink, margin: 0, lineHeight: 1.6 }}>
             <span style={{ marginInlineEnd: 6 }} aria-hidden="true">⚡</span>
             <span style={{ color: T.ink3 }}>أسرع إجابة في الجولة — </span>
-            <strong style={{ fontWeight: 700 }}>{recap.fastest_name}</strong>
-            <span className="folio" style={{ fontSize: 11, color: T.gold, marginInlineStart: 6 }}>
+            {/* Isolated: a Latin name followed by "0.85 ثانية" otherwise
+                shares one LTR run and renders as "TestPlayer30.85". */}
+            <strong style={{ fontWeight: 700, unicodeBidi: 'isolate' }}>{recap.fastest_name}</strong>
+            <span className="folio" style={{ fontSize: 11, color: T.gold, marginInlineStart: 6, unicodeBidi: 'isolate', display: 'inline-block' }}>
               {recap.fastest_value}
             </span>
           </p>

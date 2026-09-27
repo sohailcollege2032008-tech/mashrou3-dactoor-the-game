@@ -1,5 +1,6 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
+import { rememberReturnTo } from '../../utils/returnTo'
 
 /* ── Shared loading screen ─────────────────────────────────────────────────── */
 function LoadingScreen({ label = 'جاري استعادة الجلسة' }) {
@@ -55,10 +56,15 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   const session     = useAuthStore(state => state.session)
   const profile     = useAuthStore(state => state.profile)
   const initialized = useAuthStore(state => state.initialized)
+  const location    = useLocation()
 
   if (!initialized) return <LoadingScreen label="جاري استعادة الجلسة" />
 
-  if (!session) return <Navigate to="/" replace />
+  if (!session) {
+    // A shared link opened while signed out: come back to it after sign-in.
+    rememberReturnTo(location.pathname + location.search)
+    return <Navigate to="/" replace />
+  }
 
   if (!profile) return <LoadingScreen label="جاري تحميل الملف الشخصي" />
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import MathText from '../../components/common/MathText'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ref, onValue, get, set, update, runTransaction, onDisconnect } from 'firebase/database'
-import { doc, updateDoc, increment, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, updateDoc, increment, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore'
 import { rtdb, db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useServerClock } from '../../hooks/useServerClock'
@@ -279,6 +279,7 @@ export default function PlayerGameView() {
   const [hostOnline, setHostOnline]         = useState(true)
   const [showFullBoard, setShowFullBoard]   = useState(false)
   const [cutSize, setCutSize]               = useState(null)
+  const [ffaVerdict, setFfaVerdict]         = useState(null)
 
   const [autoNavCountdown, setAutoNavCountdown] = useState(null)
 
@@ -329,7 +330,9 @@ export default function PlayerGameView() {
         fetchMyAnswerResult(data.current_question_index, uid)
       }
       if (data.status === 'finished' && prevStatusRef.current !== 'finished') {
-        confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 } })
+        // A qualifier's confetti waits for the server's verdict (below) — it
+        // used to rain on the players who had just been knocked out too.
+        if (!data.tournament_id) confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 } })
         const qSetId  = data.question_set_id
         const hostUid = data.host_id
 
@@ -474,6 +477,31 @@ export default function PlayerGameView() {
       .catch(() => {})
     return () => { cancelled = true }
   }, [room?.tournament_id, cutSize])
+
+  // The qualifier's verdict for me, as the server wrote it (rank + advanced).
+  // The live board can order a tie differently from the server's tiebreak, so
+  // the "you're through / you're out" line only trusts ffa_results.
+  useEffect(() => {
+    const tid = room?.tournament_id
+    const uid = session?.uid
+    if (!tid || !uid || room?.status !== 'finished') return
+    let celebrated = false
+    const unsub = onSnapshot(
+      doc(db, 'tournaments', tid, 'ffa_results', uid),
+      snap => {
+        if (!snap.exists()) return
+        const v = snap.data()
+        const advanced = v.advanced !== false
+        if (advanced && !celebrated) {
+          celebrated = true
+          confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 } })
+        }
+        setFfaVerdict({ advanced, rank: v.rank ?? null })
+      },
+      () => {},
+    )
+    return () => unsub()
+  }, [room?.tournament_id, room?.status, session?.uid])
 
   useEffect(() => {
     if (!session) return
@@ -1182,6 +1210,24 @@ export default function PlayerGameView() {
                 {player.score}
                 <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--ink-4)', marginLeft: 4 }}>pts</span>
               </p>
+
+              {room.tournament_id && (
+                <div className="ar" dir="rtl" style={{
+                  margin: '0 0 20px', padding: '12px 16px',
+                  border: `1px solid ${!ffaVerdict ? 'var(--rule)' : ffaVerdict.advanced ? 'var(--success)' : 'var(--alert)'}`,
+                  background: !ffaVerdict ? 'transparent'
+                    : ffaVerdict.advanced ? 'color-mix(in srgb, var(--success) 8%, var(--paper))'
+                    : 'rgba(180,48,57,0.06)',
+                  fontFamily: 'var(--arabic)', fontSize: 15, fontWeight: 700,
+                  color: !ffaVerdict ? 'var(--ink-3)' : ffaVerdict.advanced ? 'var(--success)' : 'var(--alert)',
+                }}>
+                  {!ffaVerdict
+                    ? 'بنحسب المتأهلين…'
+                    : ffaVerdict.advanced
+                      ? `✓ اتأهلت للأدوار الإقصائية${ffaVerdict.rank ? ` — المقعد ${ffaVerdict.rank}` : ''}`
+                      : `مش ضمن المتأهلين المرة دي${ffaVerdict.rank ? ` — المركز ${ffaVerdict.rank}` : ''}`}
+                </div>
+              )}
 
               {/* Full final standings (everyone, not just top 5) */}
               {sortedPlayers.length > 0 && (
