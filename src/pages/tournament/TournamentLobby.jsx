@@ -12,11 +12,17 @@ import { useAuth } from '../../hooks/useAuth'
 import {
   computeActualTopCut, roundsForTopCut, validateRoundAssignments, TOP_CUT_CHOICES
 } from '../../utils/tournamentUtils'
-import { Copy, Check, Settings } from 'lucide-react'
+import { Copy, Check, Settings, Calendar, Clock, AlertTriangle, XCircle, Edit2 } from 'lucide-react'
 import QuestionAssignmentPanel from '../../components/tournament/QuestionAssignmentPanel'
 import { loadTournamentDeck } from '../../utils/deckLoader'
 import ShareWatchLink from '../../components/tournament/ShareWatchLink'
 import SoundToggle from '../../components/common/SoundToggle'
+
+function getLocalDatetimeString(date) {
+  const d = date ? new Date(date) : new Date(Date.now() + 15 * 60 * 1000)
+  const tzOffset = d.getTimezoneOffset() * 60000
+  return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16)
+}
 
 const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 function genRoomCode() {
@@ -50,7 +56,10 @@ export default function TournamentLobby() {
 
   const [showQPanel, setShowQPanel] = useState(false)
 
-  const [timeLeft,      setTimeLeft]      = useState(null)
+  const [timeLeft,           setTimeLeft]           = useState(null)
+  const [showScheduleModal,  setShowScheduleModal]  = useState(false)
+  const [customScheduleDate, setCustomScheduleDate] = useState('')
+  const [updatingSchedule,   setUpdatingSchedule]   = useState(false)
   const autoLaunchedRef = useRef(false)
 
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
@@ -97,15 +106,24 @@ export default function TournamentLobby() {
   }, [tournament, tournamentId, navigate])
 
   useEffect(() => {
-    if (!tournament?.scheduled_start_at) return
+    if (!tournament?.scheduled_start_at) {
+      setTimeLeft(null)
+      autoLaunchedRef.current = false
+      return
+    }
     const getTargetMs = () => {
       const t = tournament.scheduled_start_at
-      if (t?.toDate)         return t.toDate().getTime()
+      if (t?.toDate)             return t.toDate().getTime()
       if (typeof t === 'number') return t
+      if (t instanceof Date)     return t.getTime()
       return null
     }
     const targetMs = getTargetMs()
-    if (!targetMs) return
+    if (!targetMs) {
+      setTimeLeft(null)
+      autoLaunchedRef.current = false
+      return
+    }
     const tick = () => {
       const remaining = Math.ceil((targetMs - Date.now()) / 1000)
       setTimeLeft(remaining)
@@ -117,12 +135,101 @@ export default function TournamentLobby() {
 
   useEffect(() => {
     if (timeLeft === null || timeLeft > 0) return
+    if (!tournament?.scheduled_start_at) return
     if (autoLaunchedRef.current || launching) return
     if (registrations.length < 2) return
     autoLaunchedRef.current = true
     launchFFA()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft])
+  }, [timeLeft, tournament?.scheduled_start_at])
+
+  const removeSchedule = useCallback(async () => {
+    if (updatingSchedule) return
+    setUpdatingSchedule(true)
+    setError(null)
+    try {
+      await updateDoc(doc(db, 'tournaments', tournamentId), {
+        scheduled_start_at: null
+      })
+      setTimeLeft(null)
+      autoLaunchedRef.current = false
+    } catch (e) {
+      console.error(e)
+      setError('فشل إلغاء الجدولة: ' + (e.message || ''))
+    } finally {
+      setUpdatingSchedule(false)
+    }
+  }, [tournamentId, updatingSchedule])
+
+  const addMinutesToSchedule = useCallback(async (minutes) => {
+    if (updatingSchedule) return
+    setUpdatingSchedule(true)
+    setError(null)
+    try {
+      const getTargetMs = () => {
+        const t = tournament?.scheduled_start_at
+        if (t?.toDate)             return t.toDate().getTime()
+        if (typeof t === 'number') return t
+        if (t instanceof Date)     return t.getTime()
+        return null
+      }
+      const existingMs = getTargetMs()
+      const baseMs = (existingMs && existingMs > Date.now()) ? existingMs : Date.now()
+      const newTarget = new Date(baseMs + minutes * 60 * 1000)
+      await updateDoc(doc(db, 'tournaments', tournamentId), {
+        scheduled_start_at: newTarget
+      })
+      autoLaunchedRef.current = false
+    } catch (e) {
+      console.error(e)
+      setError('فشل تعديل موعد الجدولة: ' + (e.message || ''))
+    } finally {
+      setUpdatingSchedule(false)
+    }
+  }, [tournament?.scheduled_start_at, tournamentId, updatingSchedule])
+
+  const saveCustomSchedule = useCallback(async (dateString) => {
+    if (updatingSchedule) return
+    if (!dateString) {
+      setError('يرجى اختيار وقت صحيح')
+      return
+    }
+    const targetDate = new Date(dateString)
+    if (isNaN(targetDate.getTime()) || targetDate <= new Date()) {
+      setError('وقت البدء يجب أن يكون في المستقبل')
+      return
+    }
+    setUpdatingSchedule(true)
+    setError(null)
+    try {
+      await updateDoc(doc(db, 'tournaments', tournamentId), {
+        scheduled_start_at: targetDate
+      })
+      autoLaunchedRef.current = false
+      setShowScheduleModal(false)
+    } catch (e) {
+      console.error(e)
+      setError('فشل تعديل موعد الجدولة: ' + (e.message || ''))
+    } finally {
+      setUpdatingSchedule(false)
+    }
+  }, [tournamentId, updatingSchedule])
+
+  const openScheduleModal = useCallback(() => {
+    const getTargetMs = () => {
+      const t = tournament?.scheduled_start_at
+      if (t?.toDate)             return t.toDate().getTime()
+      if (typeof t === 'number') return t
+      if (t instanceof Date)     return t.getTime()
+      return null
+    }
+    const existingMs = getTargetMs()
+    const initialDate = (existingMs && existingMs > Date.now())
+      ? new Date(existingMs)
+      : new Date(Date.now() + 15 * 60 * 1000)
+    setCustomScheduleDate(getLocalDatetimeString(initialDate))
+    setShowScheduleModal(true)
+  }, [tournament?.scheduled_start_at])
 
   const copyCode = useCallback(() => {
     if (!tournament?.code) return
@@ -366,26 +473,192 @@ export default function TournamentLobby() {
           {tournament.title}
         </h1>
 
-        {/* ── Scheduled countdown ─────────────────────────────────────── */}
-        {isScheduled && timeLeft !== null && timeLeft > 0 && (
-          <div style={{
-            border: `1px solid ${countdownUrgent ? 'var(--alert)' : 'var(--gold)'}`,
-            background: countdownUrgent ? 'rgba(180,48,57,0.06)' : 'rgba(176,137,68,0.06)',
-            padding: '16px 20px', marginBottom: 20, textAlign: 'center',
-          }}>
-            <p className="folio" style={{ marginBottom: 8, color: countdownUrgent ? 'var(--alert)' : 'var(--gold)', letterSpacing: '0.2em' }}>
-              AUTO-START IN
-            </p>
-            <p style={{
-              fontFamily: 'var(--mono)', fontSize: 32, fontWeight: 700,
-              color: countdownUrgent ? 'var(--alert)' : 'var(--gold)', margin: '0 0 4px',
-              letterSpacing: '0.08em',
+        {/* ── Scheduled countdown & Schedule controls ────────────────── */}
+        {isScheduled ? (
+          timeLeft !== null && timeLeft <= 0 ? (
+            /* انتهى وقت الجدولة ولم تبدأ بعد */
+            <div style={{
+              border: '2px solid var(--alert)',
+              background: 'rgba(180,48,57,0.06)',
+              padding: '16px 18px', marginBottom: 20, textAlign: 'center',
             }}>
-              {formatCountdown(timeLeft)}
-            </p>
-            <p className="ar" style={{ fontSize: 11, color: 'var(--ink-4)', margin: 0 }}>
-              ستبدأ البطولة تلقائياً — أو اضغط "ابدأ" الآن
-            </p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8, color: 'var(--alert)' }}>
+                <AlertTriangle size={18} />
+                <span className="folio" style={{ letterSpacing: '0.15em', fontWeight: 700 }}>
+                  SCHEDULE EXPIRED
+                </span>
+              </div>
+              <p className="ar" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', margin: '0 0 6px', lineHeight: 1.5 }}>
+                انتهى موعد البدء المجدول السابق!
+              </p>
+              <p className="ar" style={{ fontSize: 11.5, color: 'var(--ink-3)', margin: '0 0 14px', lineHeight: 1.5 }}>
+                البطولة لم تبدأ تلقائياً لعدم اكتمال تخصيص الأسئلة. قم بإلغاء الجدولة الآن لتخصيص الأسئلة بهدوء والبدء يدوياً، أو قم بتأجيل الموعد.
+              </p>
+
+              {/* زر إلغاء الجدولة الفوري */}
+              <button
+                onClick={removeSchedule}
+                disabled={updatingSchedule}
+                style={{
+                  width: '100%', padding: '10px 16px',
+                  background: 'var(--alert)', color: '#fff',
+                  border: 'none', fontFamily: 'var(--arabic)', fontSize: 14, fontWeight: 700,
+                  cursor: updatingSchedule ? 'wait' : 'pointer',
+                  marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <XCircle size={16} />
+                {updatingSchedule ? 'جاري التحديث…' : 'إلغاء الجدولة الآن (تحويل لبدء يدوي)'}
+              </button>
+
+              {/* أزرار سريعة لتأجيل البدء */}
+              <div style={{ borderTop: '1px dashed var(--rule)', paddingTop: 10, marginTop: 4 }}>
+                <span className="ar" style={{ fontSize: 11, color: 'var(--ink-4)', display: 'block', marginBottom: 8 }}>
+                  أو تأجيل البدء التلقائي من الآن:
+                </span>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => addMinutesToSchedule(10)}
+                    disabled={updatingSchedule}
+                    style={{
+                      padding: '6px 12px', background: 'var(--paper)', border: '1px solid var(--rule)',
+                      fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--ink)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    +10 دقائق
+                  </button>
+                  <button
+                    onClick={() => addMinutesToSchedule(15)}
+                    disabled={updatingSchedule}
+                    style={{
+                      padding: '6px 12px', background: 'var(--paper)', border: '1px solid var(--rule)',
+                      fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--ink)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    +15 دقيقة
+                  </button>
+                  <button
+                    onClick={() => addMinutesToSchedule(30)}
+                    disabled={updatingSchedule}
+                    style={{
+                      padding: '6px 12px', background: 'var(--paper)', border: '1px solid var(--rule)',
+                      fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--ink)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    +30 دقيقة
+                  </button>
+                  <button
+                    onClick={openScheduleModal}
+                    disabled={updatingSchedule}
+                    style={{
+                      padding: '6px 12px', background: 'var(--paper)', border: '1px solid var(--rule)',
+                      fontFamily: 'var(--arabic)', fontSize: 11, fontWeight: 600, color: 'var(--ink)',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                    }}
+                  >
+                    <Clock size={12} />
+                    موعد محدد…
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ما زال الوقت في المستقبل */
+            <div style={{
+              border: `1px solid ${countdownUrgent ? 'var(--alert)' : 'var(--gold)'}`,
+              background: countdownUrgent ? 'rgba(180,48,57,0.06)' : 'rgba(176,137,68,0.06)',
+              padding: '16px 20px', marginBottom: 20, textAlign: 'center',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
+                <Clock size={14} style={{ color: countdownUrgent ? 'var(--alert)' : 'var(--gold)' }} />
+                <span className="folio" style={{ color: countdownUrgent ? 'var(--alert)' : 'var(--gold)', letterSpacing: '0.2em' }}>
+                  AUTO-START IN
+                </span>
+              </div>
+              <p style={{
+                fontFamily: 'var(--mono)', fontSize: 32, fontWeight: 700,
+                color: countdownUrgent ? 'var(--alert)' : 'var(--gold)', margin: '0 0 4px',
+                letterSpacing: '0.08em',
+              }}>
+                {timeLeft !== null ? formatCountdown(timeLeft) : '...'}
+              </p>
+              <p className="ar" style={{ fontSize: 11, color: 'var(--ink-4)', margin: '0 0 12px' }}>
+                ستبدأ البطولة تلقائياً في الموعد — أو تحكم بالجدولة:
+              </p>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', borderTop: '1px solid rgba(176,137,68,0.2)', paddingTop: 10 }}>
+                <button
+                  onClick={removeSchedule}
+                  disabled={updatingSchedule}
+                  style={{
+                    padding: '6px 12px', background: 'var(--paper)', border: '1px solid var(--alert)',
+                    color: 'var(--alert)', fontFamily: 'var(--arabic)', fontSize: 12, fontWeight: 600,
+                    cursor: updatingSchedule ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  <XCircle size={13} />
+                  إلغاء الجدولة (بدء يدوي)
+                </button>
+                <button
+                  onClick={() => addMinutesToSchedule(10)}
+                  disabled={updatingSchedule}
+                  style={{
+                    padding: '6px 10px', background: 'var(--paper)', border: '1px solid var(--rule)',
+                    fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: 700, color: 'var(--ink)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  +10د
+                </button>
+                <button
+                  onClick={openScheduleModal}
+                  disabled={updatingSchedule}
+                  style={{
+                    padding: '6px 12px', background: 'var(--paper)', border: '1px solid var(--rule)',
+                    fontFamily: 'var(--arabic)', fontSize: 12, fontWeight: 600, color: 'var(--ink)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  <Edit2 size={12} />
+                  تعديل الموعد
+                </button>
+              </div>
+            </div>
+          )
+        ) : (
+          /* غير مجدولة - بدء يدوي */
+          <div style={{
+            border: '1px dashed var(--rule)',
+            background: 'var(--paper-2)',
+            padding: '10px 14px', marginBottom: 20,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)' }} />
+              <div>
+                <span className="ar" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>
+                  نظام البدء: يدوي بواسطة الهوست
+                </span>
+                <p className="ar" style={{ fontSize: 11, color: 'var(--ink-4)', margin: 0 }}>
+                  البطولة لن تبدأ إلا عندما تضغط على "ابدأ مرحلة FFA"
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={openScheduleModal}
+              disabled={updatingSchedule}
+              style={{
+                padding: '6px 10px', background: 'var(--paper)', border: '1px solid var(--rule)',
+                fontFamily: 'var(--arabic)', fontSize: 11.5, color: 'var(--ink-2)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              <Calendar size={12} />
+              جدولة موعد
+            </button>
           </div>
         )}
 
@@ -677,6 +950,114 @@ export default function TournamentLobby() {
         )}
 
       </main>
+
+      {/* ── Schedule Edit Modal ────────────────────────────────────── */}
+      {showScheduleModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        }}>
+          <div style={{
+            background: 'var(--paper)', border: '2px solid var(--ink)',
+            maxWidth: 420, width: '100%', padding: '24px 20px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--rule)', paddingBottom: 10 }}>
+              <span className="folio" style={{ letterSpacing: '0.15em' }}>SCHEDULE TOURNAMENT</span>
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', fontSize: 16 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <h3 className="ar" style={{ margin: '0 0 12px', fontSize: 16, color: 'var(--ink)' }}>
+              تحديد موعد البدء التلقائي
+            </h3>
+            <p className="ar" style={{ fontSize: 12, color: 'var(--ink-3)', margin: '0 0 16px', lineHeight: 1.5 }}>
+              اختر موعداً جديداً لبدء البطولة تلقائياً. سيتحدث العداد التنازلي فوراً لجميع المشاركين.
+            </p>
+
+            <div style={{ marginBottom: 16 }}>
+              <label className="ar" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', marginBottom: 6 }}>
+                التاريخ والوقت:
+              </label>
+              <input
+                type="datetime-local"
+                value={customScheduleDate}
+                onChange={(e) => setCustomScheduleDate(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px',
+                  border: '1px solid var(--ink)', background: 'var(--paper)',
+                  fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--ink)',
+                  outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* أزرار سريعة داخل المودال */}
+            <div style={{ marginBottom: 20 }}>
+              <span className="ar" style={{ fontSize: 11, color: 'var(--ink-4)', display: 'block', marginBottom: 6 }}>
+                خيارات سريعة من الآن:
+              </span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[
+                  ['بعد 5 د', 5],
+                  ['بعد 10 د', 10],
+                  ['بعد 15 د', 15],
+                  ['بعد 30 د', 30],
+                ].map(([label, mins]) => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => {
+                      const target = new Date(Date.now() + mins * 60 * 1000)
+                      setCustomScheduleDate(getLocalDatetimeString(target))
+                    }}
+                    style={{
+                      flex: 1, padding: '6px 0', background: 'var(--paper-2)',
+                      border: '1px solid var(--rule)', fontFamily: 'var(--arabic)',
+                      fontSize: 11, color: 'var(--ink-2)', cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setShowScheduleModal(false)}
+                disabled={updatingSchedule}
+                style={{
+                  flex: 1, padding: '10px', background: 'var(--paper-2)',
+                  border: '1px solid var(--rule)', color: 'var(--ink-3)',
+                  fontFamily: 'var(--arabic)', fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={() => saveCustomSchedule(customScheduleDate)}
+                disabled={updatingSchedule}
+                style={{
+                  flex: 1, padding: '10px', background: 'var(--ink)',
+                  border: '1px solid var(--ink)', color: 'var(--paper)',
+                  fontFamily: 'var(--arabic)', fontSize: 13, fontWeight: 700,
+                  cursor: updatingSchedule ? 'wait' : 'pointer',
+                }}
+              >
+                {updatingSchedule ? 'جاري الحفظ…' : 'تأكيد الموعد'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <footer style={{

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   doc, onSnapshot, collection, getDoc, getDocs, setDoc, serverTimestamp,
@@ -499,7 +499,19 @@ export default function TournamentPlayerWait() {
                         {countdown}
                       </p>
                     </div>
-                  ) : null
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: 'var(--gold)',
+                        animation: 'mr-dot-pulse 1.6s ease-in-out infinite',
+                      }} />
+                      <span className="ar" style={{ fontSize: 14, color: 'var(--ink-3)' }}>
+                        في انتظار بدء البطولة…
+                      </span>
+                      <style>{`@keyframes mr-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }`}</style>
+                    </div>
+                  )
                 })()
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
